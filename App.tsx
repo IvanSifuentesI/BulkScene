@@ -8,8 +8,7 @@ import LandingPage from './components/LandingPage';
 import { initGlobalErrorTelemetry } from './services/errorTelemetryService';
 
 const LandingRoute: React.FC = () => {
-  const navigate = useNavigate();
-  return <LandingPage onOpenStudio={() => navigate('/app')} />;
+  return <LandingPage />;
 };
 
 const App: React.FC = () => {

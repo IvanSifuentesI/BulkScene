@@ -21,11 +21,11 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   badge: '🔥 Acceso Total Todo Incluido',
   offerHeadline: 'BulkScene Studio + Comunidad Skool + Academia + Mentoría + Herramientas VIP',
   features: [
-    'Herramienta BulkScene Studio (7 Motores NVIDIA NIM, FLUX.1, Whisper, 4K UHD)',
-    'Acceso directo a la Comunidad Privada en Skool (Networking de Alto Nivel)',
+    'Herramienta BulkScene Studio (Generación Ilimitada de Imágenes, Sin APIs, Sin Pagos de Tokens y Escalado 4K Ultra-HD)',
+    'Acceso directo a la Comunidad Privada en Skool (Networking de Creadores y Casos de Éxito)',
     'Academia y Formación Completa paso a paso en Automatización de Videos Virales',
     'Mentoría y Soporte Continuo con Iván Sifuentes',
-    'Más Herramientas, Workflows de Automatización y Scripts Exclusivos'
+    'Bóveda Secreta de Herramientas, Workflows de Automatización y Plantillas de Edición'
   ]
 };
 
