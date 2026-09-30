@@ -22,9 +22,10 @@ import {
   Sliders,
   Maximize2,
   Zap,
-  Clock,
   Infinity as InfinityIcon,
-  DollarSign
+  Play,
+  Copy,
+  CheckCheck
 } from 'lucide-react';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
 
@@ -35,7 +36,8 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = () => {
   const [pricing, setPricing] = useState<PricingConfig>(DEFAULT_PRICING_CONFIG);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-  const [activeModeTab, setActiveModeTab] = useState<number>(0);
+  const [activeWorkflowStep, setActiveWorkflowStep] = useState<number>(0);
+  const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
 
   useEffect(() => {
     getPricingConfig().then(setPricing);
@@ -44,6 +46,76 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
   const toggleFaq = (index: number) => {
     setActiveFaq(activeFaq === index ? null : index);
   };
+
+  const copyPromptToClipboard = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedPromptIdx(idx);
+    setTimeout(() => setCopiedPromptIdx(null), 2000);
+  };
+
+  // 6 Escenas con imágenes cinemáticas de alto impacto visual y prompts reales
+  const sampleScenes = [
+    {
+      num: '001',
+      title: 'Hook de Impacto (0-2.4s)',
+      time: '0-2.4s',
+      imageUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Cinematic 35mm portrait, 28yo Ethan in black leather jacket, rain drenched street, volumetric neon rim light, intense gaze at camera, photorealistic 8k.'
+    },
+    {
+      num: '002',
+      title: 'Tensión Creciente',
+      time: '2.4-5.0s',
+      imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Cinematic profile shot, Ethan turning into foggy alley, warm tungsten lantern reflection, dark moody atmosphere, hyper-detailed texture, depth of field.'
+    },
+    {
+      num: '003',
+      title: 'Giro Inesperado',
+      time: '5.0-7.8s',
+      imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Dutch angle shot, dramatic silhouette looking at glowing cyber holographic device, deep blue and orange complementary grading, 35mm film grain.'
+    },
+    {
+      num: '004',
+      title: 'Detalle Facial & Clímax',
+      time: '7.8-10.2s',
+      imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Extreme close up of Ethan eyes, reflection of city lights, subtle eyebrow scar, ultra high fidelity skin pores, anamorphic bokeh, 4K UHD.'
+    },
+    {
+      num: '005',
+      title: 'Acción Cinemática',
+      time: '10.2-13.0s',
+      imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Dynamic action motion, running through neon reflections, smoke and sparks in background, high shutter speed, cinematic film still.'
+    },
+    {
+      num: '006',
+      title: 'Llamado a Acción (CTA)',
+      time: '13.0-15.5s',
+      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Hero wide shot, Ethan standing on skyscraper ledge overlooking sprawling futuristic metropolis at dawn, golden hour volumetric haze.'
+    }
+  ];
+
+  const workflowSteps = [
+    {
+      step: 'Paso 1',
+      title: 'Pegar Guion o Idea',
+      desc: 'El Director con IA analiza el texto completo, detecta la narrativa y desglosa automáticamente cada escena con encuadres y tiempos de locución.'
+    },
+    {
+      step: 'Paso 2',
+      title: 'Fijar Personaje & Estilo',
+      desc: 'Bloquea el rostro y vestimenta con semilla matemática única (Seed Locking) y elige entre 10+ estilos cinematográficos para todo el video.'
+    },
+    {
+      step: 'Paso 3',
+      title: 'Generación Masiva & ZIP',
+      desc: 'El motor genera hasta 1,000 imágenes secuenciales en minutos. Descarga un solo archivo ZIP numerado (#001-#1000) listo para CapCut o Premiere.'
+    }
+  ];
 
   const faqs = [
     {
@@ -133,30 +205,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
   return (
     <div className="min-h-screen bg-[#06080d] text-slate-100 font-sans selection:bg-emerald-500 selection:text-black">
-      {/* 1. URGENCY ANNOUNCEMENT BAR (Fórmula 100K Top Hook) */}
-      <aside aria-label="Aviso de oferta especial" className="sticky top-0 z-50 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 py-2.5 px-4 text-center text-xs font-black text-black shadow-lg shadow-emerald-500/20">
-        <div className="max-w-6xl mx-auto flex items-center justify-center gap-2 sm:gap-4 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 bg-black/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[10px]">
-            <Flame className="w-3.5 h-3.5 fill-black text-black animate-bounce" />
-            OFERTA OFICIAL SKOOL
-          </span>
-          <span>
-            Acceso Completo a la Suite de Imágenes Ilimitadas + Comunidad Skool + Mentoría por solo{' '}
-            <strong className="underline underline-offset-2">${pricing.price} {pricing.currency}{pricing.period}</strong>
-          </span>
-          <a
-            href={pricing.skoolUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="bg-black text-white hover:bg-slate-900 px-3 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-transform hover:scale-105"
-          >
-            <span>Desbloquear en Skool</span>
-            <ArrowRight className="w-3 h-3" />
-          </a>
-        </div>
-      </aside>
-
-      {/* 2. MAIN HEADER / NAVIGATION */}
+      {/* 1. MAIN HEADER / NAVIGATION */}
       <header className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20">
@@ -215,8 +264,8 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
       </header>
 
-      {/* 3. HERO SECTION (High-Converting Tripwire VSL Hook) */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-16 text-center space-y-8">
+      {/* 2. HERO SECTION (High-Converting Tripwire VSL Hook) */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 pb-16 text-center space-y-8">
         {/* Core Category Badge */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-wide uppercase border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
           <Zap className="w-4 h-4 fill-emerald-400" />
@@ -276,7 +325,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
 
         {/* Proof Metrics Strip */}
-        <div className="pt-6 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto text-center">
+        <div className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto text-center">
           <div className="p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
             <div className="flex items-center justify-center gap-1.5 text-2xl font-black text-white font-mono">
               <InfinityIcon className="w-6 h-6 text-emerald-400" />
@@ -301,29 +350,92 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </div>
         </div>
 
-        {/* 4. VISUAL APP MOCKUP SHOWCASE (Interactive Studio Showcase) */}
-        <div className="pt-4 max-w-5xl mx-auto">
-          <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-2 sm:p-4 shadow-[0_0_80px_rgba(16,185,129,0.15)] overflow-hidden">
-            {/* Browser top chrome */}
+        {/* 3. HIGH-IMPACT SPEED & VOLUME CALLOUT BANNER (Petición de usuario) */}
+        <div className="pt-2 max-w-5xl mx-auto">
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#0e121a] to-teal-950/40 border border-emerald-500/40 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_40px_rgba(16,185,129,0.15)]">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
+                <Zap className="w-6 h-6 fill-emerald-400" />
+              </div>
+              <div>
+                <p className="text-white font-black text-sm sm:text-base tracking-tight">
+                  «Pegué un guion de 1,000 escenas y generó las 1,000 imágenes en solo minutos, todas con el mismo personaje y listas para editar.»
+                </p>
+                <p className="text-xs text-emerald-400 font-mono mt-0.5">
+                  ⚡ Rendimiento Real: 1.8s por toma • 100 tomas en ~2.8 minutos • 1,000 tomas en ~10 minutos • $0.00 en APIs
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 bg-emerald-500 text-black font-black text-xs px-4 py-2 rounded-xl uppercase tracking-wider shadow">
+              100% Ilimitado
+            </div>
+          </div>
+        </div>
+
+        {/* 4. VISUAL APP MOCKUP SHOWCASE (Estilo Mac con Imágenes de Alto Impacto & Flujo) */}
+        <div className="pt-2 max-w-5xl mx-auto">
+          <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-2 sm:p-5 shadow-[0_0_90px_rgba(16,185,129,0.18)] overflow-hidden">
+            {/* Mac top chrome */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-xs text-slate-500">
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500/80 inline-block" />
-                <span className="w-3 h-3 rounded-full bg-amber-500/80 inline-block" />
-                <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block" />
-                <span className="ml-2 font-mono text-[11px] text-slate-400 hidden sm:inline-block">
-                  bulkscene-studio.app/workspace/produccion-viral
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-[#ff5f56] inline-block shadow-sm" />
+                <span className="w-3 h-3 rounded-full bg-[#ffbd2e] inline-block shadow-sm" />
+                <span className="w-3 h-3 rounded-full bg-[#27c93f] inline-block shadow-sm" />
+                <span className="ml-3 font-mono text-[11px] text-slate-400 hidden sm:inline-block">
+                  bulkscene-studio.app/workspace/produccion-viral-1000-escenas
                 </span>
               </div>
-              <div className="flex items-center gap-2 font-mono text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+              <div className="flex items-center gap-2 font-mono text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <span>Estado: Motor Activo • Costo API: $0.00</span>
               </div>
             </div>
 
+            {/* Interactive Workflow Steps Bar */}
+            <div className="p-3 sm:px-6 sm:py-3 border-b border-white/5 bg-white/[0.01] flex items-center justify-between gap-2 overflow-x-auto">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 hidden md:inline">
+                Flujo del Estudio:
+              </span>
+              <div className="flex items-center gap-2 w-full justify-between sm:justify-start">
+                {workflowSteps.map((wf, wIdx) => (
+                  <button
+                    key={wIdx}
+                    onClick={() => setActiveWorkflowStep(wIdx)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-left ${
+                      activeWorkflowStep === wIdx
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-white/[0.03] text-slate-400 border border-transparent hover:text-white'
+                    }`}
+                  >
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] flex items-center justify-center font-mono font-bold">
+                      {wIdx + 1}
+                    </span>
+                    <span>{wf.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Simulated Workspace View */}
-            <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-              {/* Left Column: Script and Character Lock */}
+            <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
+              {/* Left Column: Script and Character Lock + Active Modes */}
               <div className="space-y-4">
+                {/* Active Mode Dynamic Box */}
+                <div className="p-4 rounded-2xl bg-[#121622] border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      {workflowSteps[activeWorkflowStep].title}
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      Activo
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {workflowSteps[activeWorkflowStep].desc}
+                  </p>
+                </div>
+
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-white flex items-center gap-1.5">
@@ -335,7 +447,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Protagonista Ethan: 28 años, chaqueta de cuero negra, cicatriz sutil en ceja izquierda. Mismo rostro asegurado en las 100 escenas.
+                    Protagonista Ethan: 28 años, chaqueta de cuero negra, cicatriz sutil en ceja. Mismo rostro asegurado en las 1,000 tomas.
                   </p>
                 </div>
 
@@ -348,53 +460,104 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     <span className="text-xs bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg font-bold">
                       Cinemático 35mm Hiperrealista
                     </span>
-                    <span className="text-xs text-slate-400">4K UHD</span>
+                    <span className="text-xs font-mono text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded">
+                      4K UHD
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Center & Right Column: Scene Grid Preview */}
+              {/* Center & Right Column: Scene Grid Preview with STRIKING VISUAL IMAGES */}
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                    Generación Secuencial en Lote (30 Escenas)
+                    Generación Secuencial en Lote (Escenas del Guion)
                   </span>
                   <span className="text-emerald-400 font-mono text-[11px] font-bold">
-                    ✓ 30/30 Completadas (100%)
+                    ✓ Lote de 1,000 Escenas Listo (100%)
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-                  {[
-                    { num: '001', title: 'Hook Impacto', time: '0-2s' },
-                    { num: '002', title: 'Tensión Creciente', time: '2-4s' },
-                    { num: '003', title: 'Giro Inesperado', time: '4-7s' },
-                    { num: '004', title: 'Detalle Facial', time: '7-9s' },
-                    { num: '005', title: 'Clímax Visual', time: '9-12s' },
-                    { num: '006', title: 'Llamado a Acción', time: '12-15s' }
-                  ].map((sc, i) => (
-                    <div key={i} className="group relative rounded-xl bg-[#121622] border border-white/10 p-2.5 flex flex-col justify-between aspect-[9/16] hover:border-emerald-500/50 transition-all">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-mono font-bold text-emerald-400">#{sc.num}</span>
-                        <span className="text-slate-500">{sc.time}</span>
+                {/* 6 Striking Visual Scene Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {sampleScenes.map((sc, i) => (
+                    <div
+                      key={i}
+                      className="group relative rounded-2xl bg-[#121622] border border-white/10 overflow-hidden aspect-[9/16] hover:border-emerald-500/80 transition-all duration-300 shadow-lg hover:shadow-emerald-500/25 flex flex-col justify-between"
+                    >
+                      {/* Photographic Image Background */}
+                      <img
+                        src={sc.imageUrl}
+                        alt={sc.title}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+
+                      {/* Vignette Gradient Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-black/60 pointer-events-none" />
+
+                      {/* Top Header Information */}
+                      <div className="relative z-10 p-2.5 flex items-center justify-between text-[10px]">
+                        <span className="font-mono font-black text-emerald-300 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded border border-emerald-500/30 shadow">
+                          #{sc.num}
+                        </span>
+                        <span className="text-slate-300 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-mono">
+                          {sc.time}
+                        </span>
                       </div>
-                      <div className="my-auto text-center space-y-1">
-                        <div className="w-8 h-8 mx-auto rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                          <CheckCircle2 className="w-4 h-4" />
-                        </div>
-                        <p className="text-[10px] text-slate-300 font-medium leading-tight">{sc.title}</p>
+
+                      {/* Hover Overlay with Prompt Copy Action */}
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-3 text-center bg-black/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 mb-2">
+                          ✓ 4K UHD Renderizado
+                        </span>
+                        <p className="text-[10px] text-slate-200 line-clamp-3 italic mb-3">
+                          "{sc.prompt}"
+                        </p>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyPromptToClipboard(sc.prompt, i);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black font-extrabold text-[10px] flex items-center gap-1 shadow-md hover:bg-emerald-400 transition-colors"
+                        >
+                          {copiedPromptIdx === i ? (
+                            <>
+                              <CheckCheck className="w-3 h-3" />
+                              <span>¡Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copiar Prompt</span>
+                            </>
+                          )}
+                        </button>
                       </div>
-                      <div className="text-[9px] font-mono text-slate-500 text-center truncate">
-                        {sc.num}_escena.png
+
+                      {/* Bottom Title & Scene Output Name */}
+                      <div className="relative z-10 p-2.5 space-y-0.5">
+                        <p className="text-[11px] text-white font-extrabold leading-tight drop-shadow">
+                          {sc.title}
+                        </p>
+                        <p className="text-[9px] font-mono text-emerald-400 drop-shadow truncate">
+                          {sc.num}_escena.png
+                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="pt-2 flex items-center justify-between text-xs text-slate-400">
-                  <span>Archivo de salida: <strong className="text-white">Lote_30_Escenas_Sincronizadas.zip</strong></span>
-                  <span className="text-emerald-400 font-bold">Listo para CapCut y Premiere</span>
+                {/* Bottom Status Bar */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-2 border-t border-white/5">
+                  <div className="flex items-center gap-1.5">
+                    <FolderArchive className="w-4 h-4 text-emerald-400" />
+                    <span>Archivo de salida: <strong className="text-white">Lote_1000_Escenas_Sincronizadas.zip</strong></span>
+                  </div>
+                  <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    Listo para arrastrar a CapCut y Premiere
+                  </span>
                 </div>
               </div>
             </div>
@@ -476,7 +639,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               </li>
               <li className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span><strong>Lotes en ZIP Ordenados (#001 a #100):</strong> Arrastras la carpeta directamente a CapCut o Premiere y el video queda sincronizado.</span>
+                <span><strong>Lotes en ZIP Ordenados (#001 a #1000):</strong> Arrastras la carpeta directamente a CapCut o Premiere y el video queda sincronizado.</span>
               </li>
             </ul>
           </div>
