@@ -255,7 +255,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           targetSlot.seed,
           signal
         );
-        finalImageUrl = res.imageUrl;
+        finalImageUrl = (res as any).imageUrl || res.dataUrl;
       }
 
       const elapsed = Math.round((Date.now() - startTime) / 100) / 10;
@@ -1122,7 +1122,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
                     </div>
                   )}
                   {isFailed && (
-                    <AlertCircle className="w-3.5 h-3.5 text-red-400" title={slot.errorDetail || 'Error'} />
+                    <span title={slot.errorDetail || 'Error'}>
+                      <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                    </span>
                   )}
                   {isQueued && (
                     <span className="text-[10px] text-slate-500">En cola</span>

@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Rocket,
   FolderOpen,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import { 
   SceneSlot, 
@@ -183,7 +184,8 @@ export const MainApplication: React.FC = () => {
       const seq = idx + 1;
       const padded = seq.toString().padStart(3, '0');
       
-      let compiled = sc.visualPromptEn;
+      const basePrompt = sc.visualPromptEn || sc.visualPrompt || sc.promptEn || sc.scriptText || sc.scriptSegment || '';
+      let compiled = basePrompt;
       if (activeCharacter?.anchorDescription) {
         compiled = `${activeCharacter.anchorDescription}. ${activeCharacter.clothingAnchor || ''}. ${compiled}`;
       }
@@ -195,7 +197,7 @@ export const MainApplication: React.FC = () => {
         id: `slot-${padded}`,
         sequenceNumber: seq,
         paddedNumber: padded,
-        rawPrompt: sc.visualPromptEn || sc.narrationSegment,
+        rawPrompt: basePrompt,
         compiledPrompt: compiled.trim(),
         status: 'idle',
         seed: activeCharacter?.defaultSeed || (Math.floor(Math.random() * 900000) + 100000),

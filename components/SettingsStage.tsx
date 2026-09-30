@@ -181,14 +181,19 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   // Pricing Handlers
   const handleSavePrice = async () => {
     setIsUpdatingPrice(true);
-    const updated = await updateRemotePrice({
-      price: Number(priceInput),
-      currency: currencyInput.trim().toUpperCase(),
-      period: periodInput.trim(),
-    });
-    setPricingConfig(updated);
+    const result = await updateRemotePrice(Number(priceInput));
+    if (result.success) {
+      setPricingConfig((prev) => ({
+        ...prev,
+        price: Number(priceInput),
+        currency: currencyInput.trim().toUpperCase(),
+        period: periodInput.trim(),
+      }));
+      triggerSaveNotification(result.message);
+    } else {
+      triggerSaveNotification(result.message);
+    }
     setIsUpdatingPrice(false);
-    triggerSaveNotification(`Precio Skool actualizado a $${updated.price} ${updated.currency}${updated.period} en tiempo real.`);
   };
 
   // Webhook Handler

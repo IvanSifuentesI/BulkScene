@@ -269,6 +269,90 @@ Rules:
   return currentPrompt;
 }
 
+export async function callLLMWithFallbacks(params: {
+  model?: string;
+  systemPrompt: string;
+  userPrompt: string;
+  groqKey?: string;
+  nvidiaNimKey?: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const {
+    model = 'groq-llama-70b',
+    systemPrompt,
+    userPrompt,
+    groqKey = DEFAULT_GROQ_API_KEY,
+    nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
+    signal,
+  } = params;
+
+  let endpoint = '';
+  let authHeader = '';
+  let payloadModel = '';
+
+  if (model.includes('groq') || model === 'groq-llama-70b') {
+    endpoint = '/api/groq/openai/v1/chat/completions';
+    authHeader = `Bearer ${(groqKey || DEFAULT_GROQ_API_KEY).trim()}`;
+    payloadModel = 'llama-3.3-70b-versatile';
+  } else if (model.includes('deepseek')) {
+    endpoint = '/api/nvidia-nim/v1/chat/completions';
+    authHeader = `Bearer ${(nvidiaNimKey || DEFAULT_NVIDIA_NIM_API_KEY).trim()}`;
+    payloadModel = 'nicoboss/DeepSeek-R1-Distill-Qwen-32B-Uncensored';
+  } else {
+    endpoint = '/api/nvidia-nim/v1/chat/completions';
+    authHeader = `Bearer ${(nvidiaNimKey || DEFAULT_NVIDIA_NIM_API_KEY).trim()}`;
+    payloadModel = 'meta/llama-3.3-70b-instruct';
+  }
+
+  const directEndpoints: Record<string, string> = {
+    '/api/groq/openai/v1/chat/completions': 'https://api.groq.com/openai/v1/chat/completions',
+    '/api/nvidia-nim/v1/chat/completions': 'https://integrate.api.nvidia.com/v1/chat/completions',
+  };
+
+  const candidateEndpoints = [endpoint, directEndpoints[endpoint] || endpoint];
+  let lastError: any = null;
+
+  for (const ep of candidateEndpoints) {
+    try {
+      const response = await fetch(ep, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: payloadModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.5,
+          max_tokens: 4096,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        if (response.status === 404 && ep.startsWith('/api')) {
+          continue;
+        }
+        const err = await response.text();
+        throw new Error(`Error en modelo LLM (${response.status}): ${err.slice(0, 180)}`);
+      }
+
+      const json = await response.json();
+      const rawContent = json.choices?.[0]?.message?.content;
+      if (!rawContent) throw new Error('Respuesta vacía del modelo LLM.');
+      return rawContent;
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Fallo al contactar ${ep}:`, err.message);
+    }
+  }
+
+  throw lastError || new Error('No se pudo comunicar con los servicios de LLM (Groq / NVIDIA).');
+}
+
 export interface MasterPromptAnalysis {
   productionSummary: string;
   genreAndTone: string;

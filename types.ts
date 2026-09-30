@@ -150,6 +150,15 @@ export interface SceneSlot {
   seed: number;
 }
 
+export interface StylePreset {
+  id: string;
+  name: string;
+  category: string;
+  promptModifier: string;
+  badgeColor: string;
+  description: string;
+}
+
 export interface CharacterPersona {
   id: string;
   name: string;
@@ -162,10 +171,17 @@ export interface CharacterPersona {
 
 export interface ScriptSceneResult {
   sceneNumber: number;
-  scriptText: string;
-  estimatedDurationSec: number;
-  charactersPresent: string[];
-  promptEn: string;
+  scriptText?: string;
+  scriptSegment?: string;
+  narrationSegment?: string;
+  estimatedDurationSec?: number;
+  durationSeconds?: number;
+  charactersPresent?: string[];
+  promptEn?: string;
+  visualPrompt?: string;
+  visualPromptEn?: string;
+  cameraAngle?: string;
+  lighting?: string;
   continuityNote?: string;
 }
 
