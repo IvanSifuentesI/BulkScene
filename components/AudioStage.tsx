@@ -440,17 +440,17 @@ export const AudioStage: React.FC<AudioStageProps> = ({
             </div>
           </div>
 
-          {/* Estado de Whisper */}
+          {/* Estado de Sincronización Fonética */}
           {isTranscribing ? (
             <div className="p-3.5 rounded-xl bg-[#08090d] flex items-center gap-2.5 text-xs text-emerald-300 animate-pulse">
               <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
-              <span>Alineando marcas de tiempo al milisegundo con <strong>Groq Whisper v3 Turbo</strong>...</span>
+              <span>Alineando marcas de tiempo al milisegundo con el <strong>Motor Fonético Neural</strong>...</span>
             </div>
           ) : transcriptionResult ? (
             <div className="p-3.5 rounded-xl bg-[#08090d] flex items-center justify-between text-xs text-emerald-300">
               <span className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Whisper: <strong>{transcriptionResult.words.length}</strong> palabras detectadas ({transcriptionResult.segments.length} cortes temporales)</span>
+                <span>Sincronización: <strong>{transcriptionResult.words.length}</strong> palabras detectadas ({transcriptionResult.segments.length} cortes temporales)</span>
               </span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded uppercase font-mono">
                 Sync Milimétrico Listo

@@ -103,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'audio' as AppStage,
-      label: 'Voz & Whisper',
+      label: 'Audio & Sincronización',
       icon: Mic,
       badge: null,
       badgeClass: '',
@@ -293,7 +293,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
               <span className="flex items-center gap-1">
                 <Cpu className="w-3 h-3 text-emerald-400" />
-                <span>NVIDIA NIM</span>
+                <span>Motor Neuronal</span>
               </span>
               <span className="text-emerald-400 font-bold">● ONLINE</span>
             </div>

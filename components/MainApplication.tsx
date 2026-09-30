@@ -46,6 +46,9 @@ export const MainApplication: React.FC = () => {
   const [currentStage, setCurrentStage] = useState<AppStage>('guion');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('creador@bulkscene.ai');
+  const [showMobileNotice, setShowMobileNotice] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.innerWidth < 768;
+  });
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('bulkscene_user_email');
@@ -293,7 +296,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <Mic className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Whisper</span>
+              <span>Voz y Audio</span>
             </button>
 
             <button
@@ -328,6 +331,12 @@ export const MainApplication: React.FC = () => {
 
           {/* Right Header Status Bar */}
           <div className="flex items-center gap-3">
+            {/* PC Optimized Badge */}
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-mono shadow-inner">
+              <Monitor className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Modo PC Optimizado</span>
+            </div>
+
             {/* Project Folder Indicator */}
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#111420] text-xs text-gray-300 font-mono shadow-inner border border-white/5">
               <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
@@ -337,8 +346,8 @@ export const MainApplication: React.FC = () => {
             {/* Cluster Status */}
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111420] text-xs font-mono text-gray-300 shadow-inner border border-white/5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-gray-400">NVIDIA Cluster:</span>
-              <span className="text-emerald-400 font-bold">{nvidiaKeys.length} Keys</span>
+              <span className="text-gray-400">Cluster Neuronal:</span>
+              <span className="text-emerald-400 font-bold">Activo</span>
             </div>
 
             {/* Settings Stage Trigger */}
@@ -356,9 +365,28 @@ export const MainApplication: React.FC = () => {
           </div>
         </header>
 
+        {/* Mobile Screen Notice (Only visible when viewport is mobile/small tablet) */}
+        {showMobileNotice && (
+          <div className="md:hidden bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-cyan-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-amber-200">
+            <div className="flex items-center gap-2 pr-2">
+              <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Modo PC Recomendado:</strong> BulkScene Studio está optimizado para pantallas de PC/Laptop para trabajar cómodamente con cientos de escenas y exportación.
+              </span>
+            </div>
+            <button
+              onClick={() => setShowMobileNotice(false)}
+              className="text-gray-400 hover:text-white p-1 rounded font-bold"
+              aria-label="Cerrar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Scrollable Stage Content View */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-          <div className="max-w-[1600px] mx-auto w-full pb-16">
+          <div className="max-w-[1850px] 2xl:max-w-full mx-auto w-full pb-16 px-1 sm:px-2">
             {currentStage === 'showcase' && (
               <LandingPage onOpenStudio={() => setCurrentStage('guion')} />
             )}

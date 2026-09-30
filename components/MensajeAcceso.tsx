@@ -1,5 +1,16 @@
-
 import React from 'react';
+import { Link } from 'react-router-dom';
+import { 
+  Sparkles, 
+  ArrowLeft, 
+  ExternalLink, 
+  Lock, 
+  Clock, 
+  AlertTriangle, 
+  GraduationCap, 
+  ShieldAlert,
+  UserX
+} from 'lucide-react';
 import LogoutButton from './LogoutButton';
 
 type TipoMensaje = 'expirado' | 'no_suscrito' | 'conflicto_dispositivo' | 'cuenta_desactivada' | 'no_autorizado' | 'limite_dispositivos';
@@ -11,36 +22,36 @@ interface MensajeAccesoProps {
 }
 
 const formatDate = (dateString: string | undefined | null): string => {
-    if (!dateString) return 'hace un tiempo';
-    try {
-        const date = new Date(dateString);
-        return new Intl.DateTimeFormat('es-ES', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-        }).format(date);
-    } catch (e) {
-        return dateString; // Fallback to original string if format is invalid
-    }
+  if (!dateString) return 'hace un tiempo';
+  try {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date);
+  } catch (e) {
+    return dateString;
+  }
 };
 
-const MensajeAcceso: React.FC<MensajeAccesoProps> = ({ tipo, onBack, expirationDate }) => {
+export const MensajeAcceso: React.FC<MensajeAccesoProps> = ({ tipo, onBack, expirationDate }) => {
   const config = {
     no_suscrito: {
       icono: '🎓',
-      titulo: 'Acceso exclusivo comunidad Skool',
-      descripcion: 'Este correo no tiene una suscripción activa en nuestra comunidad. Únete para obtener acceso inmediato a esta herramienta.',
-      botonTexto: 'Unirme a la comunidad en Skool →',
+      titulo: 'Acceso Exclusivo Comunidad Skool',
+      descripcion: 'Este correo no cuenta con una membresía activa en nuestra comunidad. Únete para obtener acceso inmediato a BulkScene Studio y todas las herramientas.',
+      botonTexto: 'Unirme a la Comunidad en Skool →',
       botonLink: 'https://www.skool.com/ia-automatiza-7412/about',
-      color: 'text-indigo-400',
+      color: 'text-emerald-400',
       secondaryText: null,
       secondaryLink: null
     },
     no_autorizado: {
       icono: '🔒',
       titulo: 'Acceso Restringido',
-      descripcion: 'Este correo no está autorizado para acceder a la aplicación.',
-      botonTexto: 'Unirme a la comunidad en Skool →',
+      descripcion: 'Este correo no está registrado como miembro activo de la plataforma.',
+      botonTexto: 'Adquirir Acceso en Skool →',
       botonLink: 'https://www.skool.com/ia-automatiza-7412/about',
       color: 'text-red-400',
       secondaryText: null,
@@ -48,28 +59,28 @@ const MensajeAcceso: React.FC<MensajeAccesoProps> = ({ tipo, onBack, expirationD
     },
     expirado: {
       icono: '⏰',
-      titulo: 'Tu acceso ha finalizado',
-      descripcion: `Tu suscripción finalizó el ${formatDate(expirationDate)}. Para seguir disfrutando de esta y todas las herramientas de automatización, renueva tu acceso en nuestra comunidad.`,
-      botonTexto: 'Renovar en Skool y Desbloquear Acceso →',
+      titulo: 'Tu Acceso Ha Finalizado',
+      descripcion: `Tu suscripción finalizó el ${formatDate(expirationDate)}. Para seguir disfrutando de BulkScene Studio con generación ilimitada y sin cobros de APIs, reactiva tu membresía en Skool.`,
+      botonTexto: 'Reactivar en Skool y Desbloquear Acceso →',
       botonLink: 'https://www.skool.com/ia-automatiza-7412/about',
       color: 'text-amber-400',
-      secondaryText: 'Si ya renovaste, contacta a Ivan por Skool',
+      secondaryText: 'Si ya renovaste, contacta a Iván por Skool',
       secondaryLink: 'https://www.skool.com/@ivan-sifuentes-3476?g=ia-automatiza'
     },
     conflicto_dispositivo: {
       icono: '📱',
-      titulo: 'Sesión Cerrada',
-      descripcion: 'Tu sesión se cerró porque tu cuenta está activa en otro dispositivo no autorizado o ha cambiado tu firma de seguridad.',
+      titulo: 'Sesión Cerrada en Otro Equipo',
+      descripcion: 'Tu sesión se cerró porque tu cuenta inició sesión en otro dispositivo o ha cambiado tu firma de seguridad.',
       botonTexto: 'Volver a Iniciar Sesión',
       botonAction: true,
-      color: 'text-orange-400',
+      color: 'text-cyan-400',
       secondaryText: null,
       secondaryLink: null
     },
     cuenta_desactivada: {
       icono: '🚫',
-      titulo: 'Cuenta Desactivada',
-      descripcion: 'Tu cuenta ha sido desactivada temporalmente por un administrador.',
+      titulo: 'Cuenta Temporalmente Desactivada',
+      descripcion: 'Tu cuenta ha sido pausada o desactivada administrativamente.',
       botonTexto: 'Contactar Soporte en Skool',
       botonLink: 'https://www.skool.com/ia-automatiza-7412/about',
       color: 'text-slate-400',
@@ -77,93 +88,129 @@ const MensajeAcceso: React.FC<MensajeAccesoProps> = ({ tipo, onBack, expirationD
       secondaryLink: null
     },
     limite_dispositivos: {
-        icono: '🚧',
-        titulo: 'Límite de Dispositivos',
-        descripcion: 'Has alcanzado el máximo de 2 dispositivos permitidos simultáneamente. Por favor, cierra sesión en uno de tus otros equipos para poder ingresar aquí, o contacta al administrador.',
-        botonTexto: 'Volver al Inicio',
-        botonAction: true,
-        color: 'text-yellow-400',
-        secondaryText: null,
-        secondaryLink: null
+      icono: '🚧',
+      titulo: 'Límite de Dispositivos Simultáneos',
+      descripcion: 'Has alcanzado el límite máximo de 2 dispositivos activos permitidos simultáneamente. Cierra sesión en tu otro equipo para ingresar aquí.',
+      botonTexto: 'Volver al Inicio',
+      botonAction: true,
+      color: 'text-amber-400',
+      secondaryText: null,
+      secondaryLink: null
     }
   }[tipo];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden selection:bg-blue-500 selection:text-white">
-      {/* Fondo decorativo */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-gradient-to-tr from-blue-600/15 via-indigo-500/10 to-violet-600/15 rounded-full blur-[110px]" />
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-violet-600/10 rounded-full blur-[100px]" />
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:28px_28px] opacity-25" />
-      </div>
+    <div className="min-h-screen bg-[#06080d] text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-black">
+      {/* Top Bar matching Studio & Login */}
+      <header className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 flex items-center justify-between border-b border-white/[0.06]">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20">
+            <div className="w-full h-full bg-[#090b10] rounded-[10px] flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-emerald-400" />
+            </div>
+          </div>
+          <div>
+            <span className="font-black text-lg text-white tracking-tight">
+              BULKSCENE <span className="text-emerald-400">STUDIO</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+                CERO APIS
+              </span>
+              <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.2 rounded">
+                ACCESO MIEMBROS
+              </span>
+            </div>
+          </div>
+        </Link>
 
-      <div className="max-w-[480px] w-full bg-slate-900/80 backdrop-blur-2xl border border-slate-800/90 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6),0_0_40px_rgba(59,130,246,0.08)] p-8 sm:p-9 text-center animate-fade-in z-10 relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-[1.5px] before:bg-gradient-to-r before:from-transparent before:via-blue-400/50 before:to-transparent">
-        
-        {/* Botón Volver (Solo si se proporciona la función onBack) */}
-        {onBack && (
-          <button 
+        {onBack ? (
+          <button
             onClick={onBack}
-            className="absolute top-4 left-4 text-slate-500 hover:text-white transition-colors flex items-center gap-1 text-sm font-medium"
-            title="Volver al inicio"
+            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Volver
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Volver al Login</span>
           </button>
+        ) : (
+          <Link
+            to="/"
+            className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Volver al Inicio</span>
+          </Link>
         )}
+      </header>
 
-        <div className="text-6xl mb-6 drop-shadow-lg filter animate-bounce-slow mt-4">{config.icono}</div>
-        
-        <h2 className={`text-2xl font-bold mb-4 ${config.color}`}>
-          {config.titulo}
-        </h2>
-        
-        <p className="text-slate-300 mb-8 leading-relaxed text-sm md:text-base">
-          {config.descripcion}
-        </p>
+      {/* Main Container in Studio Glassmorphic Style */}
+      <main className="flex-1 flex items-center justify-center p-4 py-12 relative overflow-hidden">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
 
-        <div className="space-y-4">
-          {config.botonAction ? (
-             // Si es conflicto o limite, usamos el botón para reiniciar el flujo (logout)
-            <LogoutButton className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-blue-900/30 flex items-center justify-center gap-2" />
-          ) : (
-            <>
-                <a 
-                  href={config.botonLink || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block w-full py-3.5 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-indigo-900/40 transform hover:-translate-y-0.5 flex items-center justify-center"
-                >
-                  {config.botonTexto}
-                </a>
+        <div className="w-full max-w-md z-10 animate-fade-in space-y-6">
+          <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-7 sm:p-9 shadow-[0_0_80px_rgba(16,185,129,0.12)] overflow-hidden text-center">
+            {/* Top highlight bar */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
 
-                {/* Secondary Button specifically for Expired users */}
-                {config.secondaryText && config.secondaryLink && (
-                    <a 
-                        href={config.secondaryLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block w-full py-2.5 px-4 bg-slate-800/50 hover:bg-slate-700/80 text-slate-300 hover:text-white text-sm font-medium rounded-xl transition-colors border border-slate-700 hover:border-slate-600"
+            <div className="text-5xl mb-4 drop-shadow-lg filter animate-bounce-slow mt-2">
+              {config.icono}
+            </div>
+
+            <h2 className={`text-xl sm:text-2xl font-black mb-3 ${config.color}`}>
+              {config.titulo}
+            </h2>
+
+            <p className="text-slate-300 mb-6 leading-relaxed text-sm">
+              {config.descripcion}
+            </p>
+
+            <div className="space-y-3">
+              {config.botonAction ? (
+                <LogoutButton className="w-full py-3 px-6 bg-white/10 hover:bg-white/15 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm" />
+              ) : (
+                <>
+                  <a
+                    href={config.botonLink || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block w-full py-3.5 px-6 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-[0_0_25px_rgba(16,185,129,0.3)] transform hover:scale-[1.02] flex items-center justify-center gap-2"
+                  >
+                    <span>{config.botonTexto}</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+
+                  {config.secondaryText && config.secondaryLink && (
+                    <a
+                      href={config.secondaryLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-colors border border-white/10"
                     >
-                        {config.secondaryText}
+                      {config.secondaryText}
                     </a>
-                )}
-            </>
-          )}
+                  )}
+                </>
+              )}
 
-          <div className="pt-4 border-t border-slate-800/50">
-            {tipo === 'no_suscrito' ? (
-              <p className="text-xs text-slate-500 leading-relaxed px-4">
-                Si eres alumno de Skool, envía un mensaje a Iván a través de la academia.
-              </p>
-            ) : (
-              !config.botonAction && <LogoutButton variant="text" />
-            )}
+              <div className="pt-4 border-t border-white/5">
+                {tipo === 'no_suscrito' ? (
+                  <p className="text-xs text-slate-500 leading-relaxed px-2">
+                    Si ya adquiriste tu acceso en Skool con otro correo o necesitas soporte, comunícate directamente con la academia.
+                  </p>
+                ) : (
+                  !config.botonAction && <LogoutButton variant="text" />
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
+
+      {/* Subtle Studio Footer */}
+      <footer className="py-4 text-center text-xs text-slate-600 border-t border-white/[0.04]">
+        <span>BulkScene Studio • Sistema de Verificación Automática de Membresías</span>
+      </footer>
     </div>
   );
 };

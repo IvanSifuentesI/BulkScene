@@ -26,7 +26,8 @@ import {
   Copy,
   CheckCheck,
   Star,
-  Quote
+  Quote,
+  Clock
 } from 'lucide-react';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
 
@@ -39,9 +40,40 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [activeWorkflowStep, setActiveWorkflowStep] = useState<number>(0);
   const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState<{ minutes: number; seconds: number }>({ minutes: 15, seconds: 0 });
 
   useEffect(() => {
     getPricingConfig().then(setPricing);
+
+    // Evergreen 15-Minute Countdown Timer (Persiste en localStorage)
+    const STORAGE_KEY = 'bulkscene_discount_deadline';
+    let deadline = localStorage.getItem(STORAGE_KEY);
+    
+    if (!deadline || isNaN(Number(deadline)) || Number(deadline) <= Date.now()) {
+      const newDeadline = Date.now() + 15 * 60 * 1000;
+      localStorage.setItem(STORAGE_KEY, newDeadline.toString());
+      deadline = newDeadline.toString();
+    }
+
+    const updateCountdown = () => {
+      const remainingMs = Number(deadline) - Date.now();
+      if (remainingMs <= 0) {
+        // Ciclar con periodo de gracia de 3 minutos para mantener la máxima urgencia
+        const recycled = Date.now() + 3 * 60 * 1000;
+        localStorage.setItem(STORAGE_KEY, recycled.toString());
+        deadline = recycled.toString();
+        setTimeLeft({ minutes: 3, seconds: 0 });
+      } else {
+        const totalSec = Math.floor(remainingMs / 1000);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        setTimeLeft({ minutes: m, seconds: s });
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const toggleFaq = (index: number) => {
@@ -234,23 +266,57 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
   return (
     <div className="min-h-screen bg-[#06080d] text-slate-100 font-sans selection:bg-emerald-500 selection:text-black">
-      {/* 1. MAIN HEADER / NAVIGATION */}
-      <header className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex items-center justify-between border-b border-white/[0.06]">
+      {/* 1. TOP URGENCY 15-MINUTE DISCOUNT COUNTDOWN (Mobile & PC Optimized) */}
+      <aside aria-label="Descuento limitado de 15 minutos" className="sticky top-0 z-50 bg-[#070a12]/95 border-b border-emerald-500/30 py-2 sm:py-2.5 px-3 sm:px-6 shadow-[0_4px_30px_rgba(0,0,0,0.85)] backdrop-blur-md">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-center sm:text-left">
+          {/* Urgency message */}
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
+            <span className="inline-flex items-center gap-1.5 bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[10px] font-black animate-pulse">
+              <Flame className="w-3.5 h-3.5 fill-red-400 text-red-400" />
+              OFERTA RELÁMPAGO 15 MIN
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-slate-200">
+              Descuento especial de lanzamiento (<strong>$14 USD/mes</strong>) expira en:
+            </span>
+            {/* Countdown Digits */}
+            <div className="inline-flex items-center gap-1 font-mono font-black text-sm bg-black/80 px-2.5 py-0.5 rounded-lg border border-emerald-500/40 text-emerald-400 shadow-inner">
+              <Clock className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{String(timeLeft.minutes).padStart(2, '0')}</span>
+              <span className="animate-pulse">:</span>
+              <span>{String(timeLeft.seconds).padStart(2, '0')}</span>
+            </div>
+          </div>
+
+          {/* Quick CTA button */}
+          <a
+            href={pricing.skoolUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all hover:scale-105 uppercase tracking-wider active:scale-95"
+          >
+            <span>Asegurar Mi Descuento ($14 USD)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      </aside>
+
+      {/* 2. MAIN HEADER / NAVIGATION */}
+      <header className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20 shrink-0">
             <div className="w-full h-full bg-[#090b10] rounded-[10px] flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-emerald-400" />
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
             </div>
           </div>
           <div>
-            <span className="font-black text-lg text-white tracking-tight">
+            <span className="font-black text-base sm:text-lg text-white tracking-tight">
               BULKSCENE <span className="text-emerald-400">STUDIO</span>
             </span>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="text-[9px] sm:text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 rounded">
                 CERO APIS
               </span>
-              <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.2 rounded">
+              <span className="hidden xs:inline-block text-[9px] sm:text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.2 rounded">
                 100% ILIMITADO
               </span>
             </div>
@@ -258,7 +324,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
 
         {/* Navigation CTAs */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <a
             href="#modos"
             className="hidden md:inline-block text-xs text-slate-400 hover:text-white transition-colors font-medium px-3 py-1.5"
@@ -282,7 +348,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
           <Link
             to="/login"
-            className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-200 hover:text-white font-bold text-xs flex items-center gap-1.5 border border-white/10 transition-all"
+            className="px-3 sm:px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-200 hover:text-white font-bold text-xs flex items-center gap-1.5 border border-white/10 transition-all"
           >
             <LogIn className="w-3.5 h-3.5 text-emerald-400" />
             <span>Acceso Miembros</span>
@@ -292,7 +358,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             href={pricing.skoolUrl}
             target="_blank"
             rel="noreferrer"
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-[0_0_20px_rgba(16,185,129,0.35)] transition-all hover:scale-105"
+            className="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-[0_0_20px_rgba(16,185,129,0.35)] transition-all hover:scale-105"
           >
             <span>Unirse por ${pricing.price} USD</span>
             <ExternalLink className="w-3 h-3" />
@@ -300,52 +366,52 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
       </header>
 
-      {/* 2. HERO SECTION (High-Converting Tripwire VSL Hook) */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 pb-16 text-center space-y-8">
+      {/* 3. HERO SECTION (High-Converting Tripwire VSL Hook - Mobile & Desktop Fluid) */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-12 sm:pb-16 text-center space-y-6 sm:space-y-8">
         {/* Core Category Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-wide uppercase border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-          <Zap className="w-4 h-4 fill-emerald-400" />
-          <span>MOTOR DE GENERACIÓN MASIVA • HASTA 1,000 IMÁGENES EN MINUTOS • CERO APIS</span>
+        <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] sm:text-xs font-bold tracking-wide uppercase border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)] max-w-full truncate">
+          <Zap className="w-3.5 h-3.5 fill-emerald-400 shrink-0" />
+          <span className="truncate">MOTOR MASIVO • HASTA 1,000 IMÁGENES EN MINUTOS • CERO APIS</span>
         </div>
 
         {/* The Core Headline (La Gran Promesa) */}
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.08]">
+        <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.1] sm:leading-[1.08]">
           Genera Lotes de Hasta <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">1,000 Imágenes en Minutos</span>
         </h1>
 
         {/* Subheadline (Resolución de Dolor & Mecanismo) */}
-        <p className="text-base sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
+        <p className="text-sm sm:text-lg lg:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
           Produce cientos de tomas místicas y cinematográficas con <strong>consistencia facial absoluta</strong> de tus personajes, estilos visuales de alta retención y descarga ordenada (#001 a #1000) lista para arrastrar a CapCut, Premiere o DaVinci. <strong className="text-slate-200">Sin APIs, sin pagos de tokens y sin suscripciones abusivas.</strong>
         </p>
 
         {/* Rediseño Premium del Precio Especial de Lanzamiento (Hero Card) */}
-        <div className="pt-2 max-w-2xl mx-auto">
-          <div className="relative rounded-3xl bg-gradient-to-b from-[#0f1422]/90 via-[#0a0d16]/90 to-[#07090f]/90 border border-emerald-500/40 p-5 sm:p-7 shadow-[0_0_50px_rgba(16,185,129,0.2),inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl overflow-hidden group">
+        <div className="pt-2 max-w-2xl mx-auto w-full">
+          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#0f1422]/90 via-[#0a0d16]/90 to-[#07090f]/90 border border-emerald-500/40 p-4 sm:p-7 shadow-[0_0_50px_rgba(16,185,129,0.2),inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl overflow-hidden group text-left">
             {/* Top highlight subtle glow */}
             <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
             <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-24 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
 
-            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6">
               {/* Left Column: Pricing & Tag */}
-              <div className="text-center sm:text-left space-y-2">
+              <div className="text-center sm:text-left space-y-2 w-full sm:w-auto">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-extrabold uppercase tracking-widest">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>PRECIO ESPECIAL DE LANZAMIENTO EN SKOOL</span>
                 </div>
 
-                <div className="flex items-baseline justify-center sm:justify-start gap-3">
-                  <span className="text-base sm:text-lg line-through text-slate-500 font-mono font-bold">
+                <div className="flex items-baseline justify-center sm:justify-start gap-2.5 sm:gap-3">
+                  <span className="text-sm sm:text-base line-through text-slate-500 font-mono font-bold">
                     $197 USD
                   </span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 font-mono tracking-tight">
+                    <span className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 font-mono tracking-tight">
                       ${pricing.price}
                     </span>
                     <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase font-mono">
                       {pricing.currency}{pricing.period}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                  <span className="text-[9px] sm:text-[10px] font-mono font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
                     93% OFF
                   </span>
                 </div>
@@ -361,7 +427,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                   href={pricing.skoolUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="relative w-full sm:w-auto px-7 py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 uppercase tracking-wider"
+                  className="relative w-full sm:w-auto px-6 sm:px-7 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 uppercase tracking-wider"
                 >
                   <span>DESBLOQUEAR ACCESO EN SKOOL</span>
                   <ArrowRight className="w-4 h-4" />
@@ -370,7 +436,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-slate-400">
+          <div className="mt-3 flex items-center justify-center gap-3 sm:gap-4 text-[10px] sm:text-[11px] text-slate-400 flex-wrap">
             <span className="flex items-center gap-1 text-emerald-400">
               <Check className="w-3.5 h-3.5" /> Pago Seguro por Skool
             </span>
@@ -386,67 +452,67 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
 
         {/* Proof Metrics Strip */}
-        <div className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 max-w-4xl mx-auto text-center">
-          <div className="p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
-            <div className="flex items-center justify-center gap-1.5 text-2xl font-black text-white font-mono">
-              <InfinityIcon className="w-6 h-6 text-emerald-400" />
+        <div className="pt-2 grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto text-center">
+          <div className="p-3 sm:p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
+            <div className="flex items-center justify-center gap-1.5 text-xl sm:text-2xl font-black text-white font-mono">
+              <InfinityIcon className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
               <span>Ilimitadas</span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Sin límite de imágenes</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">Sin límite de imágenes</p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
-            <p className="text-2xl font-black text-emerald-400 font-mono">$0 en APIs</p>
-            <p className="text-xs text-slate-400 mt-1">Cero cobros por tokens</p>
+          <div className="p-3 sm:p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
+            <p className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">$0 en APIs</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">Cero cobros por tokens</p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
-            <p className="text-2xl font-black text-teal-400 font-mono">1.8s</p>
-            <p className="text-xs text-slate-400 mt-1">Velocidad de generación</p>
+          <div className="p-3 sm:p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
+            <p className="text-xl sm:text-2xl font-black text-teal-400 font-mono">1.8s</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">Velocidad de generación</p>
           </div>
 
-          <div className="p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
-            <p className="text-2xl font-black text-cyan-300 font-mono">4K UHD</p>
-            <p className="text-xs text-slate-400 mt-1">Super-Resolución 2160p</p>
+          <div className="p-3 sm:p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
+            <p className="text-xl sm:text-2xl font-black text-cyan-300 font-mono">4K UHD</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">Super-Resolución 2160p</p>
           </div>
         </div>
 
-        {/* 3. VISUAL APP MOCKUP SHOWCASE (Estilo Mac con Imágenes Místicas y Épicas) */}
-        <div className="pt-4 max-w-5xl mx-auto">
-          <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-2 sm:p-5 shadow-[0_0_90px_rgba(16,185,129,0.18)] overflow-hidden">
+        {/* 4. VISUAL APP MOCKUP SHOWCASE (Estilo Mac con Imágenes Místicas y Épicas - Mobile & PC Fluid) */}
+        <div className="pt-4 max-w-5xl mx-auto w-full">
+          <div className="relative rounded-2xl sm:rounded-3xl bg-[#0a0d14] border border-white/10 p-2 sm:p-5 shadow-[0_0_90px_rgba(16,185,129,0.18)] overflow-hidden">
             {/* Mac top chrome */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#ff5f56] inline-block shadow-sm" />
-                <span className="w-3 h-3 rounded-full bg-[#ffbd2e] inline-block shadow-sm" />
-                <span className="w-3 h-3 rounded-full bg-[#27c93f] inline-block shadow-sm" />
-                <span className="ml-3 font-mono text-[11px] text-slate-400 hidden sm:inline-block">
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-white/5 text-xs text-slate-500">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#ff5f56] inline-block shadow-sm" />
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#ffbd2e] inline-block shadow-sm" />
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#27c93f] inline-block shadow-sm" />
+                <span className="ml-2 sm:ml-3 font-mono text-[10px] sm:text-[11px] text-slate-400 hidden sm:inline-block">
                   bulkscene-studio.app/workspace/produccion-viral-1000-escenas
                 </span>
               </div>
-              <div className="flex items-center gap-2 font-mono text-[11px] text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20">
+              <div className="flex items-center gap-1.5 font-mono text-[10px] sm:text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Estado: Motor Activo • Costo API: $0.00</span>
+                <span>Motor Activo • $0.00 APIs</span>
               </div>
             </div>
 
             {/* Interactive Workflow Steps Bar */}
-            <div className="p-3 sm:px-6 sm:py-3 border-b border-white/5 bg-white/[0.01] flex items-center justify-between gap-2 overflow-x-auto">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 hidden md:inline">
+            <div className="p-2 sm:px-6 sm:py-3 border-b border-white/5 bg-white/[0.01] flex items-center justify-between gap-2 overflow-x-auto">
+              <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 hidden md:inline">
                 Flujo del Estudio:
               </span>
-              <div className="flex items-center gap-2 w-full justify-between sm:justify-start">
+              <div className="flex items-center gap-1.5 sm:gap-2 w-full justify-between sm:justify-start">
                 {workflowSteps.map((wf, wIdx) => (
                   <button
                     key={wIdx}
                     onClick={() => setActiveWorkflowStep(wIdx)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-left ${
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 text-left shrink-0 ${
                       activeWorkflowStep === wIdx
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                         : 'bg-white/[0.03] text-slate-400 border border-transparent hover:text-white'
                     }`}
                   >
-                    <span className="w-4 h-4 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] flex items-center justify-center font-mono font-bold">
+                    <span className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-emerald-500/30 text-emerald-300 text-[9px] sm:text-[10px] flex items-center justify-center font-mono font-bold">
                       {wIdx + 1}
                     </span>
                     <span>{wf.title}</span>
@@ -456,11 +522,11 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             </div>
 
             {/* Simulated Workspace View */}
-            <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
+            <div className="p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 text-left">
               {/* Left Column: Script and Character Lock + Active Modes */}
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Active Mode Dynamic Box */}
-                <div className="p-4 rounded-2xl bg-[#121622] border border-white/10 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-[#121622] border border-white/10 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-white flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -475,7 +541,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-white flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-purple-400" />
@@ -490,7 +556,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Film className="w-3.5 h-3.5 text-emerald-400" />
                     Estilo Visual Activo
@@ -507,19 +573,19 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               </div>
 
               {/* Center & Right Column: Scene Grid Preview with MÍSTICAS Y ÉPICAS IMAGES */}
-              <div className="md:col-span-2 space-y-3">
+              <div className="lg:col-span-2 space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-cyan-400" />
                     Lote Masivo Generado (Escenas del Guion Místico)
                   </span>
-                  <span className="text-emerald-400 font-mono text-[11px] font-bold">
+                  <span className="text-emerald-400 font-mono text-[10px] sm:text-[11px] font-bold">
                     ✓ Lote de 1,000 Escenas Listo (100%)
                   </span>
                 </div>
 
                 {/* 6 Striking Visual Scene Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
                   {sampleScenes.map((sc, i) => (
                     <div
                       key={i}
@@ -537,7 +603,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-black/60 pointer-events-none" />
 
                       {/* Top Header Information */}
-                      <div className="relative z-10 p-2.5 flex items-center justify-between text-[10px]">
+                      <div className="relative z-10 p-2 sm:p-2.5 flex items-center justify-between text-[10px]">
                         <span className="font-mono font-black text-emerald-300 bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded border border-emerald-500/30 shadow">
                           #{sc.num}
                         </span>
@@ -576,8 +642,8 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                       </div>
 
                       {/* Bottom Title & Scene Output Name */}
-                      <div className="relative z-10 p-2.5 space-y-0.5">
-                        <p className="text-[11px] text-white font-extrabold leading-tight drop-shadow">
+                      <div className="relative z-10 p-2 sm:p-2.5 space-y-0.5">
+                        <p className="text-[10px] sm:text-[11px] text-white font-extrabold leading-tight drop-shadow">
                           {sc.title}
                         </p>
                         <p className="text-[9px] font-mono text-emerald-400 drop-shadow truncate">
@@ -594,7 +660,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     <FolderArchive className="w-4 h-4 text-emerald-400" />
                     <span>Archivo de salida: <strong className="text-white">Lote_1000_Escenas_Sincronizadas.zip</strong></span>
                   </div>
-                  <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                  <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 text-center sm:text-left">
                     Listo para arrastrar a CapCut y Premiere
                   </span>
                 </div>
@@ -604,14 +670,14 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
       </section>
 
-      {/* 4. SECCIÓN DE PRUEBA SOCIAL Y TESTIMONIOS (Reemplazo del Banner / Fórmula 100K) */}
-      <section id="testimonios" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 space-y-12 border-t border-white/[0.06]">
+      {/* 4. SECCIÓN DE PRUEBA SOCIAL Y TESTIMONIOS (Fórmula 100K) */}
+      <section id="testimonios" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-8 sm:space-y-12 border-t border-white/[0.06]">
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold uppercase border border-emerald-500/30">
             <Users className="w-3.5 h-3.5" />
             <span>Casos Reales de Alumnos y Creadores</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
             Lo que Dicen Quienes Ya Crean a Escala
           </h2>
           <p className="text-xs sm:text-base text-slate-400 max-w-2xl mx-auto">
@@ -619,11 +685,11 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 max-w-5xl mx-auto">
           {testimonials.map((t, idx) => (
             <div
               key={idx}
-              className="p-6 rounded-3xl bg-[#0e111a] border border-white/5 hover:border-emerald-500/30 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-lg shadow-black/40"
+              className="p-5 sm:p-6 rounded-3xl bg-[#0e111a] border border-white/5 hover:border-emerald-500/30 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-lg shadow-black/40"
             >
               <div className="space-y-3">
                 {/* Rating stars & metric pill */}
@@ -649,7 +715,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                 <img
                   src={t.avatar}
                   alt={t.name}
-                  className="w-10 h-10 rounded-full object-cover border border-emerald-500/40"
+                  className="w-10 h-10 rounded-full object-cover border border-emerald-500/40 shrink-0"
                 />
                 <div>
                   <h4 className="text-xs font-bold text-white flex items-center gap-1">
@@ -666,12 +732,12 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 5. EL VIEJO CAMINO VS EL NUEVO MÉTODO (Fórmula 100K Problem vs Solution) */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-16 space-y-12 border-t border-white/[0.06]">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-8 sm:space-y-12 border-t border-white/[0.06]">
         <div className="text-center space-y-3">
           <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">
             La Transformación Radical en tu Flujo de Trabajo
           </span>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
             El Viejo Camino vs El Nuevo Método
           </h2>
           <p className="text-xs sm:text-base text-slate-400 max-w-2xl mx-auto">
@@ -679,20 +745,20 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 max-w-4xl mx-auto">
           {/* El Viejo Camino */}
-          <div className="p-8 rounded-3xl bg-[#140b0e]/70 border border-red-500/20 space-y-6">
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#140b0e]/70 border border-red-500/20 space-y-5 sm:space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center shrink-0">
                 <XCircle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">El Viejo Camino</h3>
+                <h3 className="text-base sm:text-lg font-black text-white">El Viejo Camino</h3>
                 <p className="text-xs text-red-300">Costoso, lento y lleno de límites técnicos</p>
               </div>
             </div>
 
-            <ul className="space-y-4 text-xs text-slate-300">
+            <ul className="space-y-3.5 sm:space-y-4 text-xs text-slate-300">
               <li className="flex items-start gap-2.5">
                 <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <span><strong>Suscripciones mensuales de $30 a $60 USD</strong> en herramientas que limitan la cantidad de imágenes.</span>
@@ -713,18 +779,18 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </div>
 
           {/* El Nuevo Método con BulkScene Studio */}
-          <div className="p-8 rounded-3xl bg-[#091512]/70 border border-emerald-500/30 space-y-6 shadow-[0_0_50px_rgba(16,185,129,0.1)]">
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#091512]/70 border border-emerald-500/30 space-y-5 sm:space-y-6 shadow-[0_0_50px_rgba(16,185,129,0.1)]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">El Nuevo Método (BulkScene Studio)</h3>
+                <h3 className="text-base sm:text-lg font-black text-white">El Nuevo Método (BulkScene Studio)</h3>
                 <p className="text-xs text-emerald-300">Ilimitado, sin APIs y 100% automatizado</p>
               </div>
             </div>
 
-            <ul className="space-y-4 text-xs text-slate-200">
+            <ul className="space-y-3.5 sm:space-y-4 text-xs text-slate-200">
               <li className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span><strong>Imágenes Ilimitadas y Gratuitas:</strong> Genera tantas tomas como quieras sin límite mensual ni cargos extra.</span>
@@ -747,13 +813,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 6. LOS 7 MODOS DE CREACIÓN (Módulo de Poder Explicativo) */}
-      <section id="modos" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 space-y-12 border-t border-white/[0.06]">
+      <section id="modos" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-8 sm:space-y-12 border-t border-white/[0.06]">
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-300 text-xs font-bold uppercase border border-cyan-500/30">
             <Sliders className="w-3.5 h-3.5" />
             <span>Versatilidad Total para Creadores de Contenido</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
             Los 7 Modos de Producción Incluidos
           </h2>
           <p className="text-xs sm:text-base text-slate-400 max-w-2xl mx-auto">
@@ -762,11 +828,11 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
 
         {/* Interactive Mode Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {modes.map((mode, idx) => (
             <div
               key={idx}
-              className="p-6 rounded-3xl bg-[#0e111a] border border-white/5 hover:border-emerald-500/40 transition-all duration-300 space-y-4 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] flex flex-col justify-between"
+              className="p-5 sm:p-6 rounded-3xl bg-[#0e111a] border border-white/5 hover:border-emerald-500/40 transition-all duration-300 space-y-4 hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] flex flex-col justify-between"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -802,13 +868,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 7. THE VALUE STACK & SKOOL OFFER (Hormozi Value Stack / Fórmula 100K) */}
-      <section id="oferta" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 space-y-12 border-t border-white/[0.06]">
+      <section id="oferta" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-8 sm:space-y-12 border-t border-white/[0.06]">
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-amber-500/15 text-amber-300 text-xs font-bold uppercase border border-amber-500/30">
             <Flame className="w-4 h-4 fill-amber-400 text-amber-400" />
             <span>Oferta Irresistible Skool • Todo Incluido</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
             Todo lo que Recibes al Unirte Hoy
           </h2>
           <p className="text-xs sm:text-base text-slate-400 max-w-2xl mx-auto">
@@ -817,15 +883,15 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         </div>
 
         {/* Featured Offer Stack Card */}
-        <div className="max-w-4xl mx-auto">
-          <div className="relative rounded-3xl bg-gradient-to-b from-[#131b28] via-[#0b0e16] to-[#06080d] border-2 border-emerald-500/60 p-6 sm:p-12 shadow-[0_0_80px_rgba(16,185,129,0.25)] overflow-hidden space-y-8">
+        <div className="max-w-4xl mx-auto w-full">
+          <div className="relative rounded-2xl sm:rounded-3xl bg-gradient-to-b from-[#131b28] via-[#0b0e16] to-[#06080d] border-2 border-emerald-500/60 p-5 sm:p-12 shadow-[0_0_80px_rgba(16,185,129,0.25)] overflow-hidden space-y-6 sm:space-y-8">
             {/* Top Ribbon */}
-            <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-teal-400 text-black text-[11px] font-black px-6 py-1.5 rounded-bl-2xl uppercase tracking-wider shadow">
+            <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-teal-400 text-black text-[10px] sm:text-[11px] font-black px-4 sm:px-6 py-1.5 rounded-bl-2xl uppercase tracking-wider shadow">
               🔥 Membresía Oficial en Skool
             </div>
 
             {/* Header of Offer */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/[0.08]">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6 pb-6 border-b border-white/[0.08]">
               <div>
                 <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider block mb-1">
                   Membresía Completa de la Academia
@@ -844,14 +910,14 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                   Valor Normal: $685 USD
                 </div>
                 <div className="flex items-baseline md:justify-end gap-1">
-                  <span className="text-5xl sm:text-6xl font-black text-emerald-400 font-mono tracking-tight">
+                  <span className="text-4xl sm:text-6xl font-black text-emerald-400 font-mono tracking-tight">
                     ${pricing.price}
                   </span>
-                  <span className="text-sm font-bold text-slate-400 uppercase">
+                  <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase">
                     {pricing.currency}{pricing.period}
                   </span>
                 </div>
-                <span className="text-[11px] font-mono text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mt-1 border border-emerald-500/20">
+                <span className="text-[10px] sm:text-[11px] font-mono text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mt-1 border border-emerald-500/20">
                   ⚡ Sincronizado en vivo con Skool
                 </span>
               </div>
@@ -865,95 +931,95 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
               <div className="space-y-3">
                 {/* Item 1 */}
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
                       <Wrench className="w-4 h-4" />
                     </div>
                     <div>
-                      <strong className="text-white text-sm block">1. Software BulkScene Studio (Suite Ilimitada)</strong>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <strong className="text-white text-xs sm:text-sm block">1. Software BulkScene Studio (Suite Ilimitada)</strong>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                         Generación de hasta 1,000 imágenes en minutos, sin APIs, consistencia de personajes, 7 modos de creación y escalado 4K Ultra HD.
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-400 line-through shrink-0">$197 USD/mes</span>
+                  <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-400 line-through shrink-0">$197 USD/mes</span>
                 </div>
 
                 {/* Item 2 */}
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
                       <Users className="w-4 h-4" />
                     </div>
                     <div>
-                      <strong className="text-white text-sm block">2. Comunidad Exclusiva de Creadores en Skool</strong>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <strong className="text-white text-xs sm:text-sm block">2. Comunidad Exclusiva de Creadores en Skool</strong>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                         Red privada de networking con creadores de canales automatizados, casos de éxito reales y apoyo mutuo diario.
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-400 line-through shrink-0">$97 USD/mes</span>
+                  <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-400 line-through shrink-0">$97 USD/mes</span>
                 </div>
 
                 {/* Item 3 */}
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
                       <GraduationCap className="w-4 h-4" />
                     </div>
                     <div>
-                      <strong className="text-white text-sm block">3. Academia Completa de Automatización de Videos</strong>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <strong className="text-white text-xs sm:text-sm block">3. Academia Completa de Automatización de Videos</strong>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                         Módulos paso a paso para dominar guionización de alta retención, hooks virales, edición rápida y monetización en YouTube y TikTok.
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-400 line-through shrink-0">$147 USD</span>
+                  <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-400 line-through shrink-0">$147 USD</span>
                 </div>
 
                 {/* Item 4 */}
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                      <strong className="text-white text-sm block">4. Mentoría Semanal y Acompañamiento Directo</strong>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <strong className="text-white text-xs sm:text-sm block">4. Mentoría Semanal y Acompañamiento Directo</strong>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                         Preguntas y respuestas directas con Iván Sifuentes para optimizar tus canales, revisar tus videos y acelerar tus resultados.
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-400 line-through shrink-0">$197 USD</span>
+                  <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-400 line-through shrink-0">$197 USD</span>
                 </div>
 
                 {/* Item 5 */}
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
                       <ShieldCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      <strong className="text-white text-sm block">5. Bóveda de Workflows, Prompts y Plantillas de Edición</strong>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <strong className="text-white text-xs sm:text-sm block">5. Bóveda de Workflows, Prompts y Plantillas de Edición</strong>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                         Plantillas para CapCut, fórmulas de prompts de alta conversión y scripts automáticos que actualizamos constantemente.
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-mono font-bold text-slate-400 line-through shrink-0">$47 USD</span>
+                  <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-400 line-through shrink-0">$47 USD</span>
                 </div>
               </div>
             </div>
 
             {/* Total Stacking Calculation Strip */}
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
               <div>
                 <span className="text-xs uppercase font-bold text-emerald-300">Valor Total Real Acumulado:</span>
-                <span className="ml-2 text-sm font-mono text-slate-400 line-through font-bold">$685 USD</span>
+                <span className="ml-2 text-xs sm:text-sm font-mono text-slate-400 line-through font-bold">$685 USD</span>
               </div>
-              <div className="text-sm font-bold text-white">
-                ¡Pagas únicamente <span className="text-emerald-400 font-mono text-lg">${pricing.price} USD/mes</span> en Skool!
+              <div className="text-xs sm:text-sm font-bold text-white">
+                ¡Pagas únicamente <span className="text-emerald-400 font-mono text-base sm:text-lg">${pricing.price} USD/mes</span> en Skool!
               </div>
             </div>
 
@@ -963,7 +1029,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                 href={pricing.skoolUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full sm:flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-sm flex items-center justify-center gap-2.5 shadow-[0_0_35px_rgba(16,185,129,0.4)] transition-all transform hover:-translate-y-0.5 uppercase tracking-wider"
+                className="w-full sm:flex-1 py-3.5 sm:py-4 px-6 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-[0_0_35px_rgba(16,185,129,0.4)] transition-all transform hover:-translate-y-0.5 uppercase tracking-wider"
               >
                 <span>DESBLOQUEAR ACCESO COMPLETO EN SKOOL (${pricing.price} USD)</span>
                 <ExternalLink className="w-4 h-4" />
@@ -971,14 +1037,14 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
               <Link
                 to="/registro"
-                className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-white/[0.05] hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition-colors"
+                className="w-full sm:w-auto py-3.5 sm:py-4 px-6 rounded-xl sm:rounded-2xl bg-white/[0.05] hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition-colors"
               >
                 <span>¿Ya compraste? Activa tu cuenta</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            <p className="text-center text-[11px] text-slate-500">
+            <p className="text-center text-[10px] sm:text-[11px] text-slate-500">
               🔒 Pago procesado de forma 100% segura por Skool. Cancela cuando quieras en 1 solo clic desde tu panel.
             </p>
           </div>
@@ -986,13 +1052,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 8. FAQ ACCORDION (Despejando Objeciones de Compra) */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-16 space-y-8 border-t border-white/[0.06]">
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 space-y-6 sm:space-y-8 border-t border-white/[0.06]">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-bold uppercase">
             <HelpCircle className="w-3.5 h-3.5" />
             <span>Respuestas Rápidas</span>
           </div>
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
             Preguntas Frecuentes
           </h2>
           <p className="text-xs sm:text-sm text-slate-400">
@@ -1008,7 +1074,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             >
               <button
                 onClick={() => toggleFaq(i)}
-                className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-sm text-white hover:text-emerald-400 transition-colors"
+                className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-white hover:text-emerald-400 transition-colors cursor-pointer"
               >
                 <span>{faq.q}</span>
                 <ChevronDown
@@ -1018,7 +1084,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                 />
               </button>
               {activeFaq === i && (
-                <div className="px-5 pb-5 text-xs text-slate-400 leading-relaxed border-t border-white/5 pt-3">
+                <div className="px-4 sm:px-5 pb-4 sm:pb-5 text-xs text-slate-400 leading-relaxed border-t border-white/5 pt-3">
                   {faq.a}
                 </div>
               )}
@@ -1028,12 +1094,12 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 9. FINAL CALL TO ACTION (Fórmula 100K Closing) */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16">
-        <div className="p-8 sm:p-14 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0e121a] to-teal-950/40 border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.15)] text-center space-y-6">
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+        <div className="p-6 sm:p-14 rounded-3xl bg-gradient-to-r from-emerald-950/40 via-[#0e121a] to-teal-950/40 border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.15)] text-center space-y-5 sm:space-y-6">
           <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-widest block">
             ÚNETE HOY MISMO
           </span>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
             Comienza a Generar Imágenes Ilimitadas para tus Videos Virales
           </h2>
           <p className="text-xs sm:text-base text-slate-400 max-w-xl mx-auto leading-relaxed">
@@ -1045,7 +1111,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               href={pricing.skoolUrl}
               target="_blank"
               rel="noreferrer"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs sm:text-sm shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all inline-flex items-center justify-center gap-2 uppercase tracking-wider"
+              className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs sm:text-sm shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all inline-flex items-center justify-center gap-2 uppercase tracking-wider"
             >
               <span>UNIRME EN SKOOL POR ${pricing.price} USD</span>
               <ExternalLink className="w-4 h-4" />
@@ -1053,7 +1119,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
             <Link
               to="/login"
-              className="w-full sm:w-auto px-6 py-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-xs border border-white/10 transition-colors flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-6 py-3.5 sm:py-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-xs border border-white/10 transition-colors flex items-center justify-center gap-1.5"
             >
               <LogIn className="w-3.5 h-3.5 text-emerald-400" />
               <span>Acceso para Miembros</span>
@@ -1063,11 +1129,11 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       </section>
 
       {/* 10. LEGAL FOOTER */}
-      <footer className="border-t border-white/[0.06] py-10 px-4 sm:px-6 text-center text-xs text-slate-500 space-y-3">
+      <footer className="border-t border-white/[0.06] py-8 sm:py-10 px-4 sm:px-6 text-center text-xs text-slate-500 space-y-3">
         <p className="font-mono text-[11px]">
           BulkScene Studio • Desarrollado para la Comunidad IA Automatiza
         </p>
-        <p className="text-[11px] text-slate-600 max-w-md mx-auto">
+        <p className="text-[10px] sm:text-[11px] text-slate-600 max-w-md mx-auto">
           Este sitio web no es parte de Skool Inc., Google LLC, Meta Platforms ni TikTok. Es una academia privada independiente de producción audiovisual y automatización con inteligencia artificial.
         </p>
         <p className="text-[10px] text-slate-600">
