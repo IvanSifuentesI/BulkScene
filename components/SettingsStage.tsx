@@ -1,0 +1,838 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Key, 
+  Users, 
+  Palette, 
+  Plus, 
+  Trash2, 
+  Check, 
+  ShieldCheck, 
+  Cpu, 
+  Sparkles, 
+  Zap, 
+  Info,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  ShieldAlert,
+  DollarSign,
+  Copy,
+  Terminal,
+  RefreshCw,
+  Activity,
+  Globe
+} from 'lucide-react';
+import { CharacterPersona, StylePreset } from '../types';
+import { CharacterVault } from './CharacterVault';
+import { StyleMatrix } from './StyleMatrix';
+import { 
+  getPricingConfig, 
+  updateRemotePrice, 
+  PricingConfig, 
+  DEFAULT_PRICING_CONFIG 
+} from '../services/pricingService';
+import { 
+  getStoredErrorReports, 
+  clearStoredErrorReports, 
+  formatErrorForClipboard, 
+  TelemetryErrorReport 
+} from '../services/errorTelemetryService';
+
+interface SettingsStageProps {
+  nvidiaKeys: string[];
+  setNvidiaKeys: (keys: string[]) => void;
+  groqKeys: string[];
+  setGroqKeys: (keys: string[]) => void;
+  geminiKey: string;
+  setGeminiKey: (key: string) => void;
+  falKey: string;
+  setFalKey: (key: string) => void;
+  characters: CharacterPersona[];
+  activeCharacterId?: string;
+  onSelectCharacter: (id?: string) => void;
+  onAddCharacter: (character: CharacterPersona) => void;
+  onDeleteCharacter: (id: string) => void;
+  styles: StylePreset[];
+  activeStyleId?: string;
+  onSelectStyle: (id?: string) => void;
+  onAddStyle: (style: StylePreset) => void;
+  onDeleteStyle: (id: string) => void;
+}
+
+export const SettingsStage: React.FC<SettingsStageProps> = ({
+  nvidiaKeys,
+  setNvidiaKeys,
+  groqKeys,
+  setGroqKeys,
+  geminiKey,
+  setGeminiKey,
+  falKey,
+  setFalKey,
+  characters,
+  activeCharacterId,
+  onSelectCharacter,
+  onAddCharacter,
+  onDeleteCharacter,
+  styles,
+  activeStyleId,
+  onSelectStyle,
+  onAddStyle,
+  onDeleteStyle,
+}) => {
+  const [activeSubTab, setActiveSubTab] = useState<'apis' | 'characters' | 'styles' | 'telemetria'>('apis');
+  const [newNvidiaKey, setNewNvidiaKey] = useState('');
+  const [newGroqKey, setNewGroqKey] = useState('');
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [saveNotification, setSaveNotification] = useState<string | null>(null);
+
+  // Pricing State
+  const [pricingConfig, setPricingConfig] = useState<PricingConfig>(DEFAULT_PRICING_CONFIG);
+  const [priceInput, setPriceInput] = useState<number>(14);
+  const [currencyInput, setCurrencyInput] = useState<string>('USD');
+  const [periodInput, setPeriodInput] = useState<string>('/mes');
+  const [isUpdatingPrice, setIsUpdatingPrice] = useState(false);
+
+  // Telemetry State
+  const [errorReports, setErrorReports] = useState<TelemetryErrorReport[]>([]);
+  const [webhookUrlInput, setWebhookUrlInput] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_telemetry_webhook_url') || '';
+  });
+  const [copiedBatchToast, setCopiedBatchToast] = useState(false);
+
+  useEffect(() => {
+    getPricingConfig().then((cfg) => {
+      setPricingConfig(cfg);
+      setPriceInput(cfg.price);
+      setCurrencyInput(cfg.currency);
+      setPeriodInput(cfg.period);
+    });
+    setErrorReports(getStoredErrorReports());
+  }, [activeSubTab]);
+
+  const toggleShowKey = (id: string) => {
+    setShowKeys((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const triggerSaveNotification = (msg: string) => {
+    setSaveNotification(msg);
+    setTimeout(() => setSaveNotification(null), 3000);
+  };
+
+  // NVIDIA Key handlers
+  const handleAddNvidiaKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newNvidiaKey.trim();
+    if (!trimmed) return;
+    if (nvidiaKeys.includes(trimmed)) {
+      triggerSaveNotification('Esta clave de NVIDIA ya existe en la lista.');
+      return;
+    }
+    const updated = [...nvidiaKeys, trimmed];
+    setNvidiaKeys(updated);
+    localStorage.setItem('bulk_nvidia_api_keys', JSON.stringify(updated));
+    setNewNvidiaKey('');
+    triggerSaveNotification('Clave de NVIDIA agregada al pool de rotación.');
+  };
+
+  const handleRemoveNvidiaKey = (indexToRemove: number) => {
+    const updated = nvidiaKeys.filter((_, idx) => idx !== indexToRemove);
+    setNvidiaKeys(updated);
+    localStorage.setItem('bulk_nvidia_api_keys', JSON.stringify(updated));
+    triggerSaveNotification('Clave de NVIDIA eliminada.');
+  };
+
+  // Groq Key handlers
+  const handleAddGroqKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newGroqKey.trim();
+    if (!trimmed) return;
+    if (groqKeys.includes(trimmed)) {
+      triggerSaveNotification('Esta clave de Groq ya existe en la lista.');
+      return;
+    }
+    const updated = [...groqKeys, trimmed];
+    setGroqKeys(updated);
+    localStorage.setItem('bulk_groq_api_keys', JSON.stringify(updated));
+    setNewGroqKey('');
+    triggerSaveNotification('Clave de Groq guardada.');
+  };
+
+  const handleRemoveGroqKey = (indexToRemove: number) => {
+    const updated = groqKeys.filter((_, idx) => idx !== indexToRemove);
+    setGroqKeys(updated);
+    localStorage.setItem('bulk_groq_api_keys', JSON.stringify(updated));
+    triggerSaveNotification('Clave de Groq eliminada.');
+  };
+
+  // Gemini Handler
+  const handleSaveGeminiKey = (value: string) => {
+    setGeminiKey(value);
+    localStorage.setItem('bulk_gemini_api_key', value.trim());
+    triggerSaveNotification('Clave de Gemini guardada.');
+  };
+
+  // Fal.ai Handler
+  const handleSaveFalKey = (value: string) => {
+    setFalKey(value);
+    localStorage.setItem('bulk_fal_api_key', value.trim());
+    triggerSaveNotification('Clave de Fal.ai guardada.');
+  };
+
+  // Pricing Handlers
+  const handleSavePrice = async () => {
+    setIsUpdatingPrice(true);
+    const updated = await updateRemotePrice({
+      price: Number(priceInput),
+      currency: currencyInput.trim().toUpperCase(),
+      period: periodInput.trim(),
+    });
+    setPricingConfig(updated);
+    setIsUpdatingPrice(false);
+    triggerSaveNotification(`Precio Skool actualizado a $${updated.price} ${updated.currency}${updated.period} en tiempo real.`);
+  };
+
+  // Webhook Handler
+  const handleSaveWebhook = (url: string) => {
+    setWebhookUrlInput(url);
+    if (url.trim()) {
+      localStorage.setItem('bulkscene_telemetry_webhook_url', url.trim());
+      triggerSaveNotification('Webhook de alertas guardado.');
+    } else {
+      localStorage.removeItem('bulkscene_telemetry_webhook_url');
+      triggerSaveNotification('Webhook eliminado.');
+    }
+  };
+
+  // Telemetry Actions
+  const handleCopyAllErrors = () => {
+    if (errorReports.length === 0) {
+      triggerSaveNotification('No hay errores registrados.');
+      return;
+    }
+    const fullLog = `=== TELEMETRÍA GLOBAL BULKSCENE STUDIO (${errorReports.length} reportes) ===\n\n` +
+      errorReports.map((r, i) => `[REPORTE #${i + 1} - ${r.id}]\n${formatErrorForClipboard(r)}`).join('\n\n' + '='.repeat(60) + '\n\n');
+    navigator.clipboard.writeText(fullLog);
+    setCopiedBatchToast(true);
+    setTimeout(() => setCopiedBatchToast(false), 3000);
+    triggerSaveNotification('Historial de errores copiado al portapapeles.');
+  };
+
+  const handleClearErrors = () => {
+    clearStoredErrorReports();
+    setErrorReports([]);
+    triggerSaveNotification('Historial de errores purgado.');
+  };
+
+  const handleCopySingleError = (report: TelemetryErrorReport) => {
+    navigator.clipboard.writeText(formatErrorForClipboard(report));
+    triggerSaveNotification(`Reporte ${report.id} copiado al portapapeles.`);
+  };
+
+  return (
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* Sub-tab Navigation (Segmented Capsule) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
+        <div className="flex bg-[#08090d] p-1 rounded-2xl gap-1 overflow-x-auto max-w-full">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('apis')}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+              activeSubTab === 'apis'
+                ? 'bg-emerald-500 text-black shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Key className="w-4 h-4" />
+            <span>Claves APIs por Categoría</span>
+            {nvidiaKeys.length > 0 && (
+              <span className={`w-2 h-2 rounded-full ${activeSubTab === 'apis' ? 'bg-black' : 'bg-emerald-400'}`} />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('characters')}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+              activeSubTab === 'characters'
+                ? 'bg-emerald-500 text-black shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Centro de Personajes ({characters.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('styles')}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+              activeSubTab === 'styles'
+                ? 'bg-emerald-500 text-black shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            <span>Centro de Estilos ({styles.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('telemetria')}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+              activeSubTab === 'telemetria'
+                ? 'bg-red-500 text-white shadow-md font-extrabold shadow-red-500/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-red-400" />
+            <span>Telemetría & Precios Skool</span>
+            {errorReports.length > 0 && (
+              <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full font-bold">
+                {errorReports.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {saveNotification && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-300 text-xs font-medium animate-in fade-in shrink-0">
+            <Check className="w-3.5 h-3.5" />
+            <span>{saveNotification}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Sub-tab 1: Categorized APIs */}
+      {activeSubTab === 'apis' && (
+        <div className="space-y-6">
+          {/* CATEGORY 1: NVIDIA */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Categoría NVIDIA Cloud / NIM</span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      Unificada & Multi-Clave
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    FLUX.1 Schnell, FLUX.1 Dev, FLUX.2 Klein, Kontext, SD 3.5 Large, Qwen Image y DeepSeek R1 32B Uncensored.
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href="https://build.nvidia.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20"
+              >
+                <span>Obtener API en build.nvidia.com</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Pool de Claves NVIDIA (Rotación Automática para Concurrencia Ultra-Rápida)
+              </label>
+
+              {nvidiaKeys.map((key, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-[#08090d] p-2.5 rounded-xl border border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-slate-500 px-2">#{idx + 1}</span>
+                  <input
+                    type={showKeys[`nvidia-${idx}`] ? 'text' : 'password'}
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-transparent text-xs text-slate-200 font-mono border-none focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey(`nvidia-${idx}`)}
+                    className="p-1.5 text-slate-400 hover:text-white"
+                  >
+                    {showKeys[`nvidia-${idx}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveNvidiaKey(idx)}
+                    className="p-1.5 text-slate-400 hover:text-red-400"
+                    title="Eliminar clave"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddNvidiaKey} className="flex items-center gap-2 pt-2">
+                <input
+                  type="password"
+                  value={newNvidiaKey}
+                  onChange={(e) => setNewNvidiaKey(e.target.value)}
+                  placeholder="nvapi-..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono border-none"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar Clave</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* CATEGORY 2: GROQ */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Categoría Groq Cloud (Ultra-LPU)</span>
+                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      Transcripción & Subtítulos
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Whisper Large V3 Turbo (Audio a Texto a 200x velocidad de reproducción).
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/20"
+              >
+                <span>Obtener API en console.groq.com</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Pool de Claves Groq
+              </label>
+
+              {groqKeys.map((key, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-[#08090d] p-2.5 rounded-xl border border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-slate-500 px-2">#{idx + 1}</span>
+                  <input
+                    type={showKeys[`groq-${idx}`] ? 'text' : 'password'}
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-transparent text-xs text-slate-200 font-mono border-none focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey(`groq-${idx}`)}
+                    className="p-1.5 text-slate-400 hover:text-white"
+                  >
+                    {showKeys[`groq-${idx}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveGroqKey(idx)}
+                    className="p-1.5 text-slate-400 hover:text-red-400"
+                    title="Eliminar clave"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddGroqKey} className="flex items-center gap-2 pt-2">
+                <input
+                  type="password"
+                  value={newGroqKey}
+                  onChange={(e) => setNewGroqKey(e.target.value)}
+                  placeholder="gsk_..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono border-none"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar Clave</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* CATEGORY 3: GEMINI */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Categoría Google Gemini</span>
+                    <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      Dirección de Arte & Guion
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Gemini 2.5 Flash / Pro (Análisis contextual de personajes, arcos dramáticos y desgloses).
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium bg-blue-500/10 px-3 py-1.5 rounded-xl border border-blue-500/20"
+              >
+                <span>Obtener API en Google AI Studio</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Clave API Gemini
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showKeys['gemini'] ? 'text' : 'password'}
+                  value={geminiKey}
+                  onChange={(e) => handleSaveGeminiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono border-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('gemini')}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#08090d] hover:bg-slate-800 text-slate-300 text-xs flex items-center justify-center"
+                >
+                  {showKeys['gemini'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* CATEGORY 4: FAL.AI */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Categoría Fal.ai (Opcional)</span>
+                    <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      Modelos Comunitarios
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Soporte para endpoints de Fal.ai si cuentas con créditos gratuitos comunitarios.
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href="https://fal.ai/dashboard/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium bg-purple-500/10 px-3 py-1.5 rounded-xl border border-purple-500/20"
+              >
+                <span>Consola Fal.ai</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Clave API Fal.ai
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showKeys['fal'] ? 'text' : 'password'}
+                  value={falKey}
+                  onChange={(e) => handleSaveFalKey(e.target.value)}
+                  placeholder="falkey_..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono border-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('fal')}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#08090d] hover:bg-slate-800 text-slate-300 text-xs flex items-center justify-center"
+                >
+                  {showKeys['fal'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-tab 2: Character Vault */}
+      {activeSubTab === 'characters' && (
+        <CharacterVault
+          characters={characters}
+          activeCharacterId={activeCharacterId}
+          onSelectCharacter={onSelectCharacter}
+          onAddCharacter={onAddCharacter}
+          onDeleteCharacter={onDeleteCharacter}
+        />
+      )}
+
+      {/* Sub-tab 3: Style Matrix */}
+      {activeSubTab === 'styles' && (
+        <StyleMatrix
+          styles={styles}
+          activeStyleId={activeStyleId}
+          onSelectStyle={onSelectStyle}
+          onAddStyle={onAddStyle}
+          onDeleteStyle={onDeleteStyle}
+        />
+      )}
+
+      {/* Sub-tab 4: Telemetría de Errores & Precios Skool */}
+      {activeSubTab === 'telemetria' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* SECCIÓN 1: CONTROL DE PRECIOS SKOOL EN TIEMPO REAL */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] border border-emerald-500/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Sincronización de Precio de Skool</span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      En Vivo sin Redespliegue
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Modifica el precio aquí y se actualizará automáticamente en la Landing Page pública y en el formulario de activación de alumnos.
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={pricingConfig.skoolUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20"
+              >
+                <span>Ver Comunidad en Skool</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                  Monto Mensual
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-500 text-xs font-bold">$</span>
+                  <input
+                    type="number"
+                    value={priceInput}
+                    onChange={(e) => setPriceInput(Number(e.target.value))}
+                    min={1}
+                    className="w-full bg-[#08090d] rounded-xl pl-7 pr-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                  Moneda
+                </label>
+                <input
+                  type="text"
+                  value={currencyInput}
+                  onChange={(e) => setCurrencyInput(e.target.value)}
+                  placeholder="USD"
+                  className="w-full bg-[#08090d] rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500 uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
+                  Frecuencia / Periodo
+                </label>
+                <input
+                  type="text"
+                  value={periodInput}
+                  onChange={(e) => setPeriodInput(e.target.value)}
+                  placeholder="/mes"
+                  className="w-full bg-[#08090d] rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-400 font-mono">
+                Precio actual visible: <strong className="text-emerald-400 font-bold">${pricingConfig.price} {pricingConfig.currency}{pricingConfig.period}</strong>
+              </span>
+
+              <button
+                type="button"
+                onClick={handleSavePrice}
+                disabled={isUpdatingPrice}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{isUpdatingPrice ? 'Actualizando...' : 'Guardar y Sincronizar en la Web'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* SECCIÓN 2: CONSOLA DE TELEMETRÍA DE ERRORES */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] border border-red-500/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Consola de Telemetría & Diagnóstico</span>
+                    <span className="text-[10px] font-mono text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      {errorReports.length} Eventos Capturados
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Detección automática de censura NVIDIA (422), errores de API Key (401), cuotas (429) y caídas de cluster.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyAllErrors}
+                  disabled={errorReports.length === 0}
+                  className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 hover:text-emerald-300 font-bold text-xs flex items-center gap-1.5 border border-white/10 transition-all disabled:opacity-40"
+                  title="Copiar todos los errores con diagnóstico completo para pegarlos en el chat de Antigravity"
+                >
+                  <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{copiedBatchToast ? '¡Copiado!' : 'Copiar Todo para Antigravity'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleClearErrors}
+                  disabled={errorReports.length === 0}
+                  className="p-1.5 rounded-xl bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-white/10 transition-colors disabled:opacity-40"
+                  title="Limpiar registro"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Webhook Alert Integration */}
+            <div className="p-4 rounded-xl bg-[#08090d] border border-white/[0.04] space-y-2">
+              <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between">
+                <span>Webhook de Notificación Inmediata (Discord / Telegram / Slack)</span>
+                <span className="text-emerald-400 font-normal">Opcional</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  value={webhookUrlInput}
+                  onChange={(e) => setWebhookUrlInput(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/... o webhook de Slack"
+                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-red-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSaveWebhook(webhookUrlInput)}
+                  className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-xs border border-white/10"
+                >
+                  Guardar
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                Cada vez que un usuario sufra un error de censura o límite de API, se enviará una alerta automática a este canal.
+              </p>
+            </div>
+
+            {/* List of captured errors */}
+            {errorReports.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 space-y-1">
+                <ShieldCheck className="w-8 h-8 text-emerald-400/50 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-400">Sin incidencias registradas</p>
+                <p className="text-[11px] text-slate-600">El pipeline y los motores de inferencia están operando con normalidad.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                {errorReports.map((report) => (
+                  <div
+                    key={report.id}
+                    className="p-4 rounded-xl bg-[#08090d] border border-white/[0.06] hover:border-red-500/30 transition-all space-y-2 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[10px] font-bold bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded-full">
+                          {report.errorCode}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {report.id}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          • {new Date(report.timestamp).toLocaleTimeString('es-ES')}
+                        </span>
+                        {report.contextData?.slotNumber && (
+                          <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                            [Plano #{report.contextData.slotNumber}]
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopySingleError(report)}
+                        className="p-1 rounded text-slate-400 hover:text-emerald-400 hover:bg-white/5 transition-colors shrink-0"
+                        title="Copiar diagnóstico individual para soporte"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1 pt-1">
+                      <p className="text-slate-300 font-medium">
+                        <strong className="text-amber-400 font-semibold">Causa: </strong>
+                        {report.possibleCause}
+                      </p>
+                      <p className="text-emerald-300/90 font-medium">
+                        <strong className="text-emerald-400 font-semibold">Solución: </strong>
+                        {report.suggestedSolution}
+                      </p>
+                      {report.contextData?.promptSnippet && (
+                        <p className="text-[11px] text-slate-500 font-mono italic truncate bg-black/40 p-1.5 rounded-lg border border-white/[0.04]">
+                          Prompt: "{report.contextData.promptSnippet}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SettingsStage;

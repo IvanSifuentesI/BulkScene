@@ -1,0 +1,8 @@
+{
+  "name": "VIDEOUNLIMITED",
+  "description": "Una aplicación para generar lotes de imágenes y videos a partir de una lista de prompts con Gemini Imagen 3. Los usuarios pueden especificar la relación de aspecto y generar, animar y descargar los resultados.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
