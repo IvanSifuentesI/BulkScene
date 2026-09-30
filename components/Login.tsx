@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   Sparkles, 
   ArrowRight, 
   CheckCircle2, 
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  ArrowLeft,
+  Lock,
+  ExternalLink
 } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 import MensajeAcceso from './MensajeAcceso';
@@ -41,7 +44,7 @@ export const Login: React.FC = () => {
 
       // Si no existe en la base de datos de miembros autorizados de Skool
       if (!userData) {
-        // Excepción de administrador creador
+        // Excepción creador/admin
         if (emailLower === 'ivansifuentes1998@gmail.com' || emailLower === 'admin@bulkscene.ai') {
           localStorage.setItem('bulkscene_auth_session', 'active');
           localStorage.setItem('bulkscene_user_email', emailLower);
@@ -73,7 +76,6 @@ export const Login: React.FC = () => {
       navigate('/app');
     } catch (err: any) {
       console.warn('[LOGIN NOTICE]:', err);
-      // Solo el creador tiene bypass si falla la conexión
       if (emailLower === 'ivansifuentes1998@gmail.com') {
         localStorage.setItem('bulkscene_auth_session', 'active');
         localStorage.setItem('bulkscene_user_email', emailLower);
@@ -97,131 +99,149 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#050609] text-gray-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
-      {/* Dynamic Background Glows & Mesh Grid */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-emerald-500/15 via-teal-500/10 to-transparent rounded-full blur-[130px]" />
-        <div className="absolute -bottom-40 right-1/4 w-[500px] h-[400px] bg-gradient-to-t from-cyan-500/15 via-blue-600/10 to-transparent rounded-full blur-[120px]" />
-        <div className="absolute -top-20 -left-20 w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-[100px]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-40" />
-      </div>
-
-      {/* Main SaaS Auth Card */}
-      <div className="w-full max-w-lg z-10 animate-fade-in">
-        <div className="relative rounded-3xl bg-[#0a0c13]/85 backdrop-blur-2xl border border-white/10 p-8 sm:p-10 shadow-[0_25px_70px_rgba(0,0,0,0.8),0_0_50px_rgba(16,185,129,0.08)] overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-[2px] before:bg-gradient-to-r before:from-transparent before:via-emerald-400 before:to-transparent">
-          
-          {/* Header & Logo */}
-          <div className="flex flex-col items-center text-center mb-8">
-            {/* Top Engine Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold tracking-wider uppercase mb-5 shadow-sm shadow-emerald-500/10">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>HyperRender™ • Motor Neuronal de Alta Fidelidad</span>
+    <div className="min-h-screen bg-[#06080d] text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-black">
+      {/* Top Bar matching Studio */}
+      <header className="max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 flex items-center justify-between border-b border-white/[0.06]">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-400 p-0.5 shadow-lg shadow-emerald-500/20">
+            <div className="w-full h-full bg-[#090b10] rounded-[10px] flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-emerald-400" />
             </div>
-
-            {/* Glowing Brand Icon */}
-            <div className="relative mb-5 group">
-              <div className="absolute -inset-2 bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-500 rounded-2xl blur-lg opacity-40 group-hover:opacity-75 transition duration-500" />
-              <div className="relative w-16 h-16 bg-gradient-to-b from-[#111422] to-[#07080c] border border-white/15 rounded-2xl flex items-center justify-center shadow-2xl">
-                <Sparkles className="w-8 h-8 text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]" />
-              </div>
-            </div>
-
-            {/* Title & Description */}
-            <h1 className="text-3xl font-black text-white tracking-tight leading-tight">
-              BULKSCENE <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">STUDIO</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-400 mt-2 max-w-sm leading-relaxed">
-              Suite de producción de imágenes ilimitadas para videos virales: sin APIs, con consistencia de personajes y resolución 4K.
-            </p>
           </div>
+          <div>
+            <span className="font-black text-lg text-white tracking-tight">
+              BULKSCENE <span className="text-emerald-400">STUDIO</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 rounded">
+                CERO APIS
+              </span>
+              <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.2 rounded">
+                ACCESO MIEMBROS
+              </span>
+            </div>
+          </div>
+        </Link>
 
-          {/* Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-300 text-xs flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                <span>{error}</span>
-              </div>
-            )}
+        <Link
+          to="/"
+          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors font-medium"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Volver al Inicio</span>
+        </Link>
+      </header>
 
-            <div className="space-y-1.5">
-              <label className="block text-[11px] uppercase font-bold text-gray-400 tracking-wider">
-                Correo Electrónico de Alumno Skool
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-gray-500 absolute left-3.5 top-3.5 pointer-events-none" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="alumno@skool.com"
-                  className="w-full bg-black/50 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-gray-600 focus:outline-hidden focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium transition-all"
-                />
+      {/* Main Login Card in Studio Aesthetic */}
+      <main className="flex-1 flex items-center justify-center p-4 py-12 relative overflow-hidden">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
+
+        <div className="w-full max-w-md z-10 animate-fade-in space-y-6">
+          <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-7 sm:p-9 shadow-[0_0_80px_rgba(16,185,129,0.15)] overflow-hidden">
+            {/* Top highlight bar */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+
+            {/* Header info */}
+            <div className="text-center space-y-2 mb-7">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold tracking-wider uppercase mb-1">
+                <Lock className="w-3 h-3" />
+                <span>Portal Oficial para Alumnos de Skool</span>
               </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                Iniciar Sesión en el Estudio
+              </h1>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                Ingresa con el correo electrónico registrado en tu membresía de Skool para abrir el estudio de producción.
+              </p>
             </div>
 
-            {/* Primary Action Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/25 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 tracking-wider"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>INGRESAR CON EMAIL AUTORIZADO</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+            {/* Login Form */}
+            <form onSubmit={handleLogin} className="space-y-4">
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-300 text-xs flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  <span>{error}</span>
+                </div>
               )}
-            </button>
-          </form>
 
-          <div className="mt-6 flex items-center justify-between text-xs text-slate-400 border-t border-white/5 pt-4">
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="hover:text-emerald-400 transition-colors"
-            >
-              ← Volver a la Portada
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/registro')}
-              className="hover:text-emerald-400 transition-colors font-medium text-emerald-400/90"
-            >
-              ¿Ya compraste en Skool? Activa tu cuenta →
-            </button>
-          </div>
+              <div className="space-y-1.5">
+                <label className="block text-[11px] uppercase font-bold text-slate-400 tracking-wider">
+                  Correo Electrónico de Alumno
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="alumno@skool.com"
+                    className="w-full bg-[#121622] border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 font-medium transition-all"
+                  />
+                </div>
+              </div>
 
-          {/* Feature Highlights Grid */}
-          <div className="mt-8 pt-6 border-t border-white/5 grid grid-cols-2 gap-2.5 text-[11px] text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Imágenes Ilimitadas sin APIs</span>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 uppercase tracking-wider"
+              >
+                {loading ? (
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>INGRESAR CON EMAIL AUTORIZADO</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Skool purchase link if not member yet */}
+            <div className="mt-6 pt-5 border-t border-white/5 space-y-3 text-center">
+              <p className="text-xs text-slate-400">
+                ¿Aún no tienes membresía activa en Skool?
+              </p>
+              <a
+                href="https://www.skool.com/ia-automatiza-7412"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:underline"
+              >
+                <span>Desbloquear acceso por $14 USD/mes aquí</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Consistencia de Rostros y Personajes</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Super-Resolución 4K Ultra-HD</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <span>Exportación Directa para Edición</span>
+
+            {/* Feature Highlights Grid matching Studio */}
+            <div className="mt-6 pt-5 border-t border-white/5 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Hasta 1,000 imágenes</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Cero pagos en APIs</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Consistencia de Rostro</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <span>Escalado 4K Ultra-HD</span>
+              </div>
             </div>
           </div>
         </div>
+      </main>
 
-        {/* Card Footer Info */}
-        <p className="text-center text-[11px] text-gray-600 mt-4">
-          BulkScene Studio • Plataforma Exclusiva para la Comunidad IA Automatiza
-        </p>
-      </div>
+      {/* Footer */}
+      <footer className="border-t border-white/[0.06] py-6 px-4 text-center text-[11px] text-slate-600">
+        BulkScene Studio • Acceso Exclusivo para la Comunidad Oficial en Skool
+      </footer>
     </div>
   );
 };

@@ -23,9 +23,10 @@ import {
   Maximize2,
   Zap,
   Infinity as InfinityIcon,
-  Play,
   Copy,
-  CheckCheck
+  CheckCheck,
+  Star,
+  Quote
 } from 'lucide-react';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
 
@@ -53,49 +54,49 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
     setTimeout(() => setCopiedPromptIdx(null), 2000);
   };
 
-  // 6 Escenas con imágenes cinemáticas de alto impacto visual y prompts reales
+  // 6 Escenas Místicas, Épicas y de Acción Cinemática de Alto Impacto Visual
   const sampleScenes = [
     {
       num: '001',
-      title: 'Hook de Impacto (0-2.4s)',
+      title: 'Invocación de Runa Ancestral',
       time: '0-2.4s',
-      imageUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Cinematic 35mm portrait, 28yo Ethan in black leather jacket, rain drenched street, volumetric neon rim light, intense gaze at camera, photorealistic 8k.'
+      imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Cinematic 35mm film still, ancient sorcerer with glowing runic eyes channeling dark ethereal energy inside a fog-shrouded cathedral, mystical volumetric rays, vibrant neon cyan and amber sparks, cinematic depth of field, photorealistic 8k.'
     },
     {
       num: '002',
-      title: 'Tensión Creciente',
+      title: 'El Guardián en la Niebla',
       time: '2.4-5.0s',
-      imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Cinematic profile shot, Ethan turning into foggy alley, warm tungsten lantern reflection, dark moody atmosphere, hyper-detailed texture, depth of field.'
+      imageUrl: 'https://images.unsplash.com/photo-1514539079130-25950c84af65?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Dark fantasy gothic establishing shot, ancient towering black stone citadel surrounded by perpetual mist and purple aurora lightning, dark fantasy moody atmosphere, hyper-detailed architecture, cinematic lighting, 8k.'
     },
     {
       num: '003',
-      title: 'Giro Inesperado',
+      title: 'Vórtice Cósmico y Poder',
       time: '5.0-7.8s',
-      imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Dutch angle shot, dramatic silhouette looking at glowing cyber holographic device, deep blue and orange complementary grading, 35mm film grain.'
+      imageUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Epic fantasy wide angle shot, warrior standing heroically at the center of a swirling celestial vortex of glowing stardust and kinetic plasma energy, dramatic silhouette, cosmic dust particles, IMAX cinematic composition.'
     },
     {
       num: '004',
-      title: 'Detalle Facial & Clímax',
+      title: 'El Relicario Prismático',
       time: '7.8-10.2s',
-      imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Extreme close up of Ethan eyes, reflection of city lights, subtle eyebrow scar, ultra high fidelity skin pores, anamorphic bokeh, 4K UHD.'
+      imageUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Extreme close up macro shot of an ancient arcane crystal relic floating in mid-air, emitting glowing iridescent prismatic light beams, shallow depth of field, sharp reflections, Kodak Portra 400 color science, 4K UHD.'
     },
     {
       num: '005',
-      title: 'Acción Cinemática',
+      title: 'Batalla Mística en Llamas',
       time: '10.2-13.0s',
       imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Dynamic action motion, running through neon reflections, smoke and sparks in background, high shutter speed, cinematic film still.'
+      prompt: 'Dynamic high action scene, mythical shadow sorcerer unleashing a torrent of glowing fiery embers across a subterranean cavern, cinematic motion blur on periphery with crystal sharp subject focus, blockbuster movie still.'
     },
     {
       num: '006',
-      title: 'Llamado a Acción (CTA)',
+      title: 'El Reino Astral del Despertar',
       time: '13.0-15.5s',
-      imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-      prompt: 'Hero wide shot, Ethan standing on skyscraper ledge overlooking sprawling futuristic metropolis at dawn, golden hour volumetric haze.'
+      imageUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=600&q=80',
+      prompt: 'Heroic wide establishing shot, celestial entity overlooking a vast cosmic dimension of floating monolithic islands and radiant nebulae at twilight, volumetric god rays, epic cinematic grandeur, 8k resolution.'
     }
   ];
 
@@ -103,17 +104,45 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
     {
       step: 'Paso 1',
       title: 'Pegar Guion o Idea',
-      desc: 'El Director con IA analiza el texto completo, detecta la narrativa y desglosa automáticamente cada escena con encuadres y tiempos de locución.'
+      desc: 'El Director con IA analiza el texto completo, detecta la narrativa y desglosa automáticamente cada escena con encuadres, tiempos de locución y descripciones visuales.'
     },
     {
       step: 'Paso 2',
       title: 'Fijar Personaje & Estilo',
-      desc: 'Bloquea el rostro y vestimenta con semilla matemática única (Seed Locking) y elige entre 10+ estilos cinematográficos para todo el video.'
+      desc: 'Bloquea el rostro, edad y vestimenta con semilla matemática única (Seed Locking) y elige entre 10+ estilos cinematográficos para mantener coherencia en todo el video.'
     },
     {
       step: 'Paso 3',
       title: 'Generación Masiva & ZIP',
-      desc: 'El motor genera hasta 1,000 imágenes secuenciales en minutos. Descarga un solo archivo ZIP numerado (#001-#1000) listo para CapCut o Premiere.'
+      desc: 'El motor genera hasta 1,000 imágenes secuenciales en minutos. Descarga un solo archivo ZIP ordenado (#001-#1000) listo para arrastrar directamente a CapCut o Premiere.'
+    }
+  ];
+
+  // Testimonios de alumnos y creadores de contenido viral (Fórmula 100K)
+  const testimonials = [
+    {
+      name: 'Mateo Ramos',
+      channel: '@MisteriosVisuales',
+      badge: 'Canal de Shorts / 420K subs',
+      metric: '100 escenas en 3 min',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+      quote: 'Pasé de tardarme 2 días enteros creando imágenes una por una en Midjourney a generar 120 escenas místicas en menos de 5 minutos. Todas con el mismo protagonista y sin pagar un solo centavo en APIs. Es brutal.'
+    },
+    {
+      name: 'Valeria Delgado',
+      channel: '@CuriosaMenteIA',
+      badge: 'Creadora TikTok / 310K seg',
+      metric: 'Cero gasto en APIs',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
+      quote: 'Lo que más me impresionó es la consistencia de los personajes. El rostro de mi avatar no cambia en ninguna escena del video. Descargas el ZIP con los números exactos (#001 a #080), lo tiras a CapCut y la edición queda casi lista.'
+    },
+    {
+      name: 'Carlos Mendoza',
+      channel: 'Agencia ViralFaceless',
+      badge: '6 Canales Automatizados',
+      metric: '10x velocidad de entrega',
+      avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80',
+      quote: 'Antes gastábamos más de $150 USD mensuales entre Midjourney y llamadas de API que se acababan a mitad de mes. Con la membresía de Skool a $14 USD generamos miles de imágenes al mes sin límites ni facturas sorpresa.'
     }
   ];
 
@@ -238,6 +267,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </a>
 
           <a
+            href="#testimonios"
+            className="hidden sm:inline-block text-xs text-slate-400 hover:text-white transition-colors font-medium px-3 py-1.5"
+          >
+            Resultados
+          </a>
+
+          <a
             href="#oferta"
             className="hidden sm:inline-block text-xs text-slate-400 hover:text-white transition-colors font-medium px-3 py-1.5"
           >
@@ -269,53 +305,78 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         {/* Core Category Badge */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold tracking-wide uppercase border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
           <Zap className="w-4 h-4 fill-emerald-400" />
-          <span>MOTOR DE GENERACIÓN ILIMITADA • CERO COSTOS EN APIS • EDICIÓN SECUENCIAL</span>
+          <span>MOTOR DE GENERACIÓN MASIVA • HASTA 1,000 IMÁGENES EN MINUTOS • CERO APIS</span>
         </div>
 
         {/* The Core Headline (La Gran Promesa) */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.08]">
-          Genera Imágenes <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">ILIMITADAS y GRATUITAS</span> Para Tus Videos Virales
+          Genera Lotes de Hasta <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">1,000 Imágenes en Minutos</span>
         </h1>
 
         {/* Subheadline (Resolución de Dolor & Mecanismo) */}
         <p className="text-base sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-          Produce cientos de tomas cinematográficas con <strong>consistencia facial absoluta</strong> de tus personajes, estilos visuales de cine y descarga ordenada (#001 a #100) lista para arrastrar a CapCut, Premiere o DaVinci. <strong className="text-slate-200">Sin APIs, sin pagos de tokens y sin suscripciones abusivas.</strong>
+          Produce cientos de tomas místicas y cinematográficas con <strong>consistencia facial absoluta</strong> de tus personajes, estilos visuales de alta retención y descarga ordenada (#001 a #1000) lista para arrastrar a CapCut, Premiere o DaVinci. <strong className="text-slate-200">Sin APIs, sin pagos de tokens y sin suscripciones abusivas.</strong>
         </p>
 
-        {/* Price Anchoring & Primary Action CTA (Fórmula 100K) */}
-        <div className="pt-2 max-w-xl mx-auto space-y-4">
-          <div className="p-4 rounded-2xl bg-[#0e111a] border border-emerald-500/30 shadow-[0_0_40px_rgba(16,185,129,0.15)] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-left">
-              <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">
-                Precio Especial de Lanzamiento en Skool
-              </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm line-through text-slate-500 font-mono font-bold">$197 USD</span>
-                <span className="text-3xl sm:text-4xl font-black text-emerald-400 font-mono">
-                  ${pricing.price} {pricing.currency}
-                </span>
-                <span className="text-xs font-bold text-slate-400 uppercase">{pricing.period}</span>
+        {/* Rediseño Premium del Precio Especial de Lanzamiento (Hero Card) */}
+        <div className="pt-2 max-w-2xl mx-auto">
+          <div className="relative rounded-3xl bg-gradient-to-b from-[#0f1422]/90 via-[#0a0d16]/90 to-[#07090f]/90 border border-emerald-500/40 p-5 sm:p-7 shadow-[0_0_50px_rgba(16,185,129,0.2),inset_0_1px_0_0_rgba(255,255,255,0.08)] backdrop-blur-xl overflow-hidden group">
+            {/* Top highlight subtle glow */}
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-emerald-400 to-transparent" />
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-24 bg-emerald-500/15 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+              {/* Left Column: Pricing & Tag */}
+              <div className="text-center sm:text-left space-y-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-extrabold uppercase tracking-widest">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>PRECIO ESPECIAL DE LANZAMIENTO EN SKOOL</span>
+                </div>
+
+                <div className="flex items-baseline justify-center sm:justify-start gap-3">
+                  <span className="text-base sm:text-lg line-through text-slate-500 font-mono font-bold">
+                    $197 USD
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300 font-mono tracking-tight">
+                      ${pricing.price}
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-400 uppercase font-mono">
+                      {pricing.currency}{pricing.period}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                    93% OFF
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-400 font-medium">
+                  ✓ Acceso Inmediato • Cancela en 1 clic • Sin pagos en APIs
+                </p>
+              </div>
+
+              {/* Right Column: CTA Button */}
+              <div className="w-full sm:w-auto shrink-0">
+                <a
+                  href={pricing.skoolUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="relative w-full sm:w-auto px-7 py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 uppercase tracking-wider"
+                >
+                  <span>DESBLOQUEAR ACCESO EN SKOOL</span>
+                  <ArrowRight className="w-4 h-4" />
+                </a>
               </div>
             </div>
-
-            <a
-              href={pricing.skoolUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.4)] transition-all transform hover:-translate-y-0.5 uppercase tracking-wider"
-            >
-              <span>DESBLOQUEAR ACCESO EN SKOOL</span>
-              <ArrowRight className="w-4 h-4" />
-            </a>
           </div>
 
-          <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400">
+          <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-slate-400">
             <span className="flex items-center gap-1 text-emerald-400">
               <Check className="w-3.5 h-3.5" /> Pago Seguro por Skool
             </span>
             <span>•</span>
             <span className="flex items-center gap-1 text-slate-300">
-              <Check className="w-3.5 h-3.5 text-emerald-400" /> Cancela en 1 clic
+              <Check className="w-3.5 h-3.5 text-emerald-400" /> Cancela cuando quieras
             </span>
             <span>•</span>
             <Link to="/login" className="text-emerald-400 hover:underline font-bold">
@@ -350,30 +411,8 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
           </div>
         </div>
 
-        {/* 3. HIGH-IMPACT SPEED & VOLUME CALLOUT BANNER (Petición de usuario) */}
-        <div className="pt-2 max-w-5xl mx-auto">
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-[#0e121a] to-teal-950/40 border border-emerald-500/40 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_40px_rgba(16,185,129,0.15)]">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/20">
-                <Zap className="w-6 h-6 fill-emerald-400" />
-              </div>
-              <div>
-                <p className="text-white font-black text-sm sm:text-base tracking-tight">
-                  «Pegué un guion de 1,000 escenas y generó las 1,000 imágenes en solo minutos, todas con el mismo personaje y listas para editar.»
-                </p>
-                <p className="text-xs text-emerald-400 font-mono mt-0.5">
-                  ⚡ Rendimiento Real: 1.8s por toma • 100 tomas en ~2.8 minutos • 1,000 tomas en ~10 minutos • $0.00 en APIs
-                </p>
-              </div>
-            </div>
-            <div className="shrink-0 bg-emerald-500 text-black font-black text-xs px-4 py-2 rounded-xl uppercase tracking-wider shadow">
-              100% Ilimitado
-            </div>
-          </div>
-        </div>
-
-        {/* 4. VISUAL APP MOCKUP SHOWCASE (Estilo Mac con Imágenes de Alto Impacto & Flujo) */}
-        <div className="pt-2 max-w-5xl mx-auto">
+        {/* 3. VISUAL APP MOCKUP SHOWCASE (Estilo Mac con Imágenes Místicas y Épicas) */}
+        <div className="pt-4 max-w-5xl mx-auto">
           <div className="relative rounded-3xl bg-[#0a0d14] border border-white/10 p-2 sm:p-5 shadow-[0_0_90px_rgba(16,185,129,0.18)] overflow-hidden">
             {/* Mac top chrome */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-xs text-slate-500">
@@ -447,18 +486,18 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Protagonista Ethan: 28 años, chaqueta de cuero negra, cicatriz sutil en ceja. Mismo rostro asegurado en las 1,000 tomas.
+                    Guardián Astral: túnica oscura, runas luminosas en antebrazos y ojos celestiales. Mismo rostro y rasgos asegurados en las 1,000 tomas.
                   </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-2">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Film className="w-3.5 h-3.5 text-emerald-400" />
-                    Estilo Cinematográfico Activo
+                    Estilo Visual Activo
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-lg font-bold">
-                      Cinemático 35mm Hiperrealista
+                      Fantasía Épica & Cinemático 35mm
                     </span>
                     <span className="text-xs font-mono text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded">
                       4K UHD
@@ -467,12 +506,12 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                 </div>
               </div>
 
-              {/* Center & Right Column: Scene Grid Preview with STRIKING VISUAL IMAGES */}
+              {/* Center & Right Column: Scene Grid Preview with MÍSTICAS Y ÉPICAS IMAGES */}
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                    Generación Secuencial en Lote (Escenas del Guion)
+                    Lote Masivo Generado (Escenas del Guion Místico)
                   </span>
                   <span className="text-emerald-400 font-mono text-[11px] font-bold">
                     ✓ Lote de 1,000 Escenas Listo (100%)
@@ -508,7 +547,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                       </div>
 
                       {/* Hover Overlay with Prompt Copy Action */}
-                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-3 text-center bg-black/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-3 text-center bg-black/75 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity">
                         <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 mb-2">
                           ✓ 4K UHD Renderizado
                         </span>
@@ -562,6 +601,67 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* 4. SECCIÓN DE PRUEBA SOCIAL Y TESTIMONIOS (Reemplazo del Banner / Fórmula 100K) */}
+      <section id="testimonios" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 space-y-12 border-t border-white/[0.06]">
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs font-bold uppercase border border-emerald-500/30">
+            <Users className="w-3.5 h-3.5" />
+            <span>Casos Reales de Alumnos y Creadores</span>
+          </div>
+          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+            Lo que Dicen Quienes Ya Crean a Escala
+          </h2>
+          <p className="text-xs sm:text-base text-slate-400 max-w-2xl mx-auto">
+            Creadores de canales automatizados y agencias de video vertical que transformaron su velocidad de publicación con BulkScene Studio.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {testimonials.map((t, idx) => (
+            <div
+              key={idx}
+              className="p-6 rounded-3xl bg-[#0e111a] border border-white/5 hover:border-emerald-500/30 transition-all duration-300 space-y-4 flex flex-col justify-between shadow-lg shadow-black/40"
+            >
+              <div className="space-y-3">
+                {/* Rating stars & metric pill */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-amber-400">
+                    {[...Array(5)].map((_, s) => (
+                      <Star key={s} className="w-3.5 h-3.5 fill-amber-400" />
+                    ))}
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    {t.metric}
+                  </span>
+                </div>
+
+                <Quote className="w-6 h-6 text-slate-600" />
+                <p className="text-xs text-slate-300 leading-relaxed italic">
+                  "{t.quote}"
+                </p>
+              </div>
+
+              {/* Author footer */}
+              <div className="pt-4 border-t border-white/5 flex items-center gap-3">
+                <img
+                  src={t.avatar}
+                  alt={t.name}
+                  className="w-10 h-10 rounded-full object-cover border border-emerald-500/40"
+                />
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1">
+                    <span>{t.name}</span>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  </h4>
+                  <p className="text-[10px] text-slate-400 font-mono">{t.channel}</p>
+                  <p className="text-[9px] text-slate-500">{t.badge}</p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -773,7 +873,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     <div>
                       <strong className="text-white text-sm block">1. Software BulkScene Studio (Suite Ilimitada)</strong>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Generación de imágenes ilimitadas, sin APIs, consistencia de personajes, 7 modos de creación y escalado 4K Ultra HD.
+                        Generación de hasta 1,000 imágenes en minutos, sin APIs, consistencia de personajes, 7 modos de creación y escalado 4K Ultra HD.
                       </p>
                     </div>
                   </div>
