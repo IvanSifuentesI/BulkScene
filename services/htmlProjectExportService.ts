@@ -666,29 +666,39 @@ export async function saveMasterStudioHtmlFile(params: {
   let savedToDir = false;
   if (params.dirHandle && typeof params.dirHandle.getFileHandle === 'function') {
     try {
+      // Verificar y solicitar permisos de lectura/escritura si el navegador lo requiere
+      if (typeof params.dirHandle.queryPermission === 'function') {
+        let perm = await params.dirHandle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted' && typeof params.dirHandle.requestPermission === 'function') {
+          perm = await params.dirHandle.requestPermission({ mode: 'readwrite' });
+        }
+      }
+
       const fileHandle = await params.dirHandle.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(params.htmlContent);
       await writable.close();
       savedToDir = true;
     } catch (e) {
-      console.warn('[saveMasterStudioHtmlFile] No se pudo escribir directo en dirHandle, usando descarga:', e);
+      console.warn('[saveMasterStudioHtmlFile] Falló escritura directa en dirHandle:', e);
     }
   }
 
-  // Descarga automática en navegador para asegurar que el archivo esté disponible en disco
-  try {
-    const blob = new Blob([params.htmlContent], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-  } catch (err) {
-    console.warn('[saveMasterStudioHtmlFile] Error en descarga automática:', err);
+  // Descarga automática en navegador ÚNICAMENTE si no se pudo guardar directamente en la carpeta
+  if (!savedToDir) {
+    try {
+      const blob = new Blob([params.htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      console.warn('[saveMasterStudioHtmlFile] Error en descarga de respaldo:', err);
+    }
   }
 
   return { savedToDir, filename };

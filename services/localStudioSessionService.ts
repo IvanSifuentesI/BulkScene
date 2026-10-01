@@ -136,6 +136,49 @@ export async function clearLocalAudioBlob(): Promise<void> {
 }
 
 /**
+ * Guarda el FileSystemDirectoryHandle nativo en IndexedDB
+ */
+export async function saveLocalDirHandle(handle: any): Promise<void> {
+  try {
+    const db = await openAudioDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put({ handle, savedAt: Date.now() }, 'project_dir_handle');
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.warn('[LOCAL SESSION] Error guardando dirHandle en IndexedDB:', e);
+  }
+}
+
+/**
+ * Recupera el FileSystemDirectoryHandle nativo guardado en IndexedDB
+ */
+export async function getLocalDirHandle(): Promise<any | null> {
+  try {
+    const db = await openAudioDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get('project_dir_handle');
+      req.onsuccess = () => {
+        if (req.result && req.result.handle) {
+          resolve(req.result.handle);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    console.warn('[LOCAL SESSION] Error leyendo dirHandle de IndexedDB:', e);
+    return null;
+  }
+}
+
+/**
  * Guarda todo el avance y los beats del Estudio Master en localStorage
  */
 export function saveLocalStudioSession(data: Partial<LocalStudioSessionData>): void {

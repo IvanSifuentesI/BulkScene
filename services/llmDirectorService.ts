@@ -343,17 +343,25 @@ export function extractCleanKey(keyOrArray?: string | string[]): string {
   return '';
 }
 
-// Limpiador robusto para DeepSeek R1, Gemini y markdown
+// Limpiador ultra-robusto para DeepSeek R1, Gemini, Llama y markdown
 function extractCleanJson(raw: string): any {
+  if (!raw || typeof raw !== 'string') return {};
+  
   let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-  // Strip markdown fences
-  if (text.startsWith('```json')) text = text.substring(7);
-  else if (text.startsWith('```')) text = text.substring(3);
-  if (text.endsWith('```')) text = text.substring(0, text.length - 3);
-  text = text.trim();
+  // 1. Extraer bloque markdown ```json ... ``` si existe
+  const mdMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (mdMatch && mdMatch[1]) {
+    text = mdMatch[1].trim();
+  } else {
+    // Si no tiene fences completos pero empieza con ```
+    if (text.startsWith('```json')) text = text.substring(7);
+    else if (text.startsWith('```')) text = text.substring(3);
+    if (text.endsWith('```')) text = text.substring(0, text.length - 3);
+    text = text.trim();
+  }
 
-  // Extract outermost JSON object or array
+  // 2. Localizar inicio y fin de estructura JSON
   const firstBrace = text.indexOf('{');
   const firstBracket = text.indexOf('[');
   let startIdx = -1;
@@ -370,48 +378,93 @@ function extractCleanJson(raw: string): any {
     if (closing !== -1 && closing > startIdx) {
       text = text.substring(startIdx, closing + 1);
     } else {
-      // JSON is truncated — take from startIdx and try to repair
       text = text.substring(startIdx);
     }
   }
 
-  // Sanitize common LLM JSON issues
-  const sanitize = (t: string): string => {
-    // Replace Python-style single-quoted string values/keys with double quotes
-    // Step 1: keys — 'key': → "key":
-    t = t.replace(/([{,]\s*)'([^']+)'\s*:/g, '$1"$2":');
-    // Step 2: string values — : 'value' → : "value"
-    t = t.replace(/:\s*'([^']*)'/g, ': "$1"');
-    // Step 3: Remove trailing commas before } or ]
+  // Intento 1: Parse directo inmediato
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  // Intento 2: Limpieza de comas flotantes y comillas en keys
+  const cleanPass = (input: string): string => {
+    let t = input;
     t = t.replace(/,\s*([}\]])/g, '$1');
+    t = t.replace(/([{,]\s*)'([a-zA-Z0-9_\-]+)'\s*:/g, '$1"$2":');
     return t;
   };
 
-  text = sanitize(text);
-
-  // First attempt: direct parse
   try {
-    return JSON.parse(text);
-  } catch {
-    // Second attempt: try to auto-close truncated JSON by counting brackets
-    try {
-      let fixed = text;
-      const opens: string[] = [];
-      for (const ch of text) {
+    return JSON.parse(cleanPass(text));
+  } catch {}
+
+  // Intento 3: Reemplazar saltos de línea literales (0x0A) dentro de cadenas por \n escapado
+  try {
+    const escapedNewlines = text.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
+      return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+    });
+    return JSON.parse(cleanPass(escapedNewlines));
+  } catch {}
+
+  // Intento 4: Auto-cerrar llaves/corchetes si fue truncado por límite de tokens del LLM
+  try {
+    let fixed = text;
+    const opens: string[] = [];
+    let inString = false;
+    let escapeNext = false;
+    for (let i = 0; i < fixed.length; i++) {
+      const ch = fixed[i];
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
         if (ch === '{') opens.push('}');
         else if (ch === '[') opens.push(']');
-        else if (ch === '}' || ch === ']') opens.pop();
+        else if (ch === '}' || ch === ']') {
+          if (opens.length > 0 && opens[opens.length - 1] === ch) {
+            opens.pop();
+          }
+        }
       }
-      // Close any open structures in reverse
-      while (opens.length > 0) {
-        fixed += opens.pop();
+    }
+    if (inString) fixed += '"';
+    while (opens.length > 0) {
+      fixed += opens.pop();
+    }
+    return JSON.parse(cleanPass(fixed));
+  } catch {}
+
+  // Intento 5: Extracción heurística de pares clave-valor si JSON.parse sigue fallando
+  const resultObj: Record<string, any> = {};
+  const kvRegex = /"([a-zA-Z0-9_\-]+)"\s*:\s*("(?:\\.|[^"\\])*"|true|false|null|\d+(?:\.\d+)?|\[[\s\S]*?\]|\{[\s\S]*?\})/g;
+  let match;
+  while ((match = kvRegex.exec(text)) !== null) {
+    const key = match[1];
+    const valRaw = match[2];
+    try {
+      resultObj[key] = JSON.parse(valRaw);
+    } catch {
+      if (valRaw.startsWith('"') && valRaw.endsWith('"')) {
+        resultObj[key] = valRaw.slice(1, -1);
       }
-      fixed = sanitize(fixed);
-      return JSON.parse(fixed);
-    } catch (e2) {
-      throw new Error(`extractCleanJson: no se pudo parsear JSON. Primeros 300 chars: ${text.slice(0, 300)}`);
     }
   }
+
+  if (Object.keys(resultObj).length > 0) {
+    return resultObj;
+  }
+
+  throw new Error(`extractCleanJson: no se pudo parsear JSON. Primeros 300 chars: ${text.slice(0, 300)}`);
 }
 
 /**
@@ -1163,26 +1216,19 @@ export async function callLLMWithFallbacks(params: {
     }
   }
 
-  // 3. Fallback a Google Gemini si el modelo principal falló
-  if (cleanGemini && !model.startsWith('gemini-')) {
+  // 3. Fallback a Google Gemini con rotación si el modelo principal falló
+  if (!model.startsWith('gemini-')) {
     try {
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanGemini}`;
-      const res = await fetch(geminiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.5, maxOutputTokens: 4096 }
-        }),
+      const text = await callGeminiWithRotation({
+        model: GEMINI_LITE_MODEL,
+        systemPrompt,
+        userPrompt,
+        extraKeys: geminiKey ? [extractCleanKey(geminiKey)].filter(Boolean) : [],
         signal
       });
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) return text;
-      }
+      if (text) return text;
     } catch (gErr) {
-      console.warn('[callLLMWithFallbacks] Fallback Gemini falló:', gErr);
+      console.warn('[callLLMWithFallbacks] Fallback Gemini con rotación falló:', gErr);
     }
   }
 
@@ -1534,14 +1580,23 @@ Construye la representación visual precisa de la historia siguiendo las reglas 
 
     const parsed = extractCleanJson(raw);
     const result: ScriptDeepAnalysis = {
-      premise: parsed.premise || { theme: 'Análisis de historia completado' },
+      premise: parsed.premise || (parsed.theme ? {
+        theme: parsed.theme,
+        mainSituation: parsed.mainSituation,
+        conflict: parsed.conflict,
+        objective: parsed.objective,
+        problem: parsed.problem,
+        evolution: parsed.evolution,
+        outcome: parsed.outcome,
+        narrativeTone: parsed.narrativeTone
+      } : { theme: 'Análisis de historia completado' }),
       narrativeStructure: parsed.narrativeStructure || {},
       explicitElements: parsed.explicitElements || {},
       physicalActions: Array.isArray(parsed.physicalActions) ? parsed.physicalActions : [],
       groundedEmotions: Array.isArray(parsed.groundedEmotions) ? parsed.groundedEmotions : [],
       continuityMemory: Array.isArray(parsed.continuityMemory) ? parsed.continuityMemory : [],
       doNotInventList: Array.isArray(parsed.doNotInventList) ? parsed.doNotInventList : [],
-      visualSummary: parsed.visualSummary || 'Análisis visual del guion completado con éxito.',
+      visualSummary: parsed.visualSummary || parsed.summary || parsed.premise?.theme || parsed.theme || 'Análisis visual del guion completado con éxito.',
       rawText: raw
     };
 
@@ -1796,20 +1851,21 @@ export async function detectCharactersWithAI(params: {
   const system = `${MASTER_PROMPT_4_CHARACTERS}
 
 REGLAS ESTRICTAS DE RESPUESTA:
-1. Si el guion es expositivo/educativo (ej: sobre salud, nutrición, ciencia, tecnología) y NO hay protagonistas explícitos con nombres o biografías, puedes definir arquetipos contextuales (ej: paciente contemporáneo, médico especialista en bata clínica blanca, persona en cocina moderna) O dejar la lista vacía si las escenas se enfocarán en objetos, alimentos y procesos biológicos.
-2. VESTUARIO CONTEXTUAL (PROHIBIDO "period-accurate tailored layered garments"): El vestuario DEBE pertenecer a la profesión y época real (${contextStr || 'época contemporánea'}).
-3. Clasifica la presencia: Solo incluye personajes que aparezcan físicamente (no aquellos meramente mencionados).
+1. Si el guion es histórico, geográfico o documental sobre pueblos, civilizaciones o lugares extremos (ej: constructores andinos de Machu Picchu, agricultores de terrazas, habitantes árticos o exploradores de Finlandia), DEFINE las figuras humanas representativas clave (ej: "Constructor Andino Quechua", "Habitante del Ártico en Invierno") con su biometría facial auténtica y vestuario de la cultura y clima real.
+2. Si el guion es expositivo/educativo y no tiene personajes ficticios, define arquetipos contextuales reales según el tema (ej: médico, paciente, científico).
+3. VESTUARIO CONTEXTUAL: El vestuario DEBE pertenecer a la cultura y clima real (${contextStr || 'contexto del guion'}).
+4. Solo incluye figuras humanas que tengan presencia física observable en las escenas.
 
 Responde ÚNICAMENTE en formato JSON:
 {
   "characters": [
     {
-      "name": "Nombre o Rol concreto (ej: Paciente adulto, Doctora especialista, Marcus)",
+      "name": "Nombre o Rol representativo (ej: Constructor Andino, Agricultor de Terrazas, Habitante Ártico)",
       "role": "PROTAGONIST | SECONDARY",
       "alive": true,
       "exitScene": null,
       "anchorDescription": "Biometría facial y física en inglés: edad aproximada realista, estructura facial, cabello, piel, complexión",
-      "clothingAnchor": "Vestuario contextual en inglés acorde al rol y época: prendas contemporáneas/médicas/laborales concretas con telas y colores",
+      "clothingAnchor": "Vestuario contextual en inglés acorde a la cultura, época y clima: telas, abrigos o vestimentas tradicionales exactas",
       "characterLock": "CHARACTER_LOCK conciso con los rasgos inmutables que deben mantenerse entre escenas",
       "defaultSeed": 482910
     }
@@ -1824,7 +1880,7 @@ GUION COMPLETO:
 ${scriptText}
 """
 
-Extrae los personajes que deben aparecer físicamente y define su CHARACTER_LOCK:`;
+Extrae los personajes o figuras humanas representativas y define su CHARACTER_LOCK:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
@@ -1838,14 +1894,18 @@ Extrae los personajes que deben aparecer físicamente y define su CHARACTER_LOCK
     });
 
     const parsed = extractCleanJson(raw);
-    if (parsed.characters && Array.isArray(parsed.characters) && parsed.characters.length > 0) {
-      const mapped = parsed.characters.map((c: any) => ({
+    const charList = Array.isArray(parsed)
+      ? parsed
+      : (Array.isArray(parsed.characters) ? parsed.characters : (Array.isArray(parsed.personajes) ? parsed.personajes : []));
+
+    if (charList.length > 0) {
+      const mapped = charList.map((c: any) => ({
         name: c.name || 'Sujeto',
         role: c.role === 'SECONDARY' ? 'SECONDARY' as const : 'PROTAGONIST' as const,
         alive: c.alive !== false,
         exitScene: c.exitScene ?? null,
-        anchorDescription: c.anchorDescription || 'Contemporary realistic subject with natural facial features',
-        clothingAnchor: c.clothingAnchor || 'Contemporary casual or professional clothing matching the scene setting',
+        anchorDescription: c.anchorDescription || 'Realistic subject with natural facial features matching the culture and setting',
+        clothingAnchor: c.clothingAnchor || 'Authentic clothing matching the scene setting and climate',
         defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000),
         characterLock: c.characterLock || `${c.name || 'Sujeto'}: consistent appearance and contextual attire`
       }));

@@ -90,7 +90,9 @@ import {
   loadLocalStudioSession, 
   saveLocalAudioBlob, 
   getLocalAudioBlob, 
-  clearLocalStudioSession 
+  clearLocalStudioSession,
+  saveLocalDirHandle,
+  getLocalDirHandle
 } from '../services/localStudioSessionService';
 import { RotateCcw } from 'lucide-react';
 
@@ -435,7 +437,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     localStorage.setItem('bulkscene_selected_director_model', modelId);
   };
 
-  // Restaurar archivo de audio binario desde IndexedDB si no está en memoria
+  // Restaurar archivo de audio binario y handle de carpeta desde IndexedDB si no están en memoria
   useEffect(() => {
     if (!audioBlob) {
       getLocalAudioBlob().then((saved) => {
@@ -451,6 +453,15 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         }
       });
     }
+
+    getLocalDirHandle().then((savedHandle) => {
+      if (savedHandle) {
+        setActiveDirHandle(savedHandle);
+        if (savedHandle.name) {
+          setFolderName(`Carpeta: ${savedHandle.name}`);
+        }
+      }
+    });
   }, []);
 
   // Auto-guardado local instantáneo (Zero Supabase) cada vez que el usuario modifica su avance
@@ -585,13 +596,16 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setActiveDirHandle(dirHandle);
           setFolderName(`Carpeta: ${dirHandle.name}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${dirHandle.name}`);
+          await saveLocalDirHandle(dirHandle);
         }
       } else {
         const fallbackName = prompt('Ingresa el nombre de la carpeta de tu computadora donde organizarás los archivos de este proyecto:');
         if (fallbackName && fallbackName.trim()) {
-          setActiveDirHandle({ name: fallbackName.trim(), isFallback: true });
+          const fallbackHandle = { name: fallbackName.trim(), isFallback: true };
+          setActiveDirHandle(fallbackHandle);
           setFolderName(`Carpeta: ${fallbackName.trim()}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${fallbackName.trim()}`);
+          await saveLocalDirHandle(fallbackHandle);
         }
       }
     } catch (e: any) {
@@ -1153,7 +1167,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       });
       setSavedHtmlFilename(saveRes.filename);
 
-      studioLogger.addLog('SUCCESS', 'HTML Export', `✅ HTML Maestro guardado: ${saveRes.filename} · ${finalScenes.length} escenas`);
+      if (saveRes.savedToDir) {
+        studioLogger.addLog('SUCCESS', 'HTML Export', `✅ HTML Maestro guardado directamente en tu carpeta de proyecto: ${saveRes.filename} · ${finalScenes.length} escenas`);
+      } else {
+        studioLogger.addLog('SUCCESS', 'HTML Export', `📥 HTML Maestro descargado en navegador: ${saveRes.filename} · ${finalScenes.length} escenas`);
+      }
 
       setPipelineProgressText(`¡Completado! HTML guardado como ${saveRes.filename}. Pasando a Generar Escenas...`);
 
