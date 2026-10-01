@@ -5,6 +5,7 @@ import Registro from './components/Registro';
 import ProtectedRoute from './components/ProtectedRoute';
 import MainApplication from './components/MainApplication';
 import LandingPage from './components/LandingPage';
+import AdminDashboard from './components/AdminDashboard';
 import { initGlobalErrorTelemetry } from './services/errorTelemetryService';
 
 const LandingRoute: React.FC = () => {
@@ -71,7 +72,10 @@ const App: React.FC = () => {
           }
         />
 
-        {/* 5. Fallback a portada */}
+        {/* 5. Panel Administrativo & Notificaciones de Telegram */}
+        <Route path="/admin" element={<AdminDashboard />} />
+
+        {/* 6. Fallback a portada */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

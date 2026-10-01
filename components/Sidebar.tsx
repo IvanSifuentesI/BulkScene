@@ -12,9 +12,10 @@ import {
   ChevronLeft, 
   ChevronRight, 
   LogOut, 
-  Cpu 
+  Cpu,
+  ShieldCheck 
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export type AppStage = 
   | 'guion' 
@@ -59,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     {
       id: 'guion' as AppStage,
-      label: 'Director de Guion',
+      label: '1. Director de Guion',
       icon: Clapperboard,
       badge: 'IA',
       badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
@@ -69,19 +70,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       iconActiveBg: 'bg-emerald-500 text-black',
     },
     {
-      id: 'imagenes' as AppStage,
-      label: 'Generador Masivo',
-      icon: Zap,
-      badge: totalScenesCount > 0 ? `${completedScenesCount}/${totalScenesCount}` : null,
-      badgeClass: 'bg-emerald-500/20 text-emerald-300',
-      activeStyle: 'bg-[#0a231b] border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]',
-      indicatorColor: 'bg-emerald-400',
-      iconColor: 'text-emerald-400',
-      iconActiveBg: 'bg-emerald-500 text-black',
-    },
-    {
       id: 'personajes' as AppStage,
-      label: 'Banco de Personajes',
+      label: '2. Banco de Personajes',
       icon: Users,
       badge: null,
       badgeClass: '',
@@ -92,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'estilos' as AppStage,
-      label: 'Banco de Estilos',
+      label: '3. Banco de Estilos',
       icon: Palette,
       badge: null,
       badgeClass: '',
@@ -103,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'audio' as AppStage,
-      label: 'Audio & Sincronización',
+      label: '4. Audio & Voz (Opcional)',
       icon: Mic,
       badge: null,
       badgeClass: '',
@@ -114,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'escenas' as AppStage,
-      label: 'Desglose de Escenas',
+      label: '5. Desglose de Escenas',
       icon: Film,
       badge: totalScenesCount > 0 ? `${totalScenesCount}` : null,
       badgeClass: 'bg-indigo-500/20 text-indigo-300',
@@ -124,15 +114,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       iconActiveBg: 'bg-indigo-500 text-white',
     },
     {
-      id: 'showcase' as AppStage,
-      label: 'Ver Landing SaaS',
-      icon: Globe,
-      badge: null,
-      badgeClass: '',
-      activeStyle: 'bg-[#0f172a] border-blue-500/60 text-blue-300',
-      indicatorColor: 'bg-blue-400',
-      iconColor: 'text-blue-400',
-      iconActiveBg: 'bg-blue-500 text-white',
+      id: 'imagenes' as AppStage,
+      label: '6. Generador Masivo',
+      icon: Zap,
+      badge: totalScenesCount > 0 ? `${completedScenesCount}/${totalScenesCount}` : null,
+      badgeClass: 'bg-emerald-500/20 text-emerald-300',
+      activeStyle: 'bg-[#0a231b] border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]',
+      indicatorColor: 'bg-emerald-400',
+      iconColor: 'text-emerald-400',
+      iconActiveBg: 'bg-emerald-500 text-black',
     },
     {
       id: 'ajustes' as AppStage,
@@ -289,6 +279,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
+
+            {(userEmail === 'ivansifuentes1998@gmail.com' || userEmail === 'admin@bulkscene.ai') && (
+              <Link
+                to="/admin"
+                className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono hover:bg-red-500/20 transition-colors"
+                title="Panel de Telemetría y Notificaciones Telegram"
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                  <span>Modo Admin</span>
+                </span>
+                <span className="text-[9px] bg-red-500/20 px-1 py-0.2 rounded font-bold">/admin</span>
+              </Link>
+            )}
 
             <div className="flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">
               <span className="flex items-center gap-1">

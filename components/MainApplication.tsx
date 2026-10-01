@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   FileText, 
   Mic, 
@@ -13,6 +14,8 @@ import {
   Monitor, 
   Square,
   AlertCircle,
+  AlertTriangle,
+  ShieldCheck,
   Rocket,
   FolderOpen,
   Users,
@@ -35,7 +38,7 @@ import BulkSceneGenerator from './BulkSceneGenerator';
 import CharacterVault from './CharacterVault';
 import StyleMatrix from './StyleMatrix';
 import SettingsStage from './SettingsStage';
-import LandingPage from './LandingPage';
+import ReportErrorModal from './ReportErrorModal';
 
 // Initial API Keys (loaded dynamically from localStorage / user settings)
 const INITIAL_NVIDIA_KEYS: string[] = [];
@@ -49,6 +52,8 @@ export const MainApplication: React.FC = () => {
   const [showMobileNotice, setShowMobileNotice] = useState<boolean>(() => {
     return typeof window !== 'undefined' && window.innerWidth < 768;
   });
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [reportTechnicalContext, setReportTechnicalContext] = useState<any>(null);
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('bulkscene_user_email');
@@ -232,7 +237,7 @@ export const MainApplication: React.FC = () => {
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-mesh-dark relative">
         {/* Top Header Bar - Clean Command Bar */}
         <header className="h-16 border-b border-white/[0.04] bg-[#090b10] px-6 flex items-center justify-between shrink-0 z-20">
-          {/* Breadcrumb Steps - Segmented Capsule */}
+          {/* Breadcrumb Steps - Segmented Capsule (Orden Consecuente 1 a 6) */}
           <div className="bg-[#111420] p-1 rounded-2xl flex items-center gap-1 shadow-inner overflow-x-auto max-w-full">
             <button
               onClick={() => setCurrentStage('guion')}
@@ -247,23 +252,6 @@ export const MainApplication: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setCurrentStage('imagenes')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                currentStage === 'imagenes'
-                  ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
-                  : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span>2. Generador</span>
-              {totalSlotsCount > 0 && (
-                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${currentStage === 'imagenes' ? 'bg-black/30 text-black' : 'bg-white/10 text-emerald-400'}`}>
-                  {completedSlotsCount}/{totalSlotsCount}
-                </span>
-              )}
-            </button>
-
-            <button
               onClick={() => setCurrentStage('personajes')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
                 currentStage === 'personajes'
@@ -272,7 +260,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <Users className="w-3.5 h-3.5 text-purple-400" />
-              <span>Personajes</span>
+              <span>2. Personajes</span>
             </button>
 
             <button
@@ -284,7 +272,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <Palette className="w-3.5 h-3.5 text-amber-400" />
-              <span>Estilos</span>
+              <span>3. Estilos</span>
             </button>
 
             <button
@@ -296,7 +284,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <Mic className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Voz y Audio</span>
+              <span>4. Audio & Voz</span>
             </button>
 
             <button
@@ -308,7 +296,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <Film className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Escenas</span>
+              <span>5. Escenas</span>
               {scenes.length > 0 && (
                 <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${currentStage === 'escenas' ? 'bg-black/30 text-white' : 'bg-white/10 text-indigo-300'}`}>
                   {scenes.length}
@@ -317,34 +305,55 @@ export const MainApplication: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setCurrentStage('showcase')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                currentStage === 'showcase'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'text-gray-400 hover:text-blue-300 hover:bg-blue-950/20'
+              onClick={() => setCurrentStage('imagenes')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                currentStage === 'imagenes'
+                  ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20'
+                  : 'text-gray-400 hover:text-white hover:bg-white/[0.04]'
               }`}
             >
-              <Rocket className="w-3.5 h-3.5 text-blue-400" />
-              <span>Landing</span>
+              <Zap className="w-3.5 h-3.5" />
+              <span>6. Generador</span>
+              {totalSlotsCount > 0 && (
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${currentStage === 'imagenes' ? 'bg-black/30 text-black' : 'bg-white/10 text-emerald-400'}`}>
+                  {completedSlotsCount}/{totalSlotsCount}
+                </span>
+              )}
             </button>
           </div>
 
           {/* Right Header Status Bar */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {/* PC Optimized Badge */}
             <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-mono shadow-inner">
               <Monitor className="w-3.5 h-3.5 text-emerald-400" />
               <span>Modo PC Optimizado</span>
             </div>
 
-            {/* Project Folder Indicator */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#111420] text-xs text-gray-300 font-mono shadow-inner border border-white/5">
-              <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="truncate max-w-[150px]">{projectName}</span>
-            </div>
+            {/* Botón Reportar Problema al Administrador */}
+            <button
+              onClick={() => setIsReportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-semibold transition-all active:scale-95"
+              title="¿Ocurrió un error o problema técnico? Notifica directamente al administrador"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Reportar Error</span>
+            </button>
+
+            {/* Acceso discreto para el Administrador */}
+            {(userEmail === 'ivansifuentes1998@gmail.com' || userEmail === 'admin@bulkscene.ai') && (
+              <Link
+                to="/admin"
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-mono font-bold transition-all"
+                title="Panel Administrativo de Errores y Notificaciones Telegram"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                <span>Admin</span>
+              </Link>
+            )}
 
             {/* Cluster Status */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111420] text-xs font-mono text-gray-300 shadow-inner border border-white/5">
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111420] text-xs font-mono text-gray-300 shadow-inner border border-white/5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-gray-400">Cluster Neuronal:</span>
               <span className="text-emerald-400 font-bold">Activo</span>
@@ -387,10 +396,6 @@ export const MainApplication: React.FC = () => {
         {/* Scrollable Stage Content View */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           <div className="max-w-[1850px] 2xl:max-w-full mx-auto w-full pb-16 px-1 sm:px-2">
-            {currentStage === 'showcase' && (
-              <LandingPage onOpenStudio={() => setCurrentStage('guion')} />
-            )}
-
             {currentStage === 'guion' && (
               <ScriptStage
                 groqKeys={groqKeys}
@@ -500,6 +505,30 @@ export const MainApplication: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Floating Quick Report Button */}
+        <div className="fixed bottom-5 right-5 z-40">
+          <button
+            onClick={() => setIsReportModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-[#0e111a]/95 hover:bg-[#161a27] border border-amber-500/40 text-amber-300 shadow-[0_4px_25px_rgba(0,0,0,0.85)] text-xs font-bold transition-all hover:scale-105 active:scale-95 backdrop-blur-md"
+            title="¿Algo falló en la generación o en un script? Reporta el problema directamente al soporte"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+            <span>¿Problemas? Reportar</span>
+          </button>
+        </div>
+
+        {/* Modal de Reporte de Errores para el Administrador & Telegram */}
+        <ReportErrorModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          currentStage={currentStage.toUpperCase()}
+          technicalDetails={reportTechnicalContext}
+        />
       </main>
     </div>
   );
