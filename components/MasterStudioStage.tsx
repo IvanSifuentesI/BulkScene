@@ -240,16 +240,21 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 4. Project Folder Destination
+  // 4. Project Folder Destination & Project Name (Ambos campos son estrictamente OBLIGATORIOS)
   const [folderName, setFolderName] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_folder_name') || 'Descargas / Carpeta de Proyecto';
+    return localStorage.getItem('bulkscene_selected_folder_name') || '';
   });
   const [activeDirHandle, setActiveDirHandle] = useState<any>(null);
   const [currentProjectName, setCurrentProjectName] = useState<string>(() => {
-    return savedSession?.projectName || projectName || 'BulkScene_Proyecto_01';
+    return savedSession?.projectName || projectName || '';
   });
   const [lastGeneratedHtml, setLastGeneratedHtml] = useState<string | null>(null);
   const [savedHtmlFilename, setSavedHtmlFilename] = useState<string | null>(null);
+
+  // Validaciones obligatorias:
+  const isProjectNameValid = Boolean(currentProjectName && currentProjectName.trim());
+  const isFolderSelected = Boolean(activeDirHandle);
+  const isReadyToGenerate = isProjectNameValid && isFolderSelected;
 
   // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
   const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(false);
@@ -380,15 +385,12 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [isSaveStyleModalOpen, setIsSaveStyleModalOpen] = useState<boolean>(false);
   const [newStyleNameInput, setNewStyleNameInput] = useState<string>('');
 
-  // 9. Character Vault & Biometric Consistency — Toggle simple: activo = personaje consistente, inactivo = sin personaje
+  // 9. Character Vault & Biometric Consistency — Modo Auto por defecto (sin personajes preseleccionados ni sobrepuestos)
   const activeChar = characters.find((c) => c.id === activeCharacterId);
-  const [characterConsistencyEnabled, setCharacterConsistencyEnabled] = useState<boolean>(() => {
-    // Activo por defecto si hay un personaje seleccionado en la sesión guardada
-    return savedSession?.consistencyMode !== undefined
-      ? savedSession.consistencyMode !== 'desactivado'
-      : Boolean(savedSession?.activeCharacterId || activeCharacterId);
+  const [characterMode, setCharacterMode] = useState<'auto' | 'bank'>(() => {
+    return activeCharacterId ? 'bank' : 'auto';
   });
-  const consistencyMode: CharacterConsistencyMode = characterConsistencyEnabled ? 'nombre_en_prompt' : 'nombre_en_prompt';
+  const consistencyMode: CharacterConsistencyMode = 'nombre_en_prompt';
   const [detectedCharacters, setDetectedCharacters] = useState<ScriptDirectorCharacter[]>(() => {
     return savedSession?.detectedCharacters ?? [];
   });
@@ -554,21 +556,28 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     };
   };
 
-  // Pick Directory Handler (File System Access API with fallback)
+  // Pick Directory Handler (File System Access API con fallback obligatorio)
   const handlePickDirectory = async () => {
     try {
       if ('showDirectoryPicker' in window) {
-        const dirHandle = await (window as any).showDirectoryPicker();
+        const dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
         if (dirHandle && dirHandle.name) {
           setActiveDirHandle(dirHandle);
           setFolderName(`Carpeta: ${dirHandle.name}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${dirHandle.name}`);
         }
       } else {
-        alert('Tu navegador guardará automáticamente los resultados y el documento HTML en tu carpeta de descargas.');
+        const fallbackName = prompt('Ingresa el nombre de la carpeta de tu computadora donde organizarás los archivos de este proyecto:');
+        if (fallbackName && fallbackName.trim()) {
+          setActiveDirHandle({ name: fallbackName.trim(), isFallback: true });
+          setFolderName(`Carpeta: ${fallbackName.trim()}`);
+          localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${fallbackName.trim()}`);
+        }
       }
-    } catch (e) {
-      // User cancelled picker, ignore
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        console.warn('Aviso al seleccionar carpeta:', e);
+      }
     }
   };
 
@@ -799,7 +808,6 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           createdAt: new Date().toISOString()
         };
         onAddCharacter(newPersona);
-        onSelectCharacter(newPersona.id);
       }
     } catch (err) {
       console.warn('Fallo en detección de personajes:', err);
@@ -866,6 +874,22 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   // Core Pipeline Execution
   const executeGeneration = async (mode: 'full_auto' | 'prompts_only') => {
     if (!requireSubscription(mode === 'full_auto' ? 'MODO AUTOMÁTICO' : 'Generación de Prompts con IA', '1. Estudio Master')) {
+      return;
+    }
+
+    // 1. VALIDACIÓN OBLIGATORIA: Nombre del Proyecto (Estricto)
+    if (!currentProjectName || !currentProjectName.trim()) {
+      alert('⚠️ Campo Obligatorio:\nDebes escribir el Nombre del Proyecto en la barra superior antes de iniciar.');
+      const nameInput = document.getElementById('project-name-input');
+      nameInput?.focus();
+      nameInput?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    // 2. VALIDACIÓN OBLIGATORIA: Carpeta de Guardado / Destino (Estricto)
+    if (!activeDirHandle) {
+      alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta de Destino donde se guardarán los resultados antes de iniciar.');
+      handlePickDirectory();
       return;
     }
 
@@ -997,17 +1021,18 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           if (detected && detected.length > 0) {
             activeCharactersList = detected;
             setDetectedCharacters(detected);
-            const proto = detected[0];
-            const newPersona: CharacterPersona = {
-              id: `char-auto-${Date.now()}`,
-              name: proto.name,
-              anchorDescription: proto.anchorDescription,
-              clothingAnchor: proto.clothingAnchor,
-              defaultSeed: proto.defaultSeed,
-              createdAt: new Date().toISOString()
-            };
-            if (onAddCharacter) onAddCharacter(newPersona);
-            onSelectCharacter(newPersona.id);
+            if (!activeCharacterId && onAddCharacter) {
+              const proto = detected[0];
+              const newPersona: CharacterPersona = {
+                id: `char-auto-${Date.now()}`,
+                name: proto.name,
+                anchorDescription: proto.anchorDescription,
+                clothingAnchor: proto.clothingAnchor,
+                defaultSeed: proto.defaultSeed,
+                createdAt: new Date().toISOString()
+              };
+              onAddCharacter(newPersona);
+            }
           }
         } catch (charErr: any) {
           console.warn('Aviso Personajes:', charErr);
@@ -1336,50 +1361,79 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </div>
           </div>
 
-          {/* Box 3: Título de Producción */}
-          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
+          {/* Box 3: Título de Producción / Nombre del Proyecto (OBLIGATORIO) */}
+          <div className={`bg-[#07090e] border rounded-2xl p-3 flex items-center gap-2.5 transition-all ${
+            !isProjectNameValid ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30' : 'border-white/[0.06]'
+          }`}>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              isProjectNameValid ? 'bg-purple-500/10 text-purple-400' : 'bg-amber-500/15 text-amber-400'
+            }`}>
               <Film className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-bold block mb-1 truncate">
-                Nombre del Proyecto
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="project-name-input" className="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-bold block truncate cursor-pointer">
+                  Nombre del Proyecto
+                </label>
+                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                  isProjectNameValid ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+                }`}>
+                  {isProjectNameValid ? '✓ Listo' : '* Obligatorio'}
+                </span>
+              </div>
               <input
+                id="project-name-input"
                 type="text"
                 value={currentProjectName}
                 onChange={(e) => {
                   setCurrentProjectName(e.target.value);
                   if (setProjectName) setProjectName(e.target.value);
                 }}
-                placeholder="Nombre_Proyecto_01"
-                className="w-full bg-[#0d111a] border border-purple-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-purple-400"
+                placeholder="Escribe el nombre del proyecto (Obligatorio)..."
+                className="w-full bg-[#0d111a] border border-purple-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-purple-400 placeholder:text-slate-600"
               />
             </div>
           </div>
 
-          {/* Box 4: Carpeta Destino & Estado de Claves */}
-          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center justify-between gap-2">
+          {/* Box 4: Carpeta Destino (OBLIGATORIA) */}
+          <div className={`bg-[#07090e] border rounded-2xl p-3 flex items-center justify-between gap-2 transition-all ${
+            !isFolderSelected ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30' : 'border-emerald-500/30'
+          }`}>
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                isFolderSelected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/15 text-amber-400 animate-pulse'
+              }`}>
                 <Folder className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block truncate">
-                  Carpeta ZIP
-                </span>
-                <span className="text-[11px] text-slate-300 font-medium truncate block" title={folderName}>
-                  {folderName}
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block truncate">
+                    Carpeta de Destino
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                    isFolderSelected ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
+                  }`}>
+                    {isFolderSelected ? '✓ Seleccionada' : '* Obligatoria'}
+                  </span>
+                </div>
+                <span className={`text-[11px] font-medium truncate block ${
+                  isFolderSelected ? 'text-slate-200' : 'text-amber-300/80 italic font-mono'
+                }`} title={folderName || 'Ninguna carpeta seleccionada'}>
+                  {isFolderSelected ? folderName : '⚠️ Sin carpeta seleccionada'}
                 </span>
               </div>
             </div>
             <button
               type="button"
               onClick={handlePickDirectory}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[11px] font-bold transition-all shrink-0 flex items-center gap-1"
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-md ${
+                isFolderSelected
+                  ? 'bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-slate-300'
+                  : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-extrabold animate-pulse'
+              }`}
             >
-              <FolderOpen className="w-3 h-3" />
-              <span>Cambiar</span>
+              <FolderOpen className="w-3.5 h-3.5" />
+              <span>{isFolderSelected ? 'Cambiar' : 'Seleccionar Carpeta'}</span>
             </button>
           </div>
         </div>
@@ -2448,140 +2502,186 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         </div>
       </div>
 
-      {/* 4. PERSONAJES — Toggle simple */}
-      <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 shadow-xl">
+      {/* 4. PERSONAJES — Modo Automático por defecto, limpio y vacío sin personajes sobrepuestos */}
+      <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 shadow-xl">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-white">Personajes</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {characterConsistencyEnabled
-                  ? 'Activo — Mantiene identidad visual estable entre escenas'
-                  : 'Desactivado — Sin personaje fijo en los prompts'}
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <UserCheck className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400">
+              PERSONAJES
+            </span>
           </div>
+          {charSavedToast && (
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 animate-pulse font-bold">
+              ✓ Guardado en Banco
+            </span>
+          )}
+          {characterMode === 'auto' && detectedCharacters.length > 0 && (
+            <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/30">
+              ✓ {detectedCharacters.length} detectado(s) por IA
+            </span>
+          )}
+        </div>
 
-          {/* Toggle on/off */}
+        {/* Toggle: Automático con IA (Predeterminado) / Del Banco */}
+        <div className="flex bg-[#07090e] rounded-xl p-1 gap-1 border border-white/[0.06]">
           <button
             type="button"
-            onClick={() => setCharacterConsistencyEnabled(v => !v)}
-            className={`relative w-12 h-6 rounded-full transition-all shrink-0 ${
-              characterConsistencyEnabled ? 'bg-purple-500' : 'bg-white/10'
+            onClick={() => {
+              setCharacterMode('auto');
+              onSelectCharacter(undefined);
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              characterMode === 'auto'
+                ? 'bg-purple-500 text-black shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
-            title={characterConsistencyEnabled ? 'Desactivar consistencia de personaje' : 'Activar consistencia de personaje'}
           >
-            <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-all ${
-              characterConsistencyEnabled ? 'left-7' : 'left-1'
-            }`} />
+            ✨ Automático con IA (Predeterminado)
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCharacterMode('bank');
+            }}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              characterMode === 'bank'
+                ? 'bg-amber-500 text-black shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            👤 Del Banco / Fijo
           </button>
         </div>
 
-        {/* Contenido expandido solo cuando está activo */}
-        {characterConsistencyEnabled && (
-          <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-3">
-            {/* Botón de detección con IA */}
-            <button
-              type="button"
-              onClick={handleAutoDetectCharacters}
-              disabled={isDetectingChars || !scriptText.trim()}
-              className="w-full py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-40 cursor-pointer"
-            >
-              {isDetectingChars ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Analizando guion completo con IA...</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-3.5 h-3.5" />
-                  <span>✨ Detectar Personajes con IA (análisis completo)</span>
-                </>
-              )}
-            </button>
-
-            {/* Selector del banco de personajes */}
-            {characters.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Del banco de personajes:</div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onSelectCharacter(undefined)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      !activeCharacterId
-                        ? 'bg-slate-600 border-slate-400 text-white'
-                        : 'bg-white/[0.03] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/20'
-                    }`}
-                  >
-                    Auto (IA detecta)
-                  </button>
-                  {characters.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => onSelectCharacter(c.id)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                        activeCharacterId === c.id
-                          ? 'bg-purple-500 border-purple-400 text-black shadow-md'
-                          : 'bg-white/[0.03] border-white/[0.08] text-slate-300 hover:text-white hover:border-purple-500/50'
-                      }`}
-                    >
-                      👤 {c.name}{activeCharacterId === c.id ? ' ✓' : ''}
-                    </button>
-                  ))}
-                </div>
+        {/* Contenido según el modo */}
+        {characterMode === 'auto' ? (
+          <div className="space-y-3">
+            {detectedCharacters.length === 0 ? (
+              <div className="bg-[#07090e] border border-dashed border-white/10 rounded-2xl p-4 text-center space-y-2">
+                <p className="text-xs text-slate-300 font-medium">
+                  ✨ <strong>Modo Automático:</strong> La IA analizará el guion completo (Paso 4) y definirá los personajes, sus rasgos físicos y vestimenta acordes a la época y cultura.
+                </p>
+                <p className="text-[10px] text-slate-500 font-mono">
+                  Vacío de forma predeterminada · Sin personajes preseleccionados ni sobrepuestos.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAutoDetectCharacters}
+                  disabled={isDetectingChars || !scriptText.trim()}
+                  className="px-4 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer disabled:opacity-40"
+                  title="Ejecutar análisis de personajes antes de la generación general"
+                >
+                  {isDetectingChars ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Analizando guion con IA...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span>✨ Detectar Personajes con IA (opcional previo)</span>
+                    </>
+                  )}
+                </button>
               </div>
-            )}
-
-            {/* Ficha del personaje activo o detectado */}
-            {(activeChar || detectedCharacters.length > 0) && (
-              <div className="bg-[#07090e] border border-purple-500/30 rounded-2xl p-3.5 space-y-2">
+            ) : (
+              <div className="bg-[#07090e] border border-purple-500/30 rounded-2xl p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
                     <UserCheck className="w-3.5 h-3.5" />
-                    {activeChar?.name || detectedCharacters[0]?.name || 'Protagonista detectado'}
+                    {detectedCharacters[0]?.name || 'Protagonista detectado'} ({detectedCharacters[0]?.role || 'Principal'})
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30">
-                      Seed #{activeChar?.defaultSeed || detectedCharacters[0]?.defaultSeed || '—'}
-                    </span>
-                    {charSavedToast && (
-                      <span className="text-[10px] text-emerald-400 animate-pulse font-bold">✓ Guardado</span>
-                    )}
-                  </div>
+                  <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30">
+                    Seed #{detectedCharacters[0]?.defaultSeed || '—'}
+                  </span>
                 </div>
-                <div className="text-[10px] font-mono text-slate-400 bg-black/30 p-2.5 rounded-xl space-y-1 border border-white/[0.04]">
-                  <div><span className="text-purple-400">Rasgos: </span>{activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription || '—'}</div>
-                  <div><span className="text-purple-400">Ropa: </span>{activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor || '—'}</div>
+                <div className="text-[10px] font-mono text-slate-400 bg-black/40 p-2.5 rounded-xl space-y-1 border border-white/[0.04]">
+                  <div><span className="text-purple-400">Rasgos: </span>{detectedCharacters[0]?.anchorDescription || '—'}</div>
+                  <div><span className="text-purple-400">Vestimenta: </span>{detectedCharacters[0]?.clothingAnchor || '—'}</div>
                 </div>
-                {Array.isArray(detectedCharacters) && detectedCharacters.length > 1 && (
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-[10px] text-slate-500 w-full">Secundarios:</span>
+                {detectedCharacters.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1 pt-1">
+                    <span className="text-[10px] text-slate-500 font-mono">Secundarios:</span>
                     {detectedCharacters.slice(1).map((dc, i) => dc ? (
                       <span key={i} className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
-                        {dc.name || 'Personaje'} ({dc.alive ? '✓' : '✗'})
+                        {dc.name} ({dc.role})
                       </span>
                     ) : null)}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleSaveCharacterToVault()}
-                  className="text-[10px] text-purple-300 hover:text-purple-200 font-bold px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 transition-all cursor-pointer"
-                >
-                  💾 Guardar en banco
-                </button>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveCharacterToVault(detectedCharacters[0])}
+                    className="flex-1 text-[11px] text-purple-300 hover:text-white font-bold py-1.5 px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>💾 Guardar Protagonista en Banco</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetectedCharacters([])}
+                    className="text-[11px] text-slate-400 hover:text-rose-400 py-1.5 px-3 rounded-xl bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.06] hover:border-rose-500/30 transition-all cursor-pointer"
+                    title="Limpiar personajes detectados y volver a estado vacío"
+                  >
+                    Limpiar
+                  </button>
+                </div>
               </div>
             )}
+          </div>
+        ) : (
+          /* Modo Del Banco: Menú desplegable exactamente como el selector de estilos */
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <select
+                value={activeCharacterId || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onSelectCharacter(val ? val : undefined);
+                }}
+                className="w-full bg-[#0d111a] border border-white/[0.08] text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
+              >
+                <option value="">👤 Seleccionar del banco de personajes...</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    👤 {c.name} {c.clothingAnchor ? `(${c.clothingAnchor.slice(0, 35)}...)` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            {/* Estado vacío */}
-            {!activeChar && detectedCharacters.length === 0 && (
-              <div className="text-center py-4 text-[11px] text-slate-500">
-                Usa el botón de arriba para detectar personajes automáticamente con IA, o selecciona uno del banco.
+            {activeChar ? (
+              <div className="bg-[#07090e] border border-amber-500/30 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    {activeChar.name} (Fijo del Banco)
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                    Seed #{activeChar.defaultSeed || '—'}
+                  </span>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400 bg-black/40 p-2.5 rounded-xl space-y-1 border border-white/[0.04]">
+                  <div><span className="text-amber-400">Rasgos: </span>{activeChar.anchorDescription || '—'}</div>
+                  <div><span className="text-amber-400">Vestimenta: </span>{activeChar.clothingAnchor || '—'}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectCharacter(undefined);
+                    setCharacterMode('auto');
+                  }}
+                  className="w-full text-[11px] text-slate-400 hover:text-white py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition-all cursor-pointer"
+                >
+                  Volver a Modo Automático
+                </button>
+              </div>
+            ) : (
+              <div className="bg-[#07090e] border border-dashed border-white/10 rounded-2xl p-4 text-center">
+                <p className="text-xs text-slate-400">
+                  Ningún personaje seleccionado del banco. Elige uno del menú desplegable o cambia a «Automático con IA».
+                </p>
               </div>
             )}
           </div>
@@ -2653,6 +2753,49 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
       {/* 6. PIPELINE EXECUTION BAR: DUAL ACTIONS & PROGRESS */}
       <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-2xl space-y-4">
+        {/* Banner de Requisitos Obligatorios */}
+        {(!currentProjectName.trim() || !activeDirHandle) && (
+          <div className="w-full p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300 animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <div>
+                <span className="font-bold text-white block">Requisitos obligatorios para generar:</span>
+                <span className="text-[11px] text-amber-200/80">
+                  {!currentProjectName.trim() && !activeDirHandle
+                    ? '1) Escribe el Nombre del Proyecto  •  2) Selecciona la Carpeta donde se guardarán los resultados.'
+                    : !currentProjectName.trim()
+                    ? '• Falta escribir el Nombre del Proyecto en la barra superior.'
+                    : '• Falta seleccionar la Carpeta de Destino en la barra superior.'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!currentProjectName.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById('project-name-input');
+                    el?.focus();
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-200 text-xs font-bold transition-all cursor-pointer"
+                >
+                  ✏️ Escribir Nombre
+                </button>
+              )}
+              {!activeDirHandle && (
+                <button
+                  type="button"
+                  onClick={handlePickDirectory}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black text-xs font-black transition-all cursor-pointer shadow-md"
+                >
+                  📂 Seleccionar Carpeta
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Auto advance toggle */}
           <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -2672,9 +2815,27 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             {/* Action 1: Solo Generar Prompts (Modo Rápido / Manual) */}
             <button
               type="button"
-              onClick={() => executeGeneration('prompts_only')}
+              onClick={() => {
+                if (!currentProjectName.trim()) {
+                  alert('⚠️ Campo Obligatorio:\nDebes escribir el Nombre del Proyecto antes de continuar.');
+                  const el = document.getElementById('project-name-input');
+                  el?.focus();
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return;
+                }
+                if (!activeDirHandle) {
+                  alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta donde se guardarán los resultados antes de continuar.');
+                  handlePickDirectory();
+                  return;
+                }
+                executeGeneration('prompts_only');
+              }}
               disabled={isProcessingPipeline || !scriptText.trim()}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#121622] hover:bg-[#1a2133] border border-white/10 hover:border-white/20 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-40 shadow-md"
+              className={`w-full sm:w-auto px-6 py-3.5 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md ${
+                !isReadyToGenerate
+                  ? 'bg-[#121622]/50 border-white/5 text-slate-500 cursor-not-allowed'
+                  : 'bg-[#121622] hover:bg-[#1a2133] border-white/10 hover:border-white/20 text-slate-200 cursor-pointer'
+              }`}
             >
               <Zap className="w-4 h-4 text-cyan-400" />
               <span>Solo Generar Prompts (Modo Manual)</span>
@@ -2683,9 +2844,27 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             {/* Action 2: MODO AUTOMÁTICO */}
             <button
               type="button"
-              onClick={() => executeGeneration('full_auto')}
+              onClick={() => {
+                if (!currentProjectName.trim()) {
+                  alert('⚠️ Campo Obligatorio:\nDebes escribir el Nombre del Proyecto antes de iniciar el Modo Automático.');
+                  const el = document.getElementById('project-name-input');
+                  el?.focus();
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return;
+                }
+                if (!activeDirHandle) {
+                  alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta donde se guardarán los resultados antes de iniciar el Modo Automático.');
+                  handlePickDirectory();
+                  return;
+                }
+                executeGeneration('full_auto');
+              }}
               disabled={isProcessingPipeline || (!scriptText.trim() && !audioBlob)}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-black font-black text-xs flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
+              className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2.5 transition-all shadow-lg ${
+                !isReadyToGenerate
+                  ? 'bg-slate-800 text-slate-500 border border-white/5 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-black shadow-[0_0_30px_rgba(16,185,129,0.35)] active:scale-95 cursor-pointer'
+              }`}
             >
               {isProcessingPipeline ? (
                 <>

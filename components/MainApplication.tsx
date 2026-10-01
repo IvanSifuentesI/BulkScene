@@ -130,7 +130,17 @@ export const MainApplication: React.FC = () => {
   });
 
   // Project Settings & Aspect Ratio
-  const [projectName, setProjectName] = useState<string>('Proyecto_Video_Viral');
+  const [projectName, setProjectName] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_project_name') || '';
+  });
+  const handleSetProjectName = (name: string) => {
+    setProjectName(name);
+    if (name) {
+      localStorage.setItem('bulkscene_project_name', name);
+    } else {
+      localStorage.removeItem('bulkscene_project_name');
+    }
+  };
   const [aspectRatio, setAspectRatio] = useState<AspectRatioType>('9:16');
   const [selectedImageModel, setSelectedImageModel] = useState<string>('flux-1-schnell');
 
@@ -142,7 +152,7 @@ export const MainApplication: React.FC = () => {
   const [scenes, setScenes] = useState<ScriptSceneResult[]>([]);
   const [slots, setSlots] = useState<SceneSlot[]>([]);
 
-  // Character Bank
+  // Character Bank — Modo Auto por defecto (sin personaje preseleccionado ni sobrepuesto)
   const [characters, setCharacters] = useState<CharacterPersona[]>(() => {
     try {
       const saved = localStorage.getItem('bulk_characters_vault');
@@ -156,7 +166,12 @@ export const MainApplication: React.FC = () => {
     }
   });
   const [activeCharacterId, setActiveCharacterIdRaw] = useState<string | undefined>(() => {
-    return localStorage.getItem('bulkscene_active_character_id') || 'stickman-beard';
+    const saved = localStorage.getItem('bulkscene_active_character_id');
+    if (saved === 'stickman-beard') {
+      localStorage.removeItem('bulkscene_active_character_id');
+      return undefined;
+    }
+    return saved || undefined;
   });
   const setActiveCharacterId = (id: string | undefined) => {
     setActiveCharacterIdRaw(id);
@@ -519,7 +534,7 @@ export const MainApplication: React.FC = () => {
                 onSelectStyle={setActiveStyleId}
                 onAddStyle={handleAddStyle}
                 projectName={projectName}
-                setProjectName={setProjectName}
+                setProjectName={handleSetProjectName}
                 onProceedToScenes={handleProceedFromScenes}
                 onProceedToAudio={handleProceedFromScript}
                 onProceedToImages={handleProceedFromScenes}
