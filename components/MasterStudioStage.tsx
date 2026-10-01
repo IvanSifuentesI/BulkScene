@@ -919,11 +919,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       let styleModifierToUse = customStyleInstructions.trim();
       let activeCharactersList = detectedCharacters;
 
-      studioLogger.addLog('STEP', `▶ Iniciando Pipeline de Dirección (${mode === 'full_auto' ? 'Modo Automático Total' : 'Solo Prompts'})...`, {
-        modeloAnalisis: selectedAnalysisModel,
-        modeloPrompts: selectedPromptModel,
-        caracteresGuion: currentScript.length
-      });
+      studioLogger.addLog('STEP', 'Pipeline', `▶ Iniciando Pipeline de Dirección (${mode === 'full_auto' ? 'Modo Automático Total' : 'Solo Prompts'}) · Análisis: ${selectedAnalysisModel} · Prompts: ${selectedPromptModel} · ${currentScript.length} chars`);
 
       if (mode === 'full_auto') {
         // PASO 1 (Gemini 3.8 Flash): Análisis Profundo del Guion y Memoria Visual
@@ -939,7 +935,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setDeepScriptAnalysis(deepAnalysisResult);
         } catch (p1Err: any) {
           console.warn('Aviso Paso 1:', p1Err);
-          studioLogger.addLog('WARN', 'Fallo en Paso 1, continuando con inferencia directa', { error: p1Err?.message });
+          studioLogger.addLog('WARN', 'Paso 1/5', `Fallo en Análisis Profundo, continuando con inferencia directa: ${p1Err?.message || 'Error desconocido'}`);
         }
 
         // PASO 2 (Gemini 3.8 Flash): Crear el Contexto Temporal y Cultural
@@ -958,7 +954,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setCulturalContextInput(textSummary || activeContext.epoch || '');
         } catch (cErr: any) {
           console.warn('Aviso Contexto:', cErr);
-          studioLogger.addLog('WARN', 'Fallo en Paso 2', { error: cErr?.message });
+          studioLogger.addLog('WARN', 'Paso 2/5', `Fallo en Contexto Cultural, se usará el configurado manualmente: ${cErr?.message || 'Error desconocido'}`);
         }
 
         // PASO 3 (Gemini 3.8 Flash): Crear el Estilo Visual único acorde al guion y contexto
@@ -982,7 +978,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setStyleMode('auto');
         } catch (sErr: any) {
           console.warn('Aviso Estilo:', sErr);
-          studioLogger.addLog('WARN', 'Fallo en Paso 3', { error: sErr?.message });
+          studioLogger.addLog('WARN', 'Paso 3/5', `Fallo en Estilo Visual, se usará el estilo actual: ${sErr?.message || 'Error desconocido'}`);
         }
 
         // PASO 4 (Gemini 3.8 Flash): Crear los Personajes con detalle no genérico (Físico + Vestimenta)
@@ -1015,7 +1011,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           }
         } catch (charErr: any) {
           console.warn('Aviso Personajes:', charErr);
-          studioLogger.addLog('WARN', 'Fallo en Paso 4', { error: charErr?.message });
+          studioLogger.addLog('WARN', 'Paso 4/5', `Fallo en detección de Personajes, continuando sin character lock: ${charErr?.message || 'Error desconocido'}`);
         }
       } else {
         // En modo manual o solo prompts, usar lo configurado actualmente
@@ -1112,10 +1108,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       });
       setSavedHtmlFilename(saveRes.filename);
 
-      studioLogger.addLog('SUCCESS', `¡HTML Maestro guardado exitosamente como ${saveRes.filename}!`, {
-        escenas: finalScenes.length,
-        archivo: saveRes.filename
-      });
+      studioLogger.addLog('SUCCESS', 'HTML Export', `✅ HTML Maestro guardado: ${saveRes.filename} · ${finalScenes.length} escenas`);
 
       setPipelineProgressText(`¡Completado! HTML guardado como ${saveRes.filename}. Pasando a Generar Escenas...`);
 
@@ -1128,7 +1121,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     } catch (err: any) {
       console.error('Error en pipeline:', err);
       const errMsg = err?.message || String(err) || 'Error desconocido';
-      studioLogger.addLog('ERROR', `Error en pipeline de dirección: ${errMsg}`, { error: errMsg });
+      studioLogger.addLog('ERROR', 'Pipeline', `Error crítico en pipeline de dirección: ${errMsg}`);
 
       // Fallback algorítmico de emergencia
       const runEmergencyFallback = () => {

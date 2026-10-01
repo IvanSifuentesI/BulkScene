@@ -343,19 +343,75 @@ export function extractCleanKey(keyOrArray?: string | string[]): string {
   return '';
 }
 
-// Limpiador robusto para DeepSeek R1 y markdown
+// Limpiador robusto para DeepSeek R1, Gemini y markdown
 function extractCleanJson(raw: string): any {
   let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  // Strip markdown fences
   if (text.startsWith('```json')) text = text.substring(7);
   else if (text.startsWith('```')) text = text.substring(3);
   if (text.endsWith('```')) text = text.substring(0, text.length - 3);
   text = text.trim();
+
+  // Extract outermost JSON object or array
   const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    text = text.substring(firstBrace, lastBrace + 1);
+  const firstBracket = text.indexOf('[');
+  let startIdx = -1;
+  let isArray = false;
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startIdx = firstBrace;
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+    isArray = true;
   }
-  return JSON.parse(text);
+
+  if (startIdx !== -1) {
+    const closing = isArray ? text.lastIndexOf(']') : text.lastIndexOf('}');
+    if (closing !== -1 && closing > startIdx) {
+      text = text.substring(startIdx, closing + 1);
+    } else {
+      // JSON is truncated — take from startIdx and try to repair
+      text = text.substring(startIdx);
+    }
+  }
+
+  // Sanitize common LLM JSON issues
+  const sanitize = (t: string): string => {
+    // Replace Python-style single-quoted string values/keys with double quotes
+    // Step 1: keys — 'key': → "key":
+    t = t.replace(/([{,]\s*)'([^']+)'\s*:/g, '$1"$2":');
+    // Step 2: string values — : 'value' → : "value"
+    t = t.replace(/:\s*'([^']*)'/g, ': "$1"');
+    // Step 3: Remove trailing commas before } or ]
+    t = t.replace(/,\s*([}\]])/g, '$1');
+    return t;
+  };
+
+  text = sanitize(text);
+
+  // First attempt: direct parse
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Second attempt: try to auto-close truncated JSON by counting brackets
+    try {
+      let fixed = text;
+      const opens: string[] = [];
+      for (const ch of text) {
+        if (ch === '{') opens.push('}');
+        else if (ch === '[') opens.push(']');
+        else if (ch === '}' || ch === ']') opens.pop();
+      }
+      // Close any open structures in reverse
+      while (opens.length > 0) {
+        fixed += opens.pop();
+      }
+      fixed = sanitize(fixed);
+      return JSON.parse(fixed);
+    } catch (e2) {
+      throw new Error(`extractCleanJson: no se pudo parsear JSON. Primeros 300 chars: ${text.slice(0, 300)}`);
+    }
+  }
 }
 
 /**
@@ -518,12 +574,11 @@ async function callLLMDirectorRaw(params: {
         const candidateModels = Array.from(new Set([
           preferredModel,
           'llama-3.1-8b-instant',
+          'llama-3.3-70b-versatile',
           'llama-3.3-70b-specdec',
           'mixtral-8x7b-32768',
           'gemma2-9b-it',
-          'deepseek-r1-distill-llama-70b',
-          'llama3-70b-8192',
-          'llama3-8b-8192'
+          'deepseek-r1-distill-llama-70b'
         ]));
 
         const endpoints = [
@@ -946,8 +1001,7 @@ Rules:
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
     'llama-3.3-70b-specdec',
-    'mixtral-8x7b-32768',
-    'llama3-70b-8192'
+    'mixtral-8x7b-32768'
   ];
 
   for (const m of candidateModels) {
@@ -1144,8 +1198,7 @@ export async function callLLMWithFallbacks(params: {
       'llama-3.3-70b-versatile',
       'llama-3.3-70b-specdec',
       'mixtral-8x7b-32768',
-      'gemma2-9b-it',
-      'llama3-70b-8192'
+      'gemma2-9b-it'
     ];
     for (const gm of candidateGroqModels) {
       try {
