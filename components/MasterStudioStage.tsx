@@ -2654,7 +2654,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  saveMasterStudioHtmlFile(lastGeneratedHtml, savedHtmlFilename, activeDirHandle);
+                  saveMasterStudioHtmlFile({
+                    dirHandle: activeDirHandle,
+                    projectName: currentProjectName,
+                    htmlContent: lastGeneratedHtml
+                  });
                 }}
                 className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
               >
