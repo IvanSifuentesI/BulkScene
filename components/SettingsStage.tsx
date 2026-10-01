@@ -20,12 +20,20 @@ import {
   Terminal,
   RefreshCw,
   Activity,
-  Globe
+  Globe,
+  Mic,
+  Volume2,
+  Flame
 } from 'lucide-react';
 import { CharacterPersona, StylePreset } from '../types';
 import { CharacterVault } from './CharacterVault';
 import { StyleMatrix } from './StyleMatrix';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { 
+  AVAILABLE_STT_MODELS, 
+  DEFAULT_ASSEMBLY_API_KEY, 
+  DEFAULT_DEEPGRAM_API_KEY 
+} from '../services/audioTranscriptionService';
 import { 
   getPricingConfig, 
   updateRemotePrice, 
@@ -81,7 +89,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   onAddStyle,
   onDeleteStyle,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'apis' | 'characters' | 'styles' | 'telemetria'>('apis');
+  const [activeSubTab, setActiveSubTab] = useState<'apis' | 'stt' | 'characters' | 'styles' | 'telemetria'>('apis');
   const [selectedScriptModel, setSelectedScriptModel] = useState<string>(() => {
     return localStorage.getItem('bulkscene_selected_director_model') || 'nvidia-llama-70b';
   });
@@ -90,10 +98,39 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
 
+  // STT / Voz a Texto State
+  const [assemblyKeyInput, setAssemblyKeyInput] = useState<string>(() => {
+    return localStorage.getItem('bulk_assembly_api_key') || DEFAULT_ASSEMBLY_API_KEY;
+  });
+  const [deepgramKeyInput, setDeepgramKeyInput] = useState<string>(() => {
+    return localStorage.getItem('bulk_deepgram_api_key') || DEFAULT_DEEPGRAM_API_KEY;
+  });
+  const [selectedSTTModel, setSelectedSTTModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_stt_model') || 'groq-whisper-turbo';
+  });
+
   const handleSelectScriptModel = (modelId: string) => {
     setSelectedScriptModel(modelId);
     localStorage.setItem('bulkscene_selected_director_model', modelId);
     triggerSaveNotification(`Modelo LLM establecido en: ${modelId}`);
+  };
+
+  const handleSaveAssemblyKey = (val: string) => {
+    setAssemblyKeyInput(val);
+    localStorage.setItem('bulk_assembly_api_key', val.trim());
+    triggerSaveNotification('Clave de AssemblyAI guardada correctamente.');
+  };
+
+  const handleSaveDeepgramKey = (val: string) => {
+    setDeepgramKeyInput(val);
+    localStorage.setItem('bulk_deepgram_api_key', val.trim());
+    triggerSaveNotification('Clave de Deepgram Nova-3 guardada correctamente.');
+  };
+
+  const handleSelectSTTModel = (id: string) => {
+    setSelectedSTTModel(id);
+    localStorage.setItem('bulkscene_selected_stt_model', id);
+    triggerSaveNotification(`Motor de Voz a Texto predeterminado: ${id}`);
   };
 
   // Pricing State
@@ -251,17 +288,31 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
           <button
             type="button"
             onClick={() => setActiveSubTab('apis')}
-            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
               activeSubTab === 'apis'
                 ? 'bg-emerald-500 text-black shadow-md font-extrabold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Key className="w-4 h-4" />
-            <span>Claves APIs por Categoría</span>
+            <span>Claves APIs Generales</span>
             {nvidiaKeys.length > 0 && (
               <span className={`w-2 h-2 rounded-full ${activeSubTab === 'apis' ? 'bg-black' : 'bg-emerald-400'}`} />
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('stt')}
+            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+              activeSubTab === 'stt'
+                ? 'bg-cyan-500 text-black shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Mic className="w-4 h-4" />
+            <span>🎙️ Voz a Texto (Groq • NVIDIA • Assembly • Deepgram)</span>
+            <span className={`w-2 h-2 rounded-full ${activeSubTab === 'stt' ? 'bg-black' : 'bg-cyan-400'}`} />
           </button>
 
           <button
@@ -376,6 +427,34 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                 );
               })}
             </div>
+          </div>
+
+          {/* ACCESO DIRECTO DESTACADO A VOZ A TEXTO */}
+          <div className="bg-gradient-to-r from-cyan-950/40 via-[#0e111a] to-emerald-950/30 rounded-2xl p-5 border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold shadow-md shadow-cyan-500/20 shrink-0">
+                <Mic className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h4 className="text-white font-black text-sm flex items-center gap-2 flex-wrap">
+                  <span>Centro de Voz a Texto & Transcripción (STT)</span>
+                  <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold">
+                    Groq • NVIDIA • AssemblyAI • Deepgram Nova-3
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                  Configura tus APIs de voz a texto y elige tu motor predeterminado con timestamps exactos palabra por palabra.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('stt')}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-black font-black text-xs transition-all shadow-md shadow-cyan-500/20 shrink-0 cursor-pointer flex items-center gap-2"
+            >
+              <span>Abrir Ajustes de Voz a Texto</span>
+              <span>➔</span>
+            </button>
           </div>
 
           {/* CATEGORY 1: NVIDIA */}
@@ -647,6 +726,339 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                   {showKeys['fal'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-tab: VOZ A TEXTO (SPEECH-TO-TEXT / TRANSCRIPCIÓN) */}
+      {activeSubTab === 'stt' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* HEADER PRINCIPAL */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 border border-cyan-500/20 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+                  <Mic className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Centro de Voz a Texto & Transcripción Fonética</span>
+                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      Groq • NVIDIA • AssemblyAI • Deepgram
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Configura tus 4 proveedores de transcripción para extraer timestamps milimétricos palabra por palabra en guiones y videos virales.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SELECTOR DE MOTOR STT PREDETERMINADO */}
+            <div className="space-y-3 pt-1">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Selecciona tu Motor de Voz a Texto Predeterminado:
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {AVAILABLE_STT_MODELS.map((m) => {
+                  const isSelected = selectedSTTModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectSTTModel(m.id)}
+                      className={`p-3.5 rounded-2xl text-left border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-cyan-950/40 border-cyan-500/60 text-white shadow-md'
+                          : 'bg-[#08090d] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{m.name}</span>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+                        {m.description}
+                      </p>
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                        <span className="text-cyan-400 font-semibold">{m.badge}</span>
+                        <span>•</span>
+                        <span>Velocidad: {m.speed}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 1. GROQ WHISPER API */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 border border-white/[0.04]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 font-bold">
+                  ⚡
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                    <span>1. Groq Cloud (Whisper Large V3 & Turbo)</span>
+                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full font-bold">
+                      {groqKeys.length} Claves en Pool
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Procesamiento en LPU de Groq a 216x tiempo real con timestamps de alta precisión.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-medium bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/20"
+              >
+                <span>Obtener API Groq</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-3">
+              {groqKeys.map((key, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-[#08090d] p-2.5 rounded-xl border border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-slate-500 px-2">#{idx + 1}</span>
+                  <input
+                    type={showKeys[`stt-groq-${idx}`] ? 'text' : 'password'}
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-transparent text-xs text-slate-200 font-mono border-none focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey(`stt-groq-${idx}`)}
+                    className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showKeys[`stt-groq-${idx}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveGroqKey(idx)}
+                    className="p-1.5 text-slate-400 hover:text-red-400 cursor-pointer"
+                    title="Eliminar clave"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddGroqKey} className="flex items-center gap-2 pt-1">
+                <input
+                  type="password"
+                  value={newGroqKey}
+                  onChange={(e) => setNewGroqKey(e.target.value)}
+                  placeholder="gsk_..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono border-none"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar Clave Groq</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* 2. NVIDIA NIM ASR API */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 border border-white/[0.04]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold">
+                  🟢
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                    <span>2. NVIDIA Cloud / NIM (Whisper & Parakeet 1.1B)</span>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
+                      {nvidiaKeys.length} Claves en Pool
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    ASR de alta fidelidad: openai/whisper-large-v3 y parakeet-1.1b-rnnt-multilingual-asr (25 idiomas).
+                  </p>
+                </div>
+              </div>
+              <a
+                href="https://build.nvidia.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-medium bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20"
+              >
+                <span>Obtener API en build.nvidia.com</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-3">
+              {nvidiaKeys.map((key, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-[#08090d] p-2.5 rounded-xl border border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-slate-500 px-2">#{idx + 1}</span>
+                  <input
+                    type={showKeys[`stt-nvidia-${idx}`] ? 'text' : 'password'}
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-transparent text-xs text-slate-200 font-mono border-none focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey(`stt-nvidia-${idx}`)}
+                    className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showKeys[`stt-nvidia-${idx}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveNvidiaKey(idx)}
+                    className="p-1.5 text-slate-400 hover:text-red-400 cursor-pointer"
+                    title="Eliminar clave"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddNvidiaKey} className="flex items-center gap-2 pt-1">
+                <input
+                  type="password"
+                  value={newNvidiaKey}
+                  onChange={(e) => setNewNvidiaKey(e.target.value)}
+                  placeholder="nvapi-..."
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono border-none"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar Clave NVIDIA</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* 3. ASSEMBLYAI API */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 border border-white/[0.04]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 font-bold">
+                  💎
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                    <span>3. AssemblyAI (Conformer-2 con Timestamps & 5GB)</span>
+                    <span className="text-[10px] font-mono text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-full font-bold">
+                      ✓ Pre-configurada & Lista
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Puntuación gramatical nativa de alta resolución con capacidad de procesar archivos pesados de hasta 5 GB.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="https://www.assemblyai.com/app"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium bg-purple-500/10 px-3 py-1.5 rounded-xl border border-purple-500/20"
+              >
+                <span>Consola AssemblyAI</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Clave API de AssemblyAI
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showKeys['assembly'] ? 'text' : 'password'}
+                  value={assemblyKeyInput}
+                  onChange={(e) => handleSaveAssemblyKey(e.target.value)}
+                  placeholder="860751f45c4a4bac88bba096aaf2aa0c"
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono border-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('assembly')}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#08090d] hover:bg-slate-800 text-slate-300 text-xs flex items-center justify-center cursor-pointer"
+                >
+                  {showKeys['assembly'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Tu clave ha sido configurada y está lista para transcribir y alinear fonéticamente tus historias.
+              </p>
+            </div>
+          </div>
+
+          {/* 4. DEEPGRAM NOVA-3 API */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 border border-white/[0.04]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 font-bold">
+                  🚀
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-sm flex items-center gap-2">
+                    <span>4. Deepgram Cloud (Nova-3)</span>
+                    <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
+                      ✓ Pre-configurada & Lista
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    El modelo más avanzado de Deepgram: menor tasa de error en español/inglés y latencia imperceptible.
+                  </p>
+                </div>
+              </div>
+              <a
+                href="https://console.deepgram.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 font-medium bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20"
+              >
+                <span>Consola Deepgram</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Clave API de Deepgram (Nova-3)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showKeys['deepgram'] ? 'text' : 'password'}
+                  value={deepgramKeyInput}
+                  onChange={(e) => handleSaveDeepgramKey(e.target.value)}
+                  placeholder="f6f070d050b62b90ca1b0c9b386e9fbb17cf0476"
+                  className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono border-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('deepgram')}
+                  className="px-3.5 py-2.5 rounded-xl bg-[#08090d] hover:bg-slate-800 text-slate-300 text-xs flex items-center justify-center cursor-pointer"
+                >
+                  {showKeys['deepgram'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Tu clave de Deepgram Nova-3 está guardada y lista para procesar audios a velocidad instantánea.
+              </p>
             </div>
           </div>
         </div>

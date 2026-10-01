@@ -26,7 +26,79 @@ export interface TranscriptionResult {
   segments: SegmentTimestamp[];
 }
 
-function getCleanGroqKey(groqApiKey?: string): string {
+export const DEFAULT_ASSEMBLY_API_KEY = '860751f45c4a4bac88bba096aaf2aa0c';
+export const DEFAULT_DEEPGRAM_API_KEY = 'f6f070d050b62b90ca1b0c9b386e9fbb17cf0476';
+
+export type STTProvider = 'groq' | 'nvidia' | 'assemblyai' | 'deepgram';
+
+export interface STTModelOption {
+  id: string;
+  name: string;
+  provider: STTProvider;
+  modelIdentifier: string;
+  description: string;
+  badge: string;
+  speed: string;
+}
+
+export const AVAILABLE_STT_MODELS: STTModelOption[] = [
+  {
+    id: 'groq-whisper-turbo',
+    name: 'Groq Whisper Large V3 Turbo',
+    provider: 'groq',
+    modelIdentifier: 'whisper-large-v3-turbo',
+    description: 'Motor ultrarrápido en LPU de Groq. Timestamps precisos palabra por palabra en ~1.5s.',
+    badge: '⚡ Ultra Rápido (216x)',
+    speed: '~1.5s'
+  },
+  {
+    id: 'deepgram-nova-3',
+    name: 'Deepgram Nova-3',
+    provider: 'deepgram',
+    modelIdentifier: 'nova-3',
+    description: 'La vanguardia de Deepgram: menor tasa de error (WER) en español/inglés y latencia casi nula.',
+    badge: '🚀 Nueva Generación',
+    speed: '< 2s'
+  },
+  {
+    id: 'assemblyai-universal',
+    name: 'AssemblyAI Universal Conformer',
+    provider: 'assemblyai',
+    modelIdentifier: 'universal',
+    description: 'Puntuación gramatical nativa de alta fidelidad con soporte para audios pesados de hasta 5GB.',
+    badge: '💎 Alta Puntuación',
+    speed: '~8s'
+  },
+  {
+    id: 'groq-whisper-v3',
+    name: 'Groq Whisper Large V3',
+    provider: 'groq',
+    modelIdentifier: 'whisper-large-v3',
+    description: 'Modelo OpenAI completo de 1.55B parámetros para máxima resolución acústica en Groq.',
+    badge: '🎯 Máxima Precisión',
+    speed: '~6s'
+  },
+  {
+    id: 'nvidia-whisper-v3',
+    name: 'NVIDIA NIM Whisper Large V3',
+    provider: 'nvidia',
+    modelIdentifier: 'openai/whisper-large-v3',
+    description: 'OpenAI Whisper acelerado en la infraestructura de computación de NVIDIA Cloud.',
+    badge: '🟢 NVIDIA Cloud',
+    speed: '~5s'
+  },
+  {
+    id: 'nvidia-parakeet-multilingual',
+    name: 'NVIDIA Parakeet 1.1B RNNT',
+    provider: 'nvidia',
+    modelIdentifier: 'nvidia/parakeet-1.1b-rnnt-multilingual-asr',
+    description: 'Arquitectura RNNT de NVIDIA optimizada para reconocimiento en 25 idiomas con alta precisión.',
+    badge: '🦜 Parakeet Multilingual',
+    speed: '~4s'
+  }
+];
+
+export function getCleanGroqKey(groqApiKey?: string): string {
   let key = (groqApiKey || '').trim();
   if (key.startsWith('[')) {
     try {
@@ -46,6 +118,38 @@ function getCleanGroqKey(groqApiKey?: string): string {
     }
   }
   return key || DEFAULT_GROQ_API_KEY;
+}
+
+export function getCleanNvidiaKey(nvidiaApiKey?: string): string {
+  let key = (nvidiaApiKey || '').trim();
+  if (key.startsWith('[')) {
+    try {
+      const arr = JSON.parse(key);
+      if (Array.isArray(arr) && arr[0]) key = String(arr[0]).trim();
+    } catch {}
+  }
+  if (!key) {
+    const stored = localStorage.getItem('bulk_nvidia_api_keys') || '';
+    if (stored.startsWith('[')) {
+      try {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr) && arr[0]) key = String(arr[0]).trim();
+      } catch {}
+    } else {
+      key = stored.trim();
+    }
+  }
+  return key;
+}
+
+export function getCleanAssemblyKey(apiKey?: string): string {
+  const key = (apiKey || '').trim() || (localStorage.getItem('bulk_assembly_api_key') || '').trim();
+  return key || DEFAULT_ASSEMBLY_API_KEY;
+}
+
+export function getCleanDeepgramKey(apiKey?: string): string {
+  const key = (apiKey || '').trim() || (localStorage.getItem('bulk_deepgram_api_key') || '').trim();
+  return key || DEFAULT_DEEPGRAM_API_KEY;
 }
 
 /**
@@ -349,6 +453,363 @@ export async function transcribeAudioWithGroq(
     segments: mergedSegments
   };
 }
+
+async function sendSingleNvidiaChunk(
+  chunkBlob: Blob,
+  cleanKey: string,
+  model: string = 'openai/whisper-large-v3',
+  signal?: AbortSignal
+): Promise<TranscriptionResult> {
+  const formData = new FormData();
+  formData.append('file', chunkBlob, 'audio_chunk.wav');
+  formData.append('model', model);
+  formData.append('response_format', 'verbose_json');
+  formData.append('timestamp_granularities[]', 'word');
+  formData.append('timestamp_granularities[]', 'segment');
+
+  const endpoints = [
+    'https://integrate.api.nvidia.com/v1/audio/transcriptions',
+    'https://ai.api.nvidia.com/v1/audio/transcriptions'
+  ];
+
+  let lastError: any = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      if (signal?.aborted) throw new Error('Transcripción cancelada');
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${cleanKey}`,
+        },
+        body: formData,
+        signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Error en NVIDIA NIM ASR (${response.status}): ${errText.slice(0, 160)}`);
+      }
+
+      const data = await response.json();
+      return {
+        text: data.text || '',
+        duration: data.duration || 0,
+        words: (data.words || []).map((w: any) => ({
+          word: w.word || '',
+          start: Number(w.start),
+          end: Number(w.end),
+        })),
+        segments: (data.segments || []).map((s: any) => ({
+          id: s.id,
+          start: Number(s.start),
+          end: Number(s.end),
+          text: (s.text || '').trim(),
+        })),
+      };
+    } catch (err: any) {
+      lastError = err;
+      if (signal?.aborted) throw err;
+      console.warn(`Intento en NVIDIA NIM ${endpoint} falló:`, err.message);
+    }
+  }
+
+  throw lastError || new Error('No se pudo conectar con el endpoint ASR de NVIDIA NIM.');
+}
+
+export async function transcribeAudioWithNvidia(
+  file: File | Blob,
+  apiKey?: string,
+  model: string = 'openai/whisper-large-v3',
+  signal?: AbortSignal,
+  onProgress?: (msg: string) => void
+): Promise<TranscriptionResult> {
+  const cleanKey = getCleanNvidiaKey(apiKey);
+  if (!cleanKey) {
+    throw new Error('API Key de NVIDIA NIM no configurada para transcripción de audio.');
+  }
+
+  const chunks = await optimizeAndSliceAudio(file);
+
+  if (chunks.length === 1) {
+    if (onProgress) onProgress(`Transcribiendo con NVIDIA NIM (${model})...`);
+    return sendSingleNvidiaChunk(chunks[0].blob, cleanKey, model, signal);
+  }
+
+  let mergedWords: WordTimestamp[] = [];
+  let mergedSegments: SegmentTimestamp[] = [];
+  const textParts: string[] = [];
+  let totalDuration = 0;
+  let segmentIdCounter = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (onProgress) onProgress(`Transcribiendo bloque ${i + 1}/${chunks.length} con NVIDIA NIM...`);
+    const chunkResult = await sendSingleNvidiaChunk(chunk.blob, cleanKey, model, signal);
+    textParts.push(chunkResult.text);
+
+    const shiftedWords = chunkResult.words.map(w => ({
+      ...w,
+      start: Number((w.start + chunk.offsetSec).toFixed(2)),
+      end: Number((w.end + chunk.offsetSec).toFixed(2))
+    }));
+    mergedWords.push(...shiftedWords);
+
+    const shiftedSegments = chunkResult.segments.map(s => ({
+      id: segmentIdCounter++,
+      start: Number((s.start + chunk.offsetSec).toFixed(2)),
+      end: Number((s.end + chunk.offsetSec).toFixed(2)),
+      text: s.text
+    }));
+    mergedSegments.push(...shiftedSegments);
+
+    totalDuration = Math.max(totalDuration, chunk.offsetSec + chunkResult.duration);
+  }
+
+  return {
+    text: textParts.join(' ').trim(),
+    duration: totalDuration,
+    words: mergedWords,
+    segments: mergedSegments
+  };
+}
+
+export async function transcribeAudioWithAssembly(
+  file: File | Blob,
+  apiKey?: string,
+  signal?: AbortSignal,
+  onProgress?: (msg: string) => void
+): Promise<TranscriptionResult> {
+  const cleanKey = getCleanAssemblyKey(apiKey);
+  if (!cleanKey) {
+    throw new Error('API Key de AssemblyAI no configurada.');
+  }
+
+  if (onProgress) onProgress('Subiendo audio a servidores de AssemblyAI...');
+
+  const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': cleanKey,
+    },
+    body: file,
+    signal
+  });
+
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text();
+    throw new Error(`Error al subir audio a AssemblyAI (${uploadRes.status}): ${err.slice(0, 150)}`);
+  }
+
+  const { upload_url } = await uploadRes.json();
+  if (!upload_url) throw new Error('AssemblyAI no devolvió una URL de subida válida.');
+
+  if (onProgress) onProgress('Procesando transcripción fonética y timestamps con AssemblyAI...');
+
+  const transcriptRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+    method: 'POST',
+    headers: {
+      'Authorization': cleanKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      audio_url,
+      language_detection: true,
+      punctuate: true,
+      format_text: true,
+      speech_model: 'best'
+    }),
+    signal
+  });
+
+  if (!transcriptRes.ok) {
+    const err = await transcriptRes.text();
+    throw new Error(`Error al solicitar transcripción a AssemblyAI (${transcriptRes.status}): ${err.slice(0, 150)}`);
+  }
+
+  const { id: transcriptId } = await transcriptRes.json();
+  if (!transcriptId) throw new Error('No se recibió ID de transcripción de AssemblyAI.');
+
+  let attempts = 0;
+  const maxAttempts = 80;
+  while (attempts < maxAttempts) {
+    if (signal?.aborted) throw new Error('Transcripción cancelada.');
+    await new Promise(r => setTimeout(r, 1500));
+    attempts++;
+
+    const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+      headers: { 'Authorization': cleanKey },
+      signal
+    });
+
+    if (!pollRes.ok) continue;
+    const pollData = await pollRes.json();
+
+    if (pollData.status === 'completed') {
+      const words: WordTimestamp[] = (pollData.words || []).map((w: any) => ({
+        word: w.text || '',
+        start: Number((w.start / 1000).toFixed(2)),
+        end: Number((w.end / 1000).toFixed(2))
+      }));
+
+      const lastWord = words[words.length - 1];
+      const duration = Number(pollData.audio_duration ? pollData.audio_duration : (lastWord ? lastWord.end : 0));
+
+      const segments: SegmentTimestamp[] = [];
+      if (words.length > 0) {
+        let segWords: WordTimestamp[] = [];
+        let segId = 0;
+        for (const w of words) {
+          segWords.push(w);
+          if (/[.,!?;:]$/.test(w.word) || segWords.length >= 10) {
+            segments.push({
+              id: segId++,
+              start: segWords[0].start,
+              end: segWords[segWords.length - 1].end,
+              text: segWords.map(x => x.word).join(' ')
+            });
+            segWords = [];
+          }
+        }
+        if (segWords.length > 0) {
+          segments.push({
+            id: segId++,
+            start: segWords[0].start,
+            end: segWords[segWords.length - 1].end,
+            text: segWords.map(x => x.word).join(' ')
+          });
+        }
+      }
+
+      return {
+        text: pollData.text || '',
+        duration,
+        words,
+        segments
+      };
+    } else if (pollData.status === 'error') {
+      throw new Error(`Fallo en AssemblyAI: ${pollData.error || 'Error desconocido'}`);
+    }
+
+    if (onProgress) {
+      onProgress(`Alineando fonéticamente con AssemblyAI (${pollData.status} - ${(attempts * 1.5).toFixed(0)}s)...`);
+    }
+  }
+
+  throw new Error('Tiempo de espera agotado al transcribir con AssemblyAI.');
+}
+
+export async function transcribeAudioWithDeepgram(
+  file: File | Blob,
+  apiKey?: string,
+  model: string = 'nova-3',
+  signal?: AbortSignal,
+  onProgress?: (msg: string) => void
+): Promise<TranscriptionResult> {
+  const cleanKey = getCleanDeepgramKey(apiKey);
+  if (!cleanKey) {
+    throw new Error('API Key de Deepgram no configurada.');
+  }
+
+  if (onProgress) onProgress(`Enviando audio a Deepgram (${model})...`);
+
+  const url = `https://api.deepgram.com/v1/listen?model=${encodeURIComponent(model)}&smart_format=true&punctuate=true&utterances=true&diarize=false`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${cleanKey}`,
+      'Content-Type': file.type || 'audio/wav'
+    },
+    body: file,
+    signal
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Error en Deepgram Nova (${response.status}): ${err.slice(0, 160)}`);
+  }
+
+  const data = await response.json();
+  const alt = data.results?.channels?.[0]?.alternatives?.[0];
+  if (!alt) {
+    throw new Error('Deepgram no devolvió transcripción para este audio.');
+  }
+
+  const words: WordTimestamp[] = (alt.words || []).map((w: any) => ({
+    word: w.punctuated_word || w.word || '',
+    start: Number(w.start.toFixed(2)),
+    end: Number(w.end.toFixed(2))
+  }));
+
+  const segments: SegmentTimestamp[] = (data.results?.utterances || []).map((u: any, idx: number) => ({
+    id: idx,
+    start: Number(u.start.toFixed(2)),
+    end: Number(u.end.toFixed(2)),
+    text: (u.transcript || '').trim()
+  }));
+
+  const lastWord = words[words.length - 1];
+  const duration = Number(data.metadata?.duration || (lastWord ? lastWord.end : 0));
+
+  return {
+    text: alt.transcript || '',
+    duration,
+    words,
+    segments
+  };
+}
+
+export async function transcribeAudioUniversal({
+  file,
+  modelId = 'groq-whisper-turbo',
+  groqKey,
+  nvidiaKey,
+  assemblyKey,
+  deepgramKey,
+  signal,
+  onProgress
+}: {
+  file: File | Blob;
+  modelId?: string;
+  groqKey?: string;
+  nvidiaKey?: string;
+  assemblyKey?: string;
+  deepgramKey?: string;
+  signal?: AbortSignal;
+  onProgress?: (status: string) => void;
+}): Promise<TranscriptionResult> {
+  const modelOption = AVAILABLE_STT_MODELS.find(m => m.id === modelId) || AVAILABLE_STT_MODELS[0];
+  const provider = modelOption.provider;
+
+  if (onProgress) onProgress(`Iniciando transcripción con ${modelOption.name}...`);
+
+  try {
+    if (provider === 'deepgram') {
+      return await transcribeAudioWithDeepgram(file, deepgramKey, modelOption.modelIdentifier, signal, onProgress);
+    } else if (provider === 'assemblyai') {
+      return await transcribeAudioWithAssembly(file, assemblyKey, signal, onProgress);
+    } else if (provider === 'nvidia') {
+      return await transcribeAudioWithNvidia(file, nvidiaKey, modelOption.modelIdentifier, signal, onProgress);
+    } else {
+      const whisperM = (modelOption.modelIdentifier as 'whisper-large-v3-turbo' | 'whisper-large-v3') || 'whisper-large-v3-turbo';
+      return await transcribeAudioWithGroq(file, groqKey, whisperM, signal);
+    }
+  } catch (err: any) {
+    console.warn(`[STT Universal] Falló proveedor ${provider} (${modelOption.name}):`, err?.message);
+    if (provider !== 'groq' && getCleanGroqKey(groqKey)) {
+      if (onProgress) onProgress(`Reintentando con Groq Whisper Turbo como respaldo...`);
+      return await transcribeAudioWithGroq(file, groqKey, 'whisper-large-v3-turbo', signal);
+    }
+    if (provider !== 'deepgram' && getCleanDeepgramKey(deepgramKey)) {
+      if (onProgress) onProgress(`Reintentando con Deepgram Nova-3 como respaldo...`);
+      return await transcribeAudioWithDeepgram(file, deepgramKey, 'nova-3', signal, onProgress);
+    }
+    throw err;
+  }
+}
+
 
 /**
  * Alinea los segmentos de escenas generados por la IA con los timestamps

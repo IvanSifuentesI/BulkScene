@@ -52,6 +52,8 @@ import {
 } from '../services/llmDirectorService';
 import { 
   transcribeAudioWithGroq, 
+  transcribeAudioUniversal,
+  AVAILABLE_STT_MODELS,
   TranscriptionResult,
   calculateSmartBeatsSegmentation,
   SmartBeatScene,
@@ -134,6 +136,10 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [playingBeatIndex, setPlayingBeatIndex] = useState<number | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(initialTranscription);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [selectedSTTModel, setSelectedSTTModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_stt_model') || 'groq-whisper-turbo';
+  });
+  const [transcriptionProgressText, setTranscriptionProgressText] = useState<string>('');
   const [whisperModel, setWhisperModel] = useState<'whisper-large-v3-turbo' | 'whisper-large-v3'>('whisper-large-v3-turbo');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
@@ -340,7 +346,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
   };
 
-  // Whisper Phonetic Beats Extraction
+  // Universal Phonetic Beats Extraction (Groq, NVIDIA NIM, AssemblyAI, Deepgram)
   const handleExtractWhisperBeats = async () => {
     if (!audioBlob) {
       alert('Primero carga un archivo de audio para extraer los beats fonéticos.');
@@ -348,9 +354,23 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
     setIsTranscribing(true);
     setIsBeatsInspectorOpen(true);
+    setTranscriptionProgressText('Conectando con motor de voz a texto...');
     try {
       const activeGroqKey = groqKeys[0] || localStorage.getItem('bulk_groq_api_keys') || '';
-      const result = await transcribeAudioWithGroq(audioBlob, activeGroqKey, whisperModel);
+      const activeNvidiaKey = nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '';
+      const activeAssemblyKey = localStorage.getItem('bulk_assembly_api_key') || '';
+      const activeDeepgramKey = localStorage.getItem('bulk_deepgram_api_key') || '';
+
+      const result = await transcribeAudioUniversal({
+        file: audioBlob,
+        modelId: selectedSTTModel,
+        groqKey: activeGroqKey,
+        nvidiaKey: activeNvidiaKey,
+        assemblyKey: activeAssemblyKey,
+        deepgramKey: activeDeepgramKey,
+        onProgress: (status) => setTranscriptionProgressText(status)
+      });
+
       setTranscription(result);
       if (result.duration) {
         setAudioDuration(result.duration);
@@ -360,16 +380,21 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       }
       setIsBeatsInspectorOpen(true);
     } catch (err: any) {
-      console.error('Error al extraer beats con Whisper:', err);
+      console.error('Error al extraer beats fonéticos:', err);
       triggerGlobalErrorModal({
-        title: 'Error al Extraer Beats con Whisper',
+        title: 'Error al Extraer Beats Fonéticos',
         stage: '1. Estudio Master - Beats Fonéticos',
-        errorCode: 'WHISPER_EXTRACTION_FAILURE',
-        errorMessage: err?.message || 'Fallo en la transcripción fonética con Groq Whisper',
-        technicalDetails: { hasGroqKey: Boolean(groqKeys[0]), audioDuration, whisperModel }
+        errorCode: 'STT_EXTRACTION_FAILURE',
+        errorMessage: err?.message || 'Fallo en la transcripción fonética de voz a texto',
+        technicalDetails: { 
+          selectedModel: selectedSTTModel,
+          hasGroqKey: Boolean(groqKeys[0]), 
+          audioDuration 
+        }
       });
     } finally {
       setIsTranscribing(false);
+      setTranscriptionProgressText('');
     }
   };
 
@@ -877,51 +902,43 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                     />
                   )}
 
-                  {/* Selector de Modelo Whisper */}
+                  {/* Selector de Motor STT (Groq, NVIDIA, Assembly, Deepgram) */}
                   <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                      <span>MODELO WHISPER:</span>
-                      <span className="text-cyan-400 font-bold">{whisperModel === 'whisper-large-v3-turbo' ? '8x Más Rápido' : '1.55B Params'}</span>
+                      <span>MOTOR VOZ A TEXTO:</span>
+                      <span className="text-cyan-400 font-bold">
+                        {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name || 'Groq Whisper Turbo'}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setWhisperModel('whisper-large-v3-turbo')}
-                        className={`p-1.5 rounded-lg text-left border transition-all ${
-                          whisperModel === 'whisper-large-v3-turbo'
-                            ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
-                            : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="text-[10px] font-bold text-cyan-300">⚡ Turbo (Recomendado)</div>
-                        <div className="text-[9px] text-slate-400">~1.5s velocidad</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWhisperModel('whisper-large-v3')}
-                        className={`p-1.5 rounded-lg text-left border transition-all ${
-                          whisperModel === 'whisper-large-v3'
-                            ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
-                            : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="text-[10px] font-bold text-white">🎯 Large V3</div>
-                        <div className="text-[9px] text-slate-400">Máx resolución</div>
-                      </button>
-                    </div>
+
+                    <select
+                      value={selectedSTTModel}
+                      onChange={(e) => {
+                        setSelectedSTTModel(e.target.value);
+                        localStorage.setItem('bulkscene_selected_stt_model', e.target.value);
+                      }}
+                      className="w-full bg-[#0d111a] border border-cyan-500/30 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      {AVAILABLE_STT_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.provider === 'deepgram' ? '🚀 [Deepgram] ' : m.provider === 'assemblyai' ? '💎 [AssemblyAI] ' : m.provider === 'nvidia' ? '🟢 [NVIDIA] ' : '⚡ [Groq] '}
+                          {m.name} ({m.speed})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Extract Beats with Whisper Button */}
+                  {/* Extract Beats Button */}
                   <button
                     type="button"
                     onClick={handleExtractWhisperBeats}
                     disabled={isTranscribing}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isTranscribing ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                        <span>Extrayendo Beats Fonéticos con Whisper...</span>
+                        <span>{transcriptionProgressText || 'Alineando fonéticamente con IA...'}</span>
                       </>
                     ) : transcription ? (
                       <>
@@ -1214,65 +1231,64 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                 </label>
               </div>
 
-              {/* Selector de Modelo Whisper */}
+              {/* Selector de Motor STT (Groq, NVIDIA NIM, AssemblyAI, Deepgram) */}
               <div className="pt-2 border-t border-white/[0.04] space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Modelo Groq Whisper:</span>
+                  <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Motor de Voz a Texto:</span>
+                  <span className="text-[10px] text-cyan-400 font-mono font-bold">
+                    {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.badge}
+                  </span>
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setWhisperModel('whisper-large-v3-turbo')}
-                    className={`p-2 rounded-xl text-left border transition-all ${
-                      whisperModel === 'whisper-large-v3-turbo'
-                        ? 'bg-cyan-500/20 border-cyan-400 text-white'
-                        : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px] font-bold flex items-center gap-1">
-                      <span>⚡ Turbo</span>
-                      <span className="text-[9px] text-cyan-300 font-mono bg-cyan-950/80 px-1 rounded">Recomendado</span>
-                    </div>
-                    <div className="text-[9px] text-slate-400 mt-0.5">~1.5s velocidad (216x real)</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setWhisperModel('whisper-large-v3')}
-                    className={`p-2 rounded-xl text-left border transition-all ${
-                      whisperModel === 'whisper-large-v3'
-                        ? 'bg-cyan-500/20 border-cyan-400 text-white'
-                        : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-[11px] font-bold">🎯 Large V3</div>
-                    <div className="text-[9px] text-slate-400 mt-0.5">1.55B params (máx fidelidad)</div>
-                  </button>
+                  {AVAILABLE_STT_MODELS.map((m) => {
+                    const isSelected = selectedSTTModel === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSTTModel(m.id);
+                          localStorage.setItem('bulkscene_selected_stt_model', m.id);
+                        }}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md'
+                            : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-[11px] font-bold flex items-center justify-between">
+                          <span className="truncate">{m.name.split(' ')[0]} {m.name.split(' ')[1]}</span>
+                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
+                        </div>
+                        <div className="text-[9px] text-slate-400 mt-0.5 truncate">{m.badge} • {m.speed}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Botón de Extraer Whisper si aún no lo ha hecho */}
+              {/* Botón de Extraer STT */}
               {audioBlob && (
                 <button
                   type="button"
                   onClick={handleExtractWhisperBeats}
                   disabled={isTranscribing}
-                  className="w-full py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer shadow-md"
                 >
                   {isTranscribing ? (
                     <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Analizando audio en memoria...</span>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                      <span>{transcriptionProgressText || 'Analizando audio con IA...'}</span>
                     </>
                   ) : transcription ? (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Re-extraer con Whisper ({transcription.words.length} palabras)</span>
+                      <span>Re-extraer con {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name.split(' ')[0]} ({transcription.words.length} pal.)</span>
                     </>
                   ) : (
                     <>
-                      <Mic className="w-3.5 h-3.5" />
-                      <span>Extraer Timestamps de Audio con Whisper</span>
+                      <Mic className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Extraer Timestamps ({AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name.split(' ')[0]})</span>
                     </>
                   )}
                 </button>
