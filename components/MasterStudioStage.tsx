@@ -63,6 +63,14 @@ import {
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
 import { requireSubscription } from '../services/subscriptionService';
+import { 
+  saveLocalStudioSession, 
+  loadLocalStudioSession, 
+  saveLocalAudioBlob, 
+  getLocalAudioBlob, 
+  clearLocalStudioSession 
+} from '../services/localStudioSessionService';
+import { RotateCcw } from 'lucide-react';
 
 interface MasterStudioStageProps {
   // APIs
@@ -120,28 +128,37 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   onProceedToImages,
   onNavigateToSettings
 }) => {
+  // Carga inicial de sesión guardada localmente (Zero Supabase)
+  const savedSession = useMemo(() => loadLocalStudioSession(), []);
+
   // 1. Script State
-  const [scriptText, setScriptText] = useState<string>(initialScript);
+  const [scriptText, setScriptText] = useState<string>(() => {
+    return initialScript || savedSession?.scriptText || '';
+  });
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
   const estimatedSeconds = Math.round((wordCount / 140) * 60);
 
   // 2. LLM Director Engine Selection (Predeterminado: Gemini 2.0 Flash)
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_director_model') || 'gemini-2.0-flash';
+    return savedSession?.selectedModel || localStorage.getItem('bulkscene_selected_director_model') || 'gemini-2.0-flash';
   });
 
   // 3. Audio & Whisper State
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(initialAudioBlob);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioDuration, setAudioDuration] = useState<number>(initialAudioDuration);
+  const [audioDuration, setAudioDuration] = useState<number>(() => {
+    return initialAudioDuration || savedSession?.audioDuration || 0;
+  });
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
   const [playingBeatIndex, setPlayingBeatIndex] = useState<number | null>(null);
-  const [transcription, setTranscription] = useState<TranscriptionResult | null>(initialTranscription);
+  const [transcription, setTranscription] = useState<TranscriptionResult | null>(() => {
+    return initialTranscription || savedSession?.transcription || null;
+  });
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [selectedSTTModel, setSelectedSTTModel] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_stt_model') || 'groq-whisper-turbo';
+    return savedSession?.selectedSTTModel || localStorage.getItem('bulkscene_selected_stt_model') || 'groq-whisper-turbo';
   });
   const [transcriptionProgressText, setTranscriptionProgressText] = useState<string>('');
   const [whisperModel, setWhisperModel] = useState<'whisper-large-v3-turbo' | 'whisper-large-v3'>('whisper-large-v3-turbo');
@@ -152,18 +169,36 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [folderName, setFolderName] = useState<string>(() => {
     return localStorage.getItem('bulkscene_selected_folder_name') || 'Descargas / Proyecto ZIP';
   });
-  const [currentProjectName, setCurrentProjectName] = useState<string>(projectName);
+  const [currentProjectName, setCurrentProjectName] = useState<string>(() => {
+    return savedSession?.projectName || projectName;
+  });
 
   // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
-  const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(false);
-  const [hookScenesCount, setHookScenesCount] = useState<number>(4);
-  const [hookDurationSec, setHookDurationSec] = useState<number>(1.8);
-  const [restDurationSec, setRestDurationSec] = useState<number>(3.2);
-  const [snapToPunctuation, setSnapToPunctuation] = useState<boolean>(true);
-  const [snapToSilences, setSnapToSilences] = useState<boolean>(true);
+  const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(() => {
+    return Boolean(savedSession?.transcription?.words?.length);
+  });
+  const [hookScenesCount, setHookScenesCount] = useState<number>(() => {
+    return savedSession?.hookScenesCount ?? 4;
+  });
+  const [hookDurationSec, setHookDurationSec] = useState<number>(() => {
+    return savedSession?.hookDurationSec ?? 1.8;
+  });
+  const [restDurationSec, setRestDurationSec] = useState<number>(() => {
+    return savedSession?.restDurationSec ?? 3.2;
+  });
+  const [snapToPunctuation, setSnapToPunctuation] = useState<boolean>(() => {
+    return savedSession?.snapToPunctuation ?? true;
+  });
+  const [snapToSilences, setSnapToSilences] = useState<boolean>(() => {
+    return savedSession?.snapToSilences ?? true;
+  });
   const [showWordsCloud, setShowWordsCloud] = useState<boolean>(false);
-  const [sceneDurationRange, setSceneDurationRange] = useState<number>(2.5); // Fallback compatible
-  const [pacingWords, setPacingWords] = useState<number>(8);
+  const [sceneDurationRange, setSceneDurationRange] = useState<number>(() => {
+    return savedSession?.sceneDurationRange ?? 2.5;
+  });
+  const [pacingWords, setPacingWords] = useState<number>(() => {
+    return savedSession?.pacingWords ?? 8;
+  });
 
   // Segmentación Dinámica de Beats en Tiempo Real
   const calculatedScenes: SmartBeatScene[] = useMemo(() => {
@@ -224,36 +259,52 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   };
 
   // 6. Narrative Direction Mode
-  const [narrativeMode, setNarrativeMode] = useState<DirectionNarrativeMode>('documental_secuencial');
+  const [narrativeMode, setNarrativeMode] = useState<DirectionNarrativeMode>(() => {
+    return savedSession?.narrativeMode ?? 'documental_secuencial';
+  });
 
   // 7. Cultural & Temporal Context
-  const [culturalContext, setCulturalContext] = useState<CulturalTemporalContext>({
-    epoch: '',
-    culture: '',
-    environment: ''
+  const [culturalContext, setCulturalContext] = useState<CulturalTemporalContext>(() => {
+    return savedSession?.culturalContext ?? {
+      epoch: '',
+      culture: '',
+      environment: ''
+    };
   });
-  const [culturalContextInput, setCulturalContextInput] = useState<string>('');
+  const [culturalContextInput, setCulturalContextInput] = useState<string>(() => {
+    return savedSession?.culturalContextInput ?? '';
+  });
   const [isExtractingContext, setIsExtractingContext] = useState<boolean>(false);
 
   // 8. Visual Style & Auto-AI
   const activeStyle = styles.find((s) => s.id === activeStyleId) || styles[0];
-  const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(
-    () => activeStyle?.promptModifier || ''
-  );
+  const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(() => {
+    return savedSession?.customStyleInstructions ?? (activeStyle?.promptModifier || '');
+  });
   const [isDetectingStyle, setIsDetectingStyle] = useState<boolean>(false);
-  const [detectedStyleReason, setDetectedStyleReason] = useState<string | null>(null);
+  const [detectedStyleReason, setDetectedStyleReason] = useState<string | null>(() => {
+    return savedSession?.detectedStyleReason ?? null;
+  });
   const [styleSavedToast, setStyleSavedToast] = useState<boolean>(false);
 
   // 9. Character Vault & Biometric Consistency
   const activeChar = characters.find((c) => c.id === activeCharacterId);
-  const [consistencyMode, setConsistencyMode] = useState<CharacterConsistencyMode>('nombre_en_prompt');
-  const [detectedCharacters, setDetectedCharacters] = useState<ScriptDirectorCharacter[]>([]);
+  const [consistencyMode, setConsistencyMode] = useState<CharacterConsistencyMode>(() => {
+    return savedSession?.consistencyMode ?? 'nombre_en_prompt';
+  });
+  const [detectedCharacters, setDetectedCharacters] = useState<ScriptDirectorCharacter[]>(() => {
+    return savedSession?.detectedCharacters ?? [];
+  });
   const [isDetectingChars, setIsDetectingChars] = useState<boolean>(false);
   const [charSavedToast, setCharSavedToast] = useState<boolean>(false);
 
   // 10. Optional Content Direction & Framing
-  const [cameraPreference, setCameraPreference] = useState<string>('variado_dinamico');
-  const [lightingPreference, setLightingPreference] = useState<string>('volumetrica_cinematica');
+  const [cameraPreference, setCameraPreference] = useState<string>(() => {
+    return savedSession?.cameraPreference ?? 'variado_dinamico';
+  });
+  const [lightingPreference, setLightingPreference] = useState<string>(() => {
+    return savedSession?.lightingPreference ?? 'volumetrica_cinematica';
+  });
 
   // 11. Pipeline Automation & Execution States
   const [autoAdvance, setAutoAdvance] = useState<boolean>(true);
@@ -264,6 +315,96 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
     localStorage.setItem('bulkscene_selected_director_model', modelId);
+  };
+
+  // Restaurar archivo de audio binario desde IndexedDB si no está en memoria
+  useEffect(() => {
+    if (!audioBlob) {
+      getLocalAudioBlob().then((saved) => {
+        if (saved && saved.blob) {
+          setAudioBlob(saved.blob);
+          if (!audioDuration) {
+            const tempAudio = new Audio();
+            tempAudio.src = URL.createObjectURL(saved.blob);
+            tempAudio.onloadedmetadata = () => {
+              setAudioDuration(tempAudio.duration);
+            };
+          }
+        }
+      });
+    }
+  }, []);
+
+  // Auto-guardado local instantáneo (Zero Supabase) cada vez que el usuario modifica su avance
+  useEffect(() => {
+    saveLocalStudioSession({
+      scriptText,
+      projectName: currentProjectName,
+      transcription,
+      audioDuration,
+      hookScenesCount,
+      hookDurationSec,
+      restDurationSec,
+      snapToPunctuation,
+      snapToSilences,
+      sceneDurationRange,
+      pacingWords,
+      narrativeMode,
+      culturalContext,
+      culturalContextInput,
+      customStyleInstructions,
+      detectedStyleReason,
+      consistencyMode,
+      detectedCharacters,
+      cameraPreference,
+      lightingPreference,
+      selectedModel,
+      selectedSTTModel,
+      activeCharacterId,
+      activeStyleId
+    });
+  }, [
+    scriptText,
+    currentProjectName,
+    transcription,
+    audioDuration,
+    hookScenesCount,
+    hookDurationSec,
+    restDurationSec,
+    snapToPunctuation,
+    snapToSilences,
+    sceneDurationRange,
+    pacingWords,
+    narrativeMode,
+    culturalContext,
+    culturalContextInput,
+    customStyleInstructions,
+    detectedStyleReason,
+    consistencyMode,
+    detectedCharacters,
+    cameraPreference,
+    lightingPreference,
+    selectedModel,
+    selectedSTTModel,
+    activeCharacterId,
+    activeStyleId
+  ]);
+
+  // Reiniciar avance para comenzar un nuevo proyecto desde cero
+  const handleResetProject = async () => {
+    if (window.confirm('¿Deseas reiniciar y limpiar todo el avance de Estudio Master para empezar un nuevo proyecto?')) {
+      await clearLocalStudioSession();
+      setScriptText('');
+      setTranscription(null);
+      setAudioBlob(null);
+      setAudioFile(null);
+      setAudioUrl(null);
+      setAudioDuration(0);
+      setDetectedCharacters([]);
+      setCulturalContextInput('');
+      setCustomStyleInstructions('');
+      setIsBeatsInspectorOpen(false);
+    }
   };
 
   // Audio URL handling
@@ -288,12 +429,15 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   };
 
   // Audio File Selection Handler
-  const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setAudioFile(file);
     setAudioBlob(file);
+
+    // Guardar audio binario en IndexedDB local sin tocar Supabase
+    await saveLocalAudioBlob(file, file.name);
 
     // Detect exact duration
     const tempAudio = new Audio();
@@ -794,9 +938,29 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </div>
           </div>
 
-          {/* Quick Sample Selector */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] text-slate-400 font-mono">Ejemplos:</span>
+          {/* Quick Actions & Sample Selector */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Indicador de persistencia local (Zero Supabase) */}
+            <div 
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-400 font-mono"
+              title="Tu avance, guion, beats y audio se guardan automáticamente en tu navegador local (sin consumir espacio ni cuotas de Supabase)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>Avance Guardado</span>
+            </div>
+
+            {/* Botón para reiniciar y comenzar proyecto nuevo */}
+            <button
+              type="button"
+              onClick={handleResetProject}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-red-500/15 hover:border-red-500/30 text-slate-400 hover:text-red-300 border border-white/10 text-xs font-semibold transition-all"
+              title="Limpiar avance y comenzar un proyecto nuevo desde cero"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Nuevo</span>
+            </button>
+
+            <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">Ejemplos:</span>
             <button
               type="button"
               onClick={() => handleLoadSample('scifi')}

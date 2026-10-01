@@ -233,46 +233,70 @@ async function callLLMDirectorRaw(params: {
       }
 
       if (attempt.provider === 'groq') {
-        const payloadModel = attempt.modelId === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
+        const preferredModel = attempt.modelId === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
+        const candidateModels = Array.from(new Set([
+          preferredModel,
+          'llama-3.1-8b-instant',
+          'llama-3.3-70b-specdec',
+          'mixtral-8x7b-32768',
+          'gemma2-9b-it',
+          'deepseek-r1-distill-llama-70b',
+          'llama3-70b-8192',
+          'llama3-8b-8192'
+        ]));
+
         const endpoints = [
           '/api/groq/openai/v1/chat/completions',
           'https://api.groq.com/openai/v1/chat/completions'
         ];
 
-        for (const ep of endpoints) {
-          try {
-            const res = await fetch(ep, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${attempt.key}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                model: payloadModel,
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt }
-                ],
-                temperature: 0.4,
-                max_tokens: 4096
-              }),
-              signal
-            });
+        let lastGroqError = '';
 
-            if (!res.ok) {
-              if (res.status === 404 && ep.startsWith('/api')) continue;
-              const errText = await res.text();
-              throw new Error(`Groq HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        for (const candidateModel of candidateModels) {
+          for (const ep of endpoints) {
+            try {
+              const res = await fetch(ep, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${attempt.key}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  model: candidateModel,
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                  ],
+                  temperature: 0.4,
+                  max_tokens: 4096
+                }),
+                signal
+              });
+
+              if (!res.ok) {
+                if (res.status === 404 && ep.startsWith('/api')) continue;
+                const errText = await res.text();
+                // Si el modelo específico no existe o no tiene acceso, probar el siguiente modelo candidato
+                if (res.status === 404 || errText.includes('model_not_found') || errText.includes('does not exist') || errText.includes('decommissioned')) {
+                  console.warn(`[GROQ] Modelo ${candidateModel} no disponible (${res.status}), probando alternativa...`);
+                  lastGroqError = `Groq (${candidateModel}): ${errText.slice(0, 100)}`;
+                  break; // break de endpoints para saltar al siguiente candidateModel
+                }
+                throw new Error(`Groq HTTP ${res.status}: ${errText.slice(0, 150)}`);
+              }
+
+              const data = await res.json();
+              const raw = data.choices?.[0]?.message?.content;
+              if (!raw) throw new Error('Groq devolvió respuesta vacía.');
+              return raw;
+            } catch (e: any) {
+              if (ep === endpoints[endpoints.length - 1]) {
+                lastGroqError = e.message;
+              }
             }
-
-            const data = await res.json();
-            const raw = data.choices?.[0]?.message?.content;
-            if (!raw) throw new Error('Groq devolvió respuesta vacía.');
-            return raw;
-          } catch (e: any) {
-            if (ep === endpoints[endpoints.length - 1]) throw e;
           }
         }
+        if (lastGroqError) throw new Error(lastGroqError);
       }
     } catch (err: any) {
       console.warn(`[LLM DIRECTOR] Falló intento con ${attempt.name}:`, err.message);
@@ -642,36 +666,50 @@ Rules:
 3. Keep it strictly under 380 characters.
 4. Output ONLY the rewritten prompt in English. No introductory text or quotes.`;
 
-  for (const ep of [endpoint, directEndpoint]) {
-    try {
-      const res = await fetch(ep, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqKey || DEFAULT_GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: `Enhance this prompt: "${currentPrompt}"` }
-          ],
-          temperature: 0.6,
-          max_tokens: 300,
-        }),
-        signal: params.signal,
-      });
+  const candidateModels = [
+    'llama-3.1-8b-instant',
+    'llama-3.3-70b-versatile',
+    'llama-3.3-70b-specdec',
+    'mixtral-8x7b-32768',
+    'llama3-70b-8192'
+  ];
 
-      if (!res.ok) {
-        if (res.status === 404 && ep.startsWith('/api')) continue;
-        throw new Error(`Error reformulando prompt (${res.status})`);
+  for (const m of candidateModels) {
+    for (const ep of [endpoint, directEndpoint]) {
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqKey || DEFAULT_GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: m,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: `Enhance this prompt: "${currentPrompt}"` }
+            ],
+            temperature: 0.6,
+            max_tokens: 300,
+          }),
+          signal: params.signal,
+        });
+
+        if (!res.ok) {
+          if (res.status === 404 && ep.startsWith('/api')) continue;
+          const errText = await res.text();
+          if (res.status === 404 || errText.includes('model_not_found') || errText.includes('does not exist')) {
+            break; // probar siguiente modelo
+          }
+          throw new Error(`Error reformulando prompt (${res.status})`);
+        }
+
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        return content ? content.replace(/^["']|["']$/g, '') : currentPrompt;
+      } catch (e) {
+        // continuar con siguiente endpoint o modelo
       }
-
-      const data = await res.json();
-      const content = data.choices?.[0]?.message?.content?.trim();
-      return content ? content.replace(/^["']|["']$/g, '') : currentPrompt;
-    } catch (e) {
-      console.warn(`Fallo al reformular en ${ep}:`, e);
     }
   }
 
@@ -839,25 +877,40 @@ export async function callLLMWithFallbacks(params: {
 
   // 4. Fallback a Groq si aún hay error
   if (cleanGroqKey && !model.startsWith('groq-')) {
-    try {
-      const gRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${cleanGroqKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-          temperature: 0.5,
-          max_tokens: 4096
-        }),
-        signal
-      });
-      if (gRes.ok) {
-        const data = await gRes.json();
-        const text = data.choices?.[0]?.message?.content;
-        if (text) return text;
+    const candidateGroqModels = [
+      'llama-3.1-8b-instant',
+      'llama-3.3-70b-versatile',
+      'llama-3.3-70b-specdec',
+      'mixtral-8x7b-32768',
+      'gemma2-9b-it',
+      'llama3-70b-8192'
+    ];
+    for (const gm of candidateGroqModels) {
+      try {
+        const gRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${cleanGroqKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: gm,
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+            temperature: 0.5,
+            max_tokens: 4096
+          }),
+          signal
+        });
+        if (gRes.ok) {
+          const data = await gRes.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) return text;
+        } else {
+          const errText = await gRes.text();
+          if (gRes.status === 404 || errText.includes('model_not_found') || errText.includes('does not exist')) {
+            continue; // probar siguiente modelo en Groq
+          }
+        }
+      } catch (gqErr) {
+        console.warn(`[callLLMWithFallbacks] Fallback Groq con ${gm} falló:`, gqErr);
       }
-    } catch (gqErr) {
-      console.warn('[callLLMWithFallbacks] Fallback Groq falló:', gqErr);
     }
   }
 
