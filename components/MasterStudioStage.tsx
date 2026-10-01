@@ -36,7 +36,8 @@ import {
   Globe,
   Lock,
   Download,
-  Copy
+  Copy,
+  Trash2
 } from 'lucide-react';
 import { 
   generateMasterStudioHtml, 
@@ -110,10 +111,12 @@ interface MasterStudioStageProps {
   activeCharacterId?: string;
   onSelectCharacter: (id?: string) => void;
   onAddCharacter?: (char: CharacterPersona) => void;
+  onDeleteCharacter?: (id: string) => void;
   styles: StylePreset[];
   activeStyleId?: string;
   onSelectStyle: (id?: string) => void;
   onAddStyle?: (style: StylePreset) => void;
+  onDeleteStyle?: (id: string) => void;
 
   // Project configuration
   projectName?: string;
@@ -138,10 +141,12 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   activeCharacterId,
   onSelectCharacter,
   onAddCharacter,
+  onDeleteCharacter,
   styles,
   activeStyleId,
   onSelectStyle,
   onAddStyle,
+  onDeleteStyle,
   projectName = 'BulkScene_Proyecto_01',
   setProjectName,
   onProceedToScenes,
@@ -242,9 +247,16 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // 4. Project Folder Destination & Project Name (Ambos campos son estrictamente OBLIGATORIOS)
   const [folderName, setFolderName] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_folder_name') || '';
+    return savedSession?.folderName || localStorage.getItem('bulkscene_selected_folder_name') || '';
   });
-  const [activeDirHandle, setActiveDirHandle] = useState<any>(null);
+  const [activeDirHandle, setActiveDirHandle] = useState<any>(() => {
+    const saved = savedSession?.folderName || localStorage.getItem('bulkscene_selected_folder_name') || '';
+    if (saved) {
+      const clean = saved.replace(/^Carpeta:\s*/, '').trim();
+      if (clean) return { name: clean, isFallback: true };
+    }
+    return null;
+  });
   const [currentProjectName, setCurrentProjectName] = useState<string>(() => {
     return savedSession?.projectName || projectName || '';
   });
@@ -366,7 +378,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   // 8. Visual Style & Auto-AI
   // styleMode: 'custom' = el usuario escribe manualmente (textarea vacío al inicio),
   //            'auto' = la IA detecta y diseña automáticamente según el guion
-  const [styleMode, setStyleMode] = useState<'custom' | 'auto'>('custom');
+  const [styleMode, setStyleMode] = useState<'custom' | 'auto'>(() => {
+    return (savedSession as any)?.styleMode ?? 'custom';
+  });
   const activeStyle = styles.find((s) => s.id === activeStyleId) || null;
   // En modo custom el textarea empieza vacío; en modo auto carga lo guardado
   const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(() => {
@@ -388,7 +402,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   // 9. Character Vault & Biometric Consistency — Modo Auto por defecto (sin personajes preseleccionados ni sobrepuestos)
   const activeChar = characters.find((c) => c.id === activeCharacterId);
   const [characterMode, setCharacterMode] = useState<'auto' | 'bank'>(() => {
-    return activeCharacterId ? 'bank' : 'auto';
+    return (savedSession as any)?.characterMode ?? (activeCharacterId ? 'bank' : 'auto');
   });
   const consistencyMode: CharacterConsistencyMode = 'nombre_en_prompt';
   const [detectedCharacters, setDetectedCharacters] = useState<ScriptDirectorCharacter[]>(() => {
@@ -467,6 +481,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       selectedSTTModel,
       activeCharacterId,
       activeStyleId,
+      folderName,
+      characterMode,
+      styleMode,
       cinematographyReason: cinematographyReason ?? undefined
     } as any);
   }, [
@@ -495,6 +512,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     selectedSTTModel,
     activeCharacterId,
     activeStyleId,
+    folderName,
+    characterMode,
+    styleMode,
     cinematographyReason
   ]);
 
@@ -2396,16 +2416,18 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   placeholder="Describe el estilo visual que quieres (ej: fotografía 35mm, colores cálidos dorados, luz de atardecer, ultra realista...)&#10;&#10;💡 O usa el botón «Automático con IA» para que la IA lo detecte del guion."
                   className="w-full bg-[#07090e] border border-white/[0.08] text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-amber-400 resize-none font-sans leading-relaxed"
                 />
-                {/* Selector de preset del banco (opcional) */}
+                {/* Selector de preset del banco (opcional) con botón de eliminación */}
                 {styles.length > 0 && (
                   <div className="flex items-center gap-2">
                     <select
-                      value=""
+                      value={activeStyleId || ''}
                       onChange={(e) => {
                         const matched = styles.find(s => s.id === e.target.value);
                         if (matched) {
                           setCustomStyleInstructions(matched.promptModifier || matched.description);
                           onSelectStyle(matched.id);
+                        } else {
+                          onSelectStyle(undefined);
                         }
                       }}
                       className="flex-1 bg-[#0d111a] border border-white/[0.08] text-slate-300 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
@@ -2415,6 +2437,23 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                         <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
                       ))}
                     </select>
+                    {activeStyleId && onDeleteStyle && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const s = styles.find(x => x.id === activeStyleId);
+                          if (window.confirm(`¿Eliminar el estilo "${s?.name || ''}" del banco? Esta acción no se puede deshacer.`)) {
+                            onDeleteStyle(activeStyleId);
+                            onSelectStyle(undefined);
+                          }
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all cursor-pointer flex items-center gap-1 text-xs shrink-0"
+                        title="Eliminar este estilo del banco"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="text-[10px] font-bold">Eliminar</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2666,16 +2705,35 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   <div><span className="text-amber-400">Rasgos: </span>{activeChar.anchorDescription || '—'}</div>
                   <div><span className="text-amber-400">Vestimenta: </span>{activeChar.clothingAnchor || '—'}</div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectCharacter(undefined);
-                    setCharacterMode('auto');
-                  }}
-                  className="w-full text-[11px] text-slate-400 hover:text-white py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition-all cursor-pointer"
-                >
-                  Volver a Modo Automático
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectCharacter(undefined);
+                      setCharacterMode('auto');
+                    }}
+                    className="flex-1 text-[11px] text-slate-400 hover:text-white py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition-all cursor-pointer"
+                  >
+                    Volver a Modo Automático
+                  </button>
+                  {onDeleteCharacter && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`¿Eliminar el personaje "${activeChar.name}"? Esta acción no se puede deshacer.`)) {
+                          onDeleteCharacter(activeChar.id);
+                          onSelectCharacter(undefined);
+                          setCharacterMode('auto');
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-all cursor-pointer flex items-center gap-1 text-xs shrink-0"
+                      title="Eliminar este personaje del banco"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold">Eliminar</span>
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="bg-[#07090e] border border-dashed border-white/10 rounded-2xl p-4 text-center">

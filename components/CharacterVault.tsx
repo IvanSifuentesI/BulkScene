@@ -243,18 +243,18 @@ export const CharacterVault: React.FC<CharacterVaultProps> = ({
                       </span>
                     )}
 
-                    {char.id.startsWith('custom-') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`¿Eliminar el personaje "${char.name}"? Esta acción no se puede deshacer.`)) {
                           onDeleteCharacter(char.id);
-                        }}
-                        className="text-slate-500 hover:text-red-400 p-1 transition-colors"
-                        title="Eliminar este personaje"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                        }
+                      }}
+                      className="text-slate-500 hover:text-red-400 p-1 rounded-lg hover:bg-red-500/10 transition-all"
+                      title="Eliminar este personaje"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 

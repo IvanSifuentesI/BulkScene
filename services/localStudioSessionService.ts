@@ -42,6 +42,9 @@ export interface LocalStudioSessionData {
   selectedSTTModel: string;
   activeCharacterId?: string;
   activeStyleId?: string;
+  folderName?: string;
+  characterMode?: 'auto' | 'bank';
+  styleMode?: 'custom' | 'auto';
   lastUpdated: number;
 }
 

@@ -220,18 +220,18 @@ export const StyleMatrix: React.FC<StyleMatrixProps> = ({
                       </span>
                     )}
 
-                    {style.id.startsWith('custom-') && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`¿Eliminar el estilo "${style.name}"? Esta acción no se puede deshacer.`)) {
                           onDeleteStyle(style.id);
-                        }}
-                        className="text-slate-500 hover:text-red-400 p-1 transition-colors"
-                        title="Eliminar este estilo"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                        }
+                      }}
+                      className="text-slate-500 hover:text-red-400 p-1 rounded-lg hover:bg-red-500/10 transition-all"
+                      title="Eliminar este estilo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 

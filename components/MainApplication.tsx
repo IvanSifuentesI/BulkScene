@@ -516,7 +516,8 @@ export const MainApplication: React.FC = () => {
         {/* Scrollable Stage Content View */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           <div className="max-w-[1850px] 2xl:max-w-full mx-auto w-full pb-16 px-1 sm:px-2">
-            {currentStage === 'guion' && (
+            {/* ─── Estudio Master: siempre montado, oculto con CSS para preservar TODA la sesión ─── */}
+            <div style={{ display: currentStage === 'guion' ? 'block' : 'none' }}>
               <MasterStudioStage
                 groqKeys={groqKeys}
                 nvidiaNimKeys={nvidiaKeys}
@@ -529,10 +530,12 @@ export const MainApplication: React.FC = () => {
                 activeCharacterId={activeCharacterId}
                 onSelectCharacter={setActiveCharacterId}
                 onAddCharacter={handleAddCharacter}
+                onDeleteCharacter={handleDeleteCharacter}
                 styles={styles}
                 activeStyleId={activeStyleId}
                 onSelectStyle={setActiveStyleId}
                 onAddStyle={handleAddStyle}
+                onDeleteStyle={handleDeleteStyle}
                 projectName={projectName}
                 setProjectName={handleSetProjectName}
                 onProceedToScenes={handleProceedFromScenes}
@@ -540,7 +543,7 @@ export const MainApplication: React.FC = () => {
                 onProceedToImages={handleProceedFromScenes}
                 onNavigateToSettings={() => setCurrentStage('ajustes')}
               />
-            )}
+            </div>
 
             {currentStage === 'imagenes' && (
               <BulkSceneGenerator
