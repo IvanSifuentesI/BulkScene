@@ -28,7 +28,11 @@ import {
 import { CharacterPersona, StylePreset } from '../types';
 import { CharacterVault } from './CharacterVault';
 import { StyleMatrix } from './StyleMatrix';
-import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { 
+  AVAILABLE_SCRIPT_MODELS, 
+  AVAILABLE_ANALYSIS_MODELS, 
+  AVAILABLE_PROMPT_MODELS 
+} from '../config/stylePresets';
 import { 
   AVAILABLE_STT_MODELS, 
   DEFAULT_ASSEMBLY_API_KEY, 
@@ -90,9 +94,18 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   onDeleteStyle,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'apis' | 'stt' | 'characters' | 'styles' | 'telemetria'>('apis');
-  const [selectedScriptModel, setSelectedScriptModel] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_director_model') || 'nvidia-llama-70b';
+  const [selectedAnalysisModel, setSelectedAnalysisModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_analysis_model') || 'gemini-3.8-flash';
   });
+
+  const [selectedPromptModel, setSelectedPromptModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_prompt_model') || 'gemini-3.5-flash-lite';
+  });
+
+  const [selectedScriptModel, setSelectedScriptModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_director_model') || 'gemini-3.8-flash';
+  });
+
   const [newNvidiaKey, setNewNvidiaKey] = useState('');
   const [newGroqKey, setNewGroqKey] = useState('');
   const [newGeminiKey, setNewGeminiKey] = useState('');
@@ -109,6 +122,18 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   const [selectedSTTModel, setSelectedSTTModel] = useState<string>(() => {
     return localStorage.getItem('bulkscene_selected_stt_model') || 'groq-whisper-turbo';
   });
+
+  const handleSelectAnalysisModel = (modelId: string) => {
+    setSelectedAnalysisModel(modelId);
+    localStorage.setItem('bulkscene_selected_analysis_model', modelId);
+    triggerSaveNotification(`Motor de Análisis establecido en: ${modelId}`);
+  };
+
+  const handleSelectPromptModel = (modelId: string) => {
+    setSelectedPromptModel(modelId);
+    localStorage.setItem('bulkscene_selected_prompt_model', modelId);
+    triggerSaveNotification(`Motor de Prompts establecido en: ${modelId}`);
+  };
 
   const handleSelectScriptModel = (modelId: string) => {
     setSelectedScriptModel(modelId);
@@ -393,57 +418,141 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
       {/* Sub-tab 1: Categorized APIs */}
       {activeSubTab === 'apis' && (
         <div className="space-y-6">
-          {/* SELECCIÓN DE MODELO LLM DIRECTOR PREDETERMINADO */}
-          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] border border-cyan-500/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400">
-                  <Cpu className="w-5 h-5" />
+          {/* SELECCIÓN DUAL DE MOTORES NEURONALES (ANÁLISIS + PROMPTS) */}
+          <div className="space-y-4">
+            {/* 1. MOTOR DE ANÁLISIS PROFUNDO (Guion, Personajes, Época, Estilo) */}
+            <div className="bg-[#0e111a] rounded-2xl p-5 space-y-3.5 border border-blue-500/25 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/[0.06]">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400 font-bold shrink-0">
+                    🧠
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-sm flex items-center gap-2 flex-wrap">
+                      <span>1. Motor de Análisis Profundo del Guion</span>
+                      <span className="text-[10px] font-mono text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold">
+                        Por defecto: Gemini 3.8 Flash
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Analiza el guion completo, detecta personajes invariables, época histórica, estilo y cinematografía.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-white font-bold text-base flex items-center gap-2">
-                    <span>Modelo de IA Predeterminado para Guiones & Dirección</span>
-                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full font-bold">
-                      10 Modelos Disponibles
-                    </span>
-                  </h3>
-                  
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                    Activo: <strong>{selectedAnalysisModel}</strong>
+                  </span>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {AVAILABLE_ANALYSIS_MODELS.map((m, idx) => {
+                  const isSelected = selectedAnalysisModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectAnalysisModel(m.id)}
+                      className={`p-3 rounded-xl text-left border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-950/40 border-blue-500/70 text-white shadow-md shadow-blue-500/10'
+                          : 'bg-[#08090d] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/15'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-slate-500">#{idx + 1}</span>
+                          <span className="text-xs font-bold text-white truncate">{m.name}</span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1 text-[10px] font-mono mt-1">
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] ${isSelected ? 'text-blue-300 bg-blue-500/20' : 'text-slate-400 bg-white/5'}`}>
+                          {m.provider}
+                        </span>
+                        <span className="text-slate-500">{m.quota || m.speed}</span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {AVAILABLE_SCRIPT_MODELS.map((m) => {
-                const isSelected = selectedScriptModel === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleSelectScriptModel(m.id)}
-                    className={`p-3.5 rounded-2xl text-left border transition-all ${
-                      isSelected
-                        ? 'bg-cyan-950/40 border-cyan-500/60 text-white shadow-md'
-                        : 'bg-[#08090d] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">{m.name}</span>
-                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-cyan-300 border border-white/10">
+            {/* 2. MOTOR DE GENERACIÓN MASIVA DE PROMPTS (Por Escena) */}
+            <div className="bg-[#0e111a] rounded-2xl p-5 space-y-3.5 border border-emerald-500/25 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/[0.06]">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400 font-bold shrink-0">
+                    ⚡
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-sm flex items-center gap-2 flex-wrap">
+                      <span>2. Motor de Generación de Prompts de Escenas</span>
+                      <span className="text-[10px] font-mono text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                        Por defecto: Gemini 3.5 Flash Lite
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Genera los prompts visuales de cada escena a alta velocidad y bajo consumo de cuota.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+                    Activo: <strong>{selectedPromptModel}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {AVAILABLE_PROMPT_MODELS.map((m, idx) => {
+                  const isSelected = selectedPromptModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => handleSelectPromptModel(m.id)}
+                      className={`p-3 rounded-xl text-left border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-950/40 border-emerald-500/70 text-white shadow-md shadow-emerald-500/10'
+                          : 'bg-[#08090d] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/15'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-slate-500">#{idx + 1}</span>
+                          <span className="text-xs font-bold text-white truncate">{m.name}</span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1 text-[10px] font-mono mt-1">
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] ${isSelected ? 'text-emerald-300 bg-emerald-500/20' : 'text-slate-400 bg-white/5'}`}>
                           {m.provider}
                         </span>
+                        <span className="text-slate-500">{m.quota || m.speed}</span>
                       </div>
-                      {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
-                      <span className="text-amber-400 font-semibold">{m.badge}</span>
-                      <span>•</span>
-                      <span>Velocidad: {m.speed}</span>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PASTILLA DE INFORMACIÓN DE ROTACIÓN & FALLBACK */}
+            <div className="bg-[#090b12] border border-white/5 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>
+                  <strong>Rotación inteligente activa:</strong> Si una clave de Gemini agota su cuota (429), rota de inmediato a la siguiente clave del pool.
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 shrink-0">
+                Fallback: Gemini → NVIDIA → Groq
+              </span>
             </div>
           </div>
 

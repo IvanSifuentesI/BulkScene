@@ -50,6 +50,7 @@ import {
   extractCulturalContextWithAI,
   detectCharactersWithAI,
   detectCinematographyWithAI,
+  getAllGeminiKeys,
   ScriptDirectorCharacter
 } from '../services/llmDirectorService';
 import { 
@@ -62,7 +63,11 @@ import {
   SmartBeatsConfig
 } from '../services/audioTranscriptionService';
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
-import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { 
+  AVAILABLE_SCRIPT_MODELS, 
+  AVAILABLE_ANALYSIS_MODELS, 
+  AVAILABLE_PROMPT_MODELS 
+} from '../config/stylePresets';
 import { requireSubscription } from '../services/subscriptionService';
 import { 
   saveLocalStudioSession, 
@@ -171,10 +176,23 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
   const estimatedSeconds = Math.round((wordCount / 140) * 60);
 
-  // 2. LLM Director Engine Selection (Predeterminado: Gemini 2.0 Flash)
-  const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return savedSession?.selectedModel || localStorage.getItem('bulkscene_selected_director_model') || 'gemini-2.0-flash';
+  // 2. LLM Director Engine Selection (Dual: Análisis Profundo + Prompts Escenas)
+  const [selectedAnalysisModel, setSelectedAnalysisModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_analysis_model') || 'gemini-3.8-flash';
   });
+
+  const [selectedPromptModel, setSelectedPromptModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_prompt_model') || 'gemini-3.5-flash-lite';
+  });
+
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return savedSession?.selectedModel || localStorage.getItem('bulkscene_selected_director_model') || 'gemini-3.8-flash';
+  });
+
+  // Claves Gemini en el pool activo
+  const geminiPoolCount = useMemo(() => {
+    return getAllGeminiKeys().length;
+  }, []);
 
   // 3. Audio & Whisper State
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -620,7 +638,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       const result = await detectStyleWithAI({
         scriptText,
         styles,
-        model: selectedModel,
+        model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
         groqKey: resolveGroqKey()
@@ -653,7 +671,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const result = await detectCinematographyWithAI({
         scriptText,
-        model: selectedModel,
+        model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
         groqKey: resolveGroqKey()
@@ -705,7 +723,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const extracted = await extractCulturalContextWithAI({
         scriptText,
-        model: selectedModel,
+        model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
         groqKey: resolveGroqKey()
@@ -733,7 +751,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const detected = await detectCharactersWithAI({
         scriptText,
-        model: selectedModel,
+        model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
         groqKey: resolveGroqKey()
@@ -834,7 +852,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         try {
           activeContext = await extractCulturalContextWithAI({
             scriptText,
-            model: selectedModel,
+            model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
             groqKey: resolveGroqKey()
@@ -854,7 +872,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         try {
           const detected = await detectCharactersWithAI({
             scriptText,
-            model: selectedModel,
+            model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
             groqKey: resolveGroqKey()
@@ -893,7 +911,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       // 5. Invocar LLM Director con procesamiento por lotes para guiones extensos
       const analysis = await analyzeScriptWithLLM({
         scriptText,
-        model: selectedModel,
+        model: selectedPromptModel,
         groqKey: resolveGroqKey(),
         nvidiaNimKey: nvidiaNimKeys[0] || '',
         geminiKey: resolveGeminiKey(),
@@ -1066,39 +1084,80 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           </div>
         </div>
 
-        {/* SUB-BAR: MODEL SELECTOR & PROJECT FOLDER DESTINATION */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-3 border-t border-white/[0.04]">
-          {/* Box 1: Motor LLM de Dirección */}
-          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0">
-              <Cpu className="w-4 h-4" />
+        {/* SUB-BAR: DUAL NEURONAL ENGINES (ANALYSIS + PROMPTS), PROJECT & FOLDER */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-white/[0.04]">
+          {/* Box 1: Motor de Análisis de Guion & Personajes */}
+          <div className="bg-[#07090e] border border-blue-500/25 rounded-2xl p-3 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0 text-sm font-black">
+              🧠
             </div>
             <div className="flex-1 min-w-0">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold block mb-1">
-                Motor LLM Director
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-blue-400 font-bold block truncate">
+                  1. Análisis Guion
+                </label>
+                <span className="text-[9px] font-mono text-blue-300 bg-blue-500/20 px-1.5 rounded">
+                  Profundo
+                </span>
+              </div>
               <select
-                value={selectedModel}
-                onChange={(e) => handleModelChange(e.target.value)}
-                className="w-full bg-[#0d111a] border border-cyan-500/30 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 truncate"
+                value={selectedAnalysisModel}
+                onChange={(e) => {
+                  setSelectedAnalysisModel(e.target.value);
+                  localStorage.setItem('bulkscene_selected_analysis_model', e.target.value);
+                }}
+                className="w-full bg-[#0d111a] border border-blue-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-blue-400 truncate cursor-pointer"
+                title="Modelo asignado para analizar el guion completo, personajes invariables, época y estilo visual."
               >
-                {AVAILABLE_SCRIPT_MODELS.map((m) => (
+                {AVAILABLE_ANALYSIS_MODELS.map((m, idx) => (
                   <option key={m.id} value={m.id}>
-                    {m.provider === 'nvidia' ? '🟢 [NVIDIA] ' : m.provider === 'gemini' ? '🔵 [Gemini] ' : '⚡ [Groq] '}
-                    {m.name} ({m.speed})
+                    #{idx + 1} {m.name} ({m.provider})
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Box 2: Título de Producción */}
-          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+          {/* Box 2: Motor de Generación de Prompts de Escenas */}
+          <div className="bg-[#07090e] border border-emerald-500/25 rounded-2xl p-3 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 text-sm font-black">
+              ⚡
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block truncate">
+                  2. Prompts Escenas
+                </label>
+                <span className="text-[9px] font-mono text-emerald-300 bg-emerald-500/20 px-1.5 rounded">
+                  Masivo
+                </span>
+              </div>
+              <select
+                value={selectedPromptModel}
+                onChange={(e) => {
+                  setSelectedPromptModel(e.target.value);
+                  localStorage.setItem('bulkscene_selected_prompt_model', e.target.value);
+                  handleModelChange(e.target.value);
+                }}
+                className="w-full bg-[#0d111a] border border-emerald-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-emerald-400 truncate cursor-pointer"
+                title="Modelo asignado para redactar el prompt fotográfico individual de cada escena."
+              >
+                {AVAILABLE_PROMPT_MODELS.map((m, idx) => (
+                  <option key={m.id} value={m.id}>
+                    #{idx + 1} {m.name} ({m.provider})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Box 3: Título de Producción */}
+          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
               <Film className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold block mb-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-bold block mb-1 truncate">
                 Nombre del Proyecto
               </label>
               <input
@@ -1109,22 +1168,22 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   if (setProjectName) setProjectName(e.target.value);
                 }}
                 placeholder="Nombre_Proyecto_01"
-                className="w-full bg-[#0d111a] border border-emerald-500/30 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-emerald-400"
+                className="w-full bg-[#0d111a] border border-purple-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-purple-400"
               />
             </div>
           </div>
 
-          {/* Box 3: Carpeta de Guardado / Exportación */}
-          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
+          {/* Box 4: Carpeta Destino & Estado de Claves */}
+          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0">
                 <Folder className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block mb-0.5">
-                  Carpeta de Destino
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block truncate">
+                  Carpeta ZIP
                 </span>
-                <span className="text-xs text-slate-300 font-medium truncate block" title={folderName}>
+                <span className="text-[11px] text-slate-300 font-medium truncate block" title={folderName}>
                   {folderName}
                 </span>
               </div>
@@ -1132,12 +1191,49 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             <button
               type="button"
               onClick={handlePickDirectory}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-bold transition-all shrink-0 flex items-center gap-1.5"
+              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[11px] font-bold transition-all shrink-0 flex items-center gap-1"
             >
-              <FolderOpen className="w-3.5 h-3.5" />
+              <FolderOpen className="w-3 h-3" />
               <span>Cambiar</span>
             </button>
           </div>
+        </div>
+
+        {/* POOL ROTATOR STATUS STRIP */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 px-1 text-[11px] font-mono text-slate-400 border-t border-white/[0.03]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              <span>Análisis: <strong>{selectedAnalysisModel}</strong></span>
+            </span>
+            <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Prompts: <strong>{selectedPromptModel}</strong></span>
+            </span>
+            {geminiPoolCount > 0 ? (
+              <span className="text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                🔄 Pool Gemini: <strong>{geminiPoolCount} clave(s)</strong> (Rotación 429 activa)
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onNavigateToSettings}
+                className="text-amber-400 hover:text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 underline cursor-pointer"
+              >
+                ⚠️ Sin claves Gemini añadidas → Ir a Configuración
+              </button>
+            )}
+          </div>
+
+          {onNavigateToSettings && (
+            <button
+              type="button"
+              onClick={onNavigateToSettings}
+              className="text-slate-400 hover:text-cyan-300 transition-colors text-[10px] underline shrink-0 cursor-pointer"
+            >
+              Cambiar orden y claves en Ajustes ➔
+            </button>
+          )}
         </div>
       </div>
 

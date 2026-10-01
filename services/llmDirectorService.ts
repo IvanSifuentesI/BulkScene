@@ -275,9 +275,11 @@ async function callLLMDirectorRaw(params: {
 }): Promise<string> {
   const { systemPrompt, userPrompt, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
-  const cleanGeminiKey = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
+  const allGeminiKeys = getAllGeminiKeys();
+  const cleanGeminiKey = extractCleanKey(geminiKey) || (allGeminiKeys[0] || '');
   const cleanNvidiaKey = extractCleanKey(nvidiaNimKey) || extractCleanKey(localStorage.getItem('bulk_nvidia_api_keys') || '') || DEFAULT_NVIDIA_NIM_API_KEY;
   const cleanGroqKey = extractCleanKey(groqKey) || extractCleanKey(localStorage.getItem('bulk_groq_api_keys') || '') || DEFAULT_GROQ_API_KEY;
+  const hasGemini = allGeminiKeys.length > 0 || Boolean(cleanGeminiKey);
 
   // Lista ordenada de intentos
   const attempts: Array<{
@@ -288,7 +290,7 @@ async function callLLMDirectorRaw(params: {
   }> = [];
 
   // Intento 1: El modelo seleccionado explícitamente
-  if (model.startsWith('gemini-') && cleanGeminiKey) {
+  if (model.startsWith('gemini-') && hasGemini) {
     attempts.push({ name: `Gemini (${model})`, provider: 'gemini', modelId: model, key: cleanGeminiKey });
   } else if ((model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-')) && cleanNvidiaKey) {
     attempts.push({ name: `NVIDIA (${model})`, provider: 'nvidia', modelId: model, key: cleanNvidiaKey });
@@ -296,9 +298,9 @@ async function callLLMDirectorRaw(params: {
     attempts.push({ name: `Groq (${model})`, provider: 'groq', modelId: model, key: cleanGroqKey });
   }
 
-  // Fallbacks de seguridad con prioridad definida: Gemini -> NVIDIA -> Groq
-  if (cleanGeminiKey && !attempts.some(a => a.provider === 'gemini')) {
-    attempts.push({ name: 'Gemini 2.0 Flash (Fallback)', provider: 'gemini', modelId: 'gemini-2.0-flash', key: cleanGeminiKey });
+  // Fallbacks de seguridad con prioridad definida: Gemini (GEMINI_LITE_MODEL) -> NVIDIA 70B -> Groq 70B
+  if (hasGemini && !attempts.some(a => a.provider === 'gemini')) {
+    attempts.push({ name: `Gemini ${GEMINI_LITE_MODEL} (Fallback)`, provider: 'gemini', modelId: GEMINI_LITE_MODEL, key: cleanGeminiKey });
   }
   if (cleanNvidiaKey && !attempts.some(a => a.provider === 'nvidia')) {
     attempts.push({ name: 'NVIDIA Llama 3.3 70B (Fallback)', provider: 'nvidia', modelId: 'nvidia-llama-70b', key: cleanNvidiaKey });
@@ -316,28 +318,13 @@ async function callLLMDirectorRaw(params: {
   for (const attempt of attempts) {
     try {
       if (attempt.provider === 'gemini') {
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${attempt.modelId}:generateContent?key=${attempt.key}`;
-        const res = await fetch(geminiEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: {
-              temperature: 0.4,
-              maxOutputTokens: 8192,
-              responseMimeType: 'application/json'
-            }
-          }),
+        const raw = await callGeminiWithRotation({
+          model: attempt.modelId,
+          systemPrompt,
+          userPrompt,
+          extraKeys: geminiKey ? [geminiKey] : [],
           signal
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 150)}`);
-        }
-
-        const data = await res.json();
-        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!raw) throw new Error('Gemini devolvió respuesta vacía.');
         return raw;
       }
@@ -893,7 +880,7 @@ export async function callLLMWithFallbacks(params: {
   }
 
   const {
-    model = 'nvidia-llama-70b',
+    model,
     systemPrompt,
     userPrompt,
     groqKey = DEFAULT_GROQ_API_KEY,
@@ -902,18 +889,22 @@ export async function callLLMWithFallbacks(params: {
     signal,
   } = params;
 
-  // ── PRIORIDAD 1: Gemini con rotación de claves (gemini-3.5-flash-lite para generación masiva) ──
-  try {
-    const text = await callGeminiWithRotation({
-      model: GEMINI_LITE_MODEL,
-      systemPrompt,
-      userPrompt,
-      extraKeys: geminiKey ? [extractCleanKey(geminiKey)].filter(Boolean) : [],
-      signal
-    });
-    if (text) return text;
-  } catch (geminiErr) {
-    console.warn('[callLLMWithFallbacks] Gemini Lite falló, activando NVIDIA/Groq:', geminiErr);
+  const targetPromptModel = model || localStorage.getItem('bulkscene_selected_prompt_model') || GEMINI_LITE_MODEL;
+
+  // ── PRIORIDAD 1: Si el modelo es Gemini (por defecto gemini-3.5-flash-lite) usar rotación ──
+  if (targetPromptModel.startsWith('gemini-')) {
+    try {
+      const text = await callGeminiWithRotation({
+        model: targetPromptModel,
+        systemPrompt,
+        userPrompt,
+        extraKeys: geminiKey ? [extractCleanKey(geminiKey)].filter(Boolean) : [],
+        signal
+      });
+      if (text) return text;
+    } catch (geminiErr) {
+      console.warn(`[callLLMWithFallbacks] Gemini (${targetPromptModel}) falló, activando fallback NVIDIA/Groq:`, geminiErr);
+    }
   }
 
   // 2. NVIDIA NIM & Groq Mapping
@@ -1207,6 +1198,91 @@ Redacta el guion definitivo respetando la extensión.`;
 }
 
 /**
+ * Orquestador de análisis de guion con prioridad configurable:
+ * 1. Intenta con el modelo de análisis seleccionado (por defecto gemini-3.8-flash)
+ * 2. Si es Gemini, rota automáticamente entre todas las claves del pool en caso de cuota agotada (429)
+ * 3. Si todo el pool Gemini se agota, activa fallback a NVIDIA Llama 70B -> Groq
+ * 4. Si el usuario seleccionó un modelo no-Gemini, lo intenta primero y usa Gemini como respaldo
+ */
+export async function executeAnalysisWithFallbacks(params: {
+  systemPrompt: string;
+  userPrompt: string;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { systemPrompt, userPrompt, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+  const analysisModel = params.model || localStorage.getItem('bulkscene_selected_analysis_model') || GEMINI_ANALYSIS_MODEL;
+
+  // Si el modelo seleccionado es de la familia Gemini (por defecto gemini-3.8-flash)
+  if (analysisModel.startsWith('gemini-')) {
+    try {
+      return await callGeminiWithRotation({
+        model: analysisModel,
+        systemPrompt,
+        userPrompt,
+        extraKeys: geminiKey ? [geminiKey] : [],
+        signal
+      });
+    } catch (geminiErr) {
+      console.warn(`[executeAnalysisWithFallbacks] Gemini (${analysisModel}) pool agotado, activando fallback a NVIDIA/Groq:`, geminiErr);
+    }
+
+    // Fallback Prioridad 2: NVIDIA NIM
+    try {
+      return await callLLMWithFallbacks({
+        model: 'nvidia-llama-70b',
+        systemPrompt,
+        userPrompt,
+        geminiKey,
+        nvidiaNimKey,
+        groqKey,
+        signal
+      });
+    } catch (nErr) {
+      console.warn('[executeAnalysisWithFallbacks] Fallback NVIDIA falló, intentando Groq:', nErr);
+    }
+
+    // Fallback Prioridad 3: Groq
+    return await callLLMWithFallbacks({
+      model: 'groq-llama-70b',
+      systemPrompt,
+      userPrompt,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+  }
+
+  // Si el usuario eligió explícitamente un modelo no-Gemini (NVIDIA o Groq)
+  try {
+    return await callLLMWithFallbacks({
+      model: analysisModel,
+      systemPrompt,
+      userPrompt,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+  } catch (err) {
+    console.warn(`[executeAnalysisWithFallbacks] Modelo seleccionado (${analysisModel}) falló, recurriendo a Gemini (${GEMINI_ANALYSIS_MODEL}):`, err);
+  }
+
+  // Respaldo de seguridad a Gemini con rotación
+  return await callGeminiWithRotation({
+    model: GEMINI_ANALYSIS_MODEL,
+    systemPrompt,
+    userPrompt,
+    extraKeys: geminiKey ? [geminiKey] : [],
+    signal
+  });
+}
+
+/**
  * Detecta automáticamente el mejor estilo visual a partir del guion analizado con el LLM activo.
  */
 export async function detectStyleWithAI(params: {
@@ -1262,30 +1338,8 @@ ${scriptText}
 
 Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
 
-  // ── INTENTO 1: Gemini con rotación de claves (gemini-3.8-flash) ───────────────
   try {
-    const raw = await callGeminiWithRotation({
-      model: GEMINI_ANALYSIS_MODEL,
-      systemPrompt: system,
-      userPrompt: user,
-      extraKeys: geminiKey ? [geminiKey] : [],
-      signal
-    });
-    const parsed = extractCleanJson(raw);
-    const matched = styles.find(s => s.id === parsed.recommendedStyleId) || styles[0];
-    return {
-      recommendedStyleId: matched.id,
-      styleName: matched.name,
-      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.',
-      customInstructions: parsed.customInstructions || matched.promptModifier || ''
-    };
-  } catch (geminiErr) {
-    console.warn('[detectStyleWithAI] Gemini falló, intentando con NVIDIA/Groq:', geminiErr);
-  }
-
-  // ── INTENTO 2: Fallback NVIDIA / Groq ─────────────────────────────────────────
-  try {
-    const raw = await callLLMWithFallbacks({
+    const raw = await executeAnalysisWithFallbacks({
       model,
       systemPrompt: system,
       userPrompt: user,
@@ -1303,7 +1357,7 @@ Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
       customInstructions: parsed.customInstructions || matched.promptModifier || ''
     };
   } catch (err) {
-    console.warn('[detectStyleWithAI] Todos los motores fallaron:', err);
+    console.warn('[detectStyleWithAI] Falló el análisis de estilo:', err);
     return {
       recommendedStyleId: styles[0].id,
       styleName: styles[0].name,
@@ -1360,13 +1414,14 @@ ${scriptText}
 
 Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con máxima precisión:`;
 
-  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
   try {
-    const raw = await callGeminiWithRotation({
-      model: GEMINI_ANALYSIS_MODEL,
+    const raw = await executeAnalysisWithFallbacks({
+      model,
       systemPrompt: system,
       userPrompt: user,
-      extraKeys: geminiKey ? [geminiKey] : [],
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
       signal
     });
     const parsed = extractCleanJson(raw);
@@ -1376,22 +1431,8 @@ Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con m
       environment: parsed.environment || 'Urbano Atmosférico',
       autoDetected: true
     };
-  } catch (geminiErr) {
-    console.warn('[extractCulturalContextWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
-  }
-
-  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
-  try {
-    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
-    const parsed = extractCleanJson(raw);
-    return {
-      epoch: parsed.epoch || 'Contemporánea',
-      culture: parsed.culture || 'Cinematográfica',
-      environment: parsed.environment || 'Urbano Atmosférico',
-      autoDetected: true
-    };
   } catch (err) {
-    console.warn('[extractCulturalContextWithAI] Todos los motores fallaron:', err);
+    console.warn('[extractCulturalContextWithAI] Falló el análisis de contexto:', err);
     return { epoch: 'Época determinada por la narración', culture: 'Cinematográfica universal', environment: 'Entorno narrativo inmersivo', autoDetected: true };
   }
 }
@@ -1447,7 +1488,16 @@ ${scriptText}
 
 Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos invariables:`;
 
-  const parseChars = (raw: string) => {
+  try {
+    const raw = await executeAnalysisWithFallbacks({
+      model,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
     const parsed = extractCleanJson(raw);
     if (parsed.characters && Array.isArray(parsed.characters) && parsed.characters.length > 0) {
       return parsed.characters.map((c: any) => ({
@@ -1460,31 +1510,8 @@ Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biom�
         defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000)
       }));
     }
-    return null;
-  };
-
-  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
-  try {
-    const raw = await callGeminiWithRotation({
-      model: GEMINI_ANALYSIS_MODEL,
-      systemPrompt: system,
-      userPrompt: user,
-      extraKeys: geminiKey ? [geminiKey] : [],
-      signal
-    });
-    const chars = parseChars(raw);
-    if (chars) return chars;
-  } catch (geminiErr) {
-    console.warn('[detectCharactersWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
-  }
-
-  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
-  try {
-    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
-    const chars = parseChars(raw);
-    if (chars) return chars;
   } catch (err) {
-    console.warn('[detectCharactersWithAI] Todos los motores fallaron:', err);
+    console.warn('[detectCharactersWithAI] Falló detección de personajes:', err);
   }
 
   const sampleSeed = Math.floor(Math.random() * 900000) + 100000;
@@ -1540,13 +1567,14 @@ ${scriptText}
 
 Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
 
-  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
   try {
-    const raw = await callGeminiWithRotation({
-      model: GEMINI_ANALYSIS_MODEL,
+    const raw = await executeAnalysisWithFallbacks({
+      model,
       systemPrompt: system,
       userPrompt: user,
-      extraKeys: geminiKey ? [geminiKey] : [],
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
       signal
     });
     const parsed = extractCleanJson(raw);
@@ -1555,21 +1583,8 @@ Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
       lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
       reason: parsed.reason || 'Cinematografía optimizada para el guion.'
     };
-  } catch (geminiErr) {
-    console.warn('[detectCinematographyWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
-  }
-
-  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
-  try {
-    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
-    const parsed = extractCleanJson(raw);
-    return {
-      cameraPreference: parsed.cameraPreference || 'variado_dinamico',
-      lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
-      reason: parsed.reason || 'Cinematografía optimizada para el guion.'
-    };
   } catch (err) {
-    console.warn('[detectCinematographyWithAI] Todos los motores fallaron:', err);
+    console.warn('[detectCinematographyWithAI] Falló detección de cinematografía:', err);
     return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
   }
 }

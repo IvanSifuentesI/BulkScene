@@ -92,45 +92,30 @@ export const AVAILABLE_IMAGE_MODELS: AIModelOption[] = [
   }
 ];
 
-export const AVAILABLE_SCRIPT_MODELS = [
-  // 1. Modelos Google Gemini (Prioridad 1)
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. MOTORES PARA ANÁLISIS PROFUNDO (Guion Completo, Personajes, Época, Estilo)
+// Prioridad 1: gemini-3.8-flash (5 rpm, 250k tpm, 20 rpd)
+// ─────────────────────────────────────────────────────────────────────────────
+export const AVAILABLE_ANALYSIS_MODELS = [
   {
-    id: 'gemini-2.0-flash',
-    name: 'Google Gemini 2.0 Flash',
+    id: 'gemini-3.8-flash',
+    name: 'Google Gemini 3.8 Flash',
     provider: 'Google Gemini',
-    endpointModel: 'gemini-2.0-flash',
-    badge: '👑 Recomendado / Nueva Gen 2.0',
-    speed: '~0.8s',
-    description: 'La arquitectura más reciente de Google: ultra veloz, multimodal y con cuota gratuita muy generosa.'
+    endpointModel: 'gemini-3.8-flash',
+    badge: '👑 Prioridad 1 · Máxima Inteligencia & Análisis',
+    speed: '~1.0s',
+    quota: '5 rpm · 250k tpm · 20 rpd',
+    description: 'Motor principal de análisis profundo: lee el guion completo, define personajes, vestimenta invariable, época histórica y atmósfera.'
   },
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Google Gemini 1.5 Pro',
-    provider: 'Google Gemini',
-    endpointModel: 'gemini-1.5-pro',
-    badge: '📚 Contexto Masivo (2M tokens)',
-    speed: '~2.2s',
-    description: 'Capaz de analizar guiones de horas enteras (1h - 2h) sin perder el más mínimo detalle narrativo ni saturar contexto.'
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Google Gemini 1.5 Flash',
-    provider: 'Google Gemini',
-    endpointModel: 'gemini-1.5-flash',
-    badge: '⚡ Ultra Ágil',
-    speed: '~0.9s',
-    description: 'Excelente compromiso entre velocidad de respuesta y calidad de desglose cinematográfico.'
-  },
-
-  // 2. Modelos NVIDIA NIM (Prioridad 2)
   {
     id: 'nvidia-llama-70b',
     name: 'NVIDIA Llama 3.3 70B Instruct',
     provider: 'NVIDIA NIM',
     endpointModel: 'meta/llama-3.3-70b-instruct',
-    badge: '🟢 Cine 8K / 70B Parámetros',
+    badge: '🟢 Prioridad 2 · Gran Capacidad 70B',
     speed: '~1.5s',
-    description: 'Máxima comprensión de metáforas, cinematografía, encuadres fotográficos y continuidad de guion.'
+    quota: 'Cuota libre NIM',
+    description: 'Alternativa potente para desglose de escenas complejas y coherencia dramática.'
   },
   {
     id: 'nvidia-deepseek-r1',
@@ -139,16 +124,18 @@ export const AVAILABLE_SCRIPT_MODELS = [
     endpointModel: 'deepseek-ai/deepseek-r1',
     badge: '🧠 Razonamiento Profundo',
     speed: '~2.8s',
-    description: 'Cadena de pensamiento exhaustiva para desgloses narrativos complejos y giros dramáticos.'
+    quota: 'Cuota libre NIM',
+    description: 'Cadena de pensamiento exhaustiva para guiones con giros dramáticos complejos.'
   },
   {
-    id: 'nvidia-nemotron-70b',
-    name: 'NVIDIA Llama 3.1 Nemotron 70B',
-    provider: 'NVIDIA NIM',
-    endpointModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
-    badge: '🔬 Alta Precisión NVIDIA',
-    speed: '~2.0s',
-    description: 'Afinado por NVIDIA para máxima coherencia en instrucciones complejas multi-escena.'
+    id: 'groq-llama-70b',
+    name: 'Groq Llama 3.3 70B Versatile',
+    provider: 'Groq',
+    endpointModel: 'llama-3.3-70b-versatile',
+    badge: '⚡ Inferencia LPU Instantánea',
+    speed: '~0.5s',
+    quota: '30 rpm Groq',
+    description: 'Velocidad casi instantánea para análisis cuando se requiere respuesta ultra rápida.'
   },
   {
     id: 'nvidia-qwen-72b',
@@ -157,7 +144,132 @@ export const AVAILABLE_SCRIPT_MODELS = [
     endpointModel: 'qwen/qwen2.5-72b-instruct',
     badge: '🌏 Detalle Cultural & Épocas',
     speed: '~1.6s',
-    description: 'Especialista en referencias históricas, culturales, vestimenta de época y personajes.'
+    quota: 'Cuota libre NIM',
+    description: 'Especialista en épocas históricas, culturas del mundo, mitología y armaduras.'
+  }
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. MOTORES PARA GENERACIÓN MASIVA DE PROMPTS (Por Escena)
+// Prioridad 1: gemini-3.5-flash-lite (15 rpm, 250k tpm, 500 rpd)
+// ─────────────────────────────────────────────────────────────────────────────
+export const AVAILABLE_PROMPT_MODELS = [
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Google Gemini 3.5 Flash Lite',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-3.5-flash-lite',
+    badge: '⚡ Prioridad 1 · Ultra Rápido & Alto Volumen',
+    speed: '~0.4s',
+    quota: '15 rpm · 250k tpm · 500 rpd',
+    description: 'Motor principal para generar cientos de prompts por escena a máxima velocidad y bajo consumo de cuota.'
+  },
+  {
+    id: 'groq-llama-70b',
+    name: 'Groq Llama 3.3 70B Versatile',
+    provider: 'Groq',
+    endpointModel: 'llama-3.3-70b-versatile',
+    badge: '⚡ Prioridad 2 · LPU ~1000 tok/s',
+    speed: '~0.4s',
+    quota: '30 rpm Groq',
+    description: 'Generación por lotes ultra veloz para videos de decenas de escenas.'
+  },
+  {
+    id: 'nvidia-llama-70b',
+    name: 'NVIDIA Llama 3.3 70B Instruct',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'meta/llama-3.3-70b-instruct',
+    badge: '🟢 Prioridad 3 · Fotografía Cinematográfica',
+    speed: '~1.5s',
+    quota: 'Cuota libre NIM',
+    description: 'Prompts descriptivos con gran detalle en lentes, iluminación volumétrica y texturas.'
+  },
+  {
+    id: 'nvidia-mistral-nemo',
+    name: 'NVIDIA Mistral NeMo 12B',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'mistralai/mistral-nemo-12b-instruct',
+    badge: '🎯 Rápido y Conciso',
+    speed: '~0.8s',
+    quota: 'Cuota libre NIM',
+    description: 'Prompts limpios sin palabrería, optimizados para FLUX y Midjourney.'
+  },
+  {
+    id: 'groq-mixtral-8x7b',
+    name: 'Groq Mixtral 8x7B MoE',
+    provider: 'Groq',
+    endpointModel: 'mixtral-8x7b-32768',
+    badge: '🔀 Mezcla de Expertos',
+    speed: '~0.6s',
+    quota: '30 rpm Groq',
+    description: 'Alta concurrencia para procesamiento por lotes masivo.'
+  }
+];
+
+// Lista unificada
+export const AVAILABLE_SCRIPT_MODELS = [
+  // 1. Google Gemini (Prioridad 1)
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Google Gemini 3.8 Flash',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-3.8-flash',
+    badge: '👑 Análisis Profundo (Guion & Personajes)',
+    speed: '~1.0s',
+    quota: '5 rpm · 250k tpm · 20 rpd',
+    description: 'Análisis minucioso del guion completo, identificación de personajes y estilo visual.'
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Google Gemini 3.5 Flash Lite',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-3.5-flash-lite',
+    badge: '⚡ Generación Masiva (Prompts x Escena)',
+    speed: '~0.4s',
+    quota: '15 rpm · 250k tpm · 500 rpd',
+    description: 'Generación masiva de prompts visuales por cada escena a alta velocidad.'
+  },
+
+  // 2. NVIDIA NIM (Prioridad 2)
+  {
+    id: 'nvidia-llama-70b',
+    name: 'NVIDIA Llama 3.3 70B Instruct',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'meta/llama-3.3-70b-instruct',
+    badge: '🟢 Cine 8K / 70B Parámetros',
+    speed: '~1.5s',
+    quota: 'Cuota libre NIM',
+    description: 'Máxima comprensión de cinematografía, encuadres fotográficos y continuidad.'
+  },
+  {
+    id: 'nvidia-deepseek-r1',
+    name: 'NVIDIA DeepSeek R1',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'deepseek-ai/deepseek-r1',
+    badge: '🧠 Razonamiento Profundo',
+    speed: '~2.8s',
+    quota: 'Cuota libre NIM',
+    description: 'Cadena de pensamiento exhaustiva para desgloses narrativos complejos.'
+  },
+  {
+    id: 'nvidia-nemotron-70b',
+    name: 'NVIDIA Llama 3.1 Nemotron 70B',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    badge: '🔬 Alta Precisión NVIDIA',
+    speed: '~2.0s',
+    quota: 'Cuota libre NIM',
+    description: 'Afinado por NVIDIA para máxima coherencia en instrucciones complejas.'
+  },
+  {
+    id: 'nvidia-qwen-72b',
+    name: 'NVIDIA Qwen 2.5 72B Instruct',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'qwen/qwen2.5-72b-instruct',
+    badge: '🌏 Detalle Cultural & Épocas',
+    speed: '~1.6s',
+    quota: 'Cuota libre NIM',
+    description: 'Especialista en referencias históricas, culturales y vestimenta de época.'
   },
   {
     id: 'nvidia-mistral-nemo',
@@ -166,10 +278,11 @@ export const AVAILABLE_SCRIPT_MODELS = [
     endpointModel: 'mistralai/mistral-nemo-12b-instruct',
     badge: '⚡ Rápido y Conciso',
     speed: '~0.9s',
-    description: 'Modelo ágil optimizado para generar prompts directos y efectivos sin saturación de texto.'
+    quota: 'Cuota libre NIM',
+    description: 'Modelo ágil optimizado para generar prompts directos y efectivos.'
   },
 
-  // 3. Modelos Groq (Prioridad 3)
+  // 3. Groq (Prioridad 3)
   {
     id: 'groq-llama-70b',
     name: 'Groq Llama 3.3 70B Versatile',
@@ -177,6 +290,7 @@ export const AVAILABLE_SCRIPT_MODELS = [
     endpointModel: 'llama-3.3-70b-versatile',
     badge: '⚡ Inferencia LPU (~1000 tok/s)',
     speed: '~0.5s',
+    quota: '30 rpm Groq',
     description: 'Inferencia ultra veloz en silicio LPU para segmentaciones casi instantáneas.'
   },
   {
@@ -186,6 +300,7 @@ export const AVAILABLE_SCRIPT_MODELS = [
     endpointModel: 'mixtral-8x7b-32768',
     badge: '🔀 Mezcla de Expertos',
     speed: '~0.7s',
+    quota: '30 rpm Groq',
     description: 'Arquitectura MoE veloz para descomponer párrafos y generar prompts directos.'
   }
 ];
