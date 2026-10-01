@@ -798,6 +798,34 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
   };
 
+  // AI Auto-Detect Cinematography (Encuadre e Iluminación)
+  const handleAutoDetectCinematography = async () => {
+    if (!requireSubscription('Dirección Cinematográfica con IA', '1. Estudio Master')) {
+      return;
+    }
+    if (!scriptText.trim()) {
+      alert('Pega o escribe un guion primero para detectar encuadre e iluminación.');
+      return;
+    }
+    setIsDetectingCinematography(true);
+    try {
+      const res = await detectCinematographyWithAI({
+        scriptText,
+        model: selectedAnalysisModel,
+        geminiKey: resolveGeminiKey(),
+        nvidiaNimKey: resolveNvidiaKey(),
+        groqKey: resolveGroqKey()
+      });
+      if (res.cameraPreference) setCameraPreference(res.cameraPreference);
+      if (res.lightingPreference) setLightingPreference(res.lightingPreference);
+      if (res.reason) setCinematographyReason(res.reason);
+    } catch (err) {
+      console.warn('Fallo en detección de cinematografía:', err);
+    } finally {
+      setIsDetectingCinematography(false);
+    }
+  };
+
   // Guardar Personaje en el Banco Permanente
   const handleSaveCharacterToVault = (charToSave?: CharacterPersona | ScriptDirectorCharacter) => {
     const target = charToSave || activeChar || (detectedCharacters.length > 0 ? detectedCharacters[0] : null);
