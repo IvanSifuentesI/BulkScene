@@ -277,9 +277,15 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [isExtractingContext, setIsExtractingContext] = useState<boolean>(false);
 
   // 8. Visual Style & Auto-AI
-  const activeStyle = styles.find((s) => s.id === activeStyleId) || styles[0];
+  // styleMode: 'custom' = el usuario escribe manualmente (textarea vacío al inicio),
+  //            'auto' = la IA detecta y rellena automáticamente
+  const [styleMode, setStyleMode] = useState<'custom' | 'auto'>(() => {
+    return (savedSession?.customStyleInstructions ? 'auto' : 'custom') as 'custom' | 'auto';
+  });
+  const activeStyle = styles.find((s) => s.id === activeStyleId) || null;
+  // En modo custom el textarea empieza vacío; en modo auto carga lo guardado
   const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(() => {
-    return savedSession?.customStyleInstructions ?? (activeStyle?.promptModifier || '');
+    return savedSession?.customStyleInstructions ?? '';
   });
   const [isDetectingStyle, setIsDetectingStyle] = useState<boolean>(false);
   const [detectedStyleReason, setDetectedStyleReason] = useState<string | null>(() => {
@@ -565,6 +571,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       return;
     }
     setIsDetectingStyle(true);
+    setStyleMode('auto');
     try {
       const result = await detectStyleWithAI({
         scriptText,
@@ -582,6 +589,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       setDetectedStyleReason(result.reason);
     } catch (err) {
       console.warn('Fallo en detección de estilo:', err);
+      setStyleMode('custom');
     } finally {
       setIsDetectingStyle(false);
     }
@@ -1871,65 +1879,106 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               )}
             </div>
 
-            <div className="relative">
-              <select
-                value={activeStyleId || 'custom'}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === 'custom') {
-                    // Mantiene el texto actual del usuario
-                  } else {
-                    onSelectStyle(val);
-                    const matched = styles.find(s => s.id === val);
-                    if (matched) setCustomStyleInstructions(matched.promptModifier || matched.description);
-                  }
+            {/* Toggle: Personalizado / Automático */}
+            <div className="flex bg-[#07090e] rounded-xl p-1 gap-1 border border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => {
+                  setStyleMode('custom');
+                  // En modo custom no limpiamos lo escrito; solo cambiamos el modo
                 }}
-                className="w-full bg-[#121418] border-2 border-amber-500/70 text-amber-200 font-bold rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)] appearance-none cursor-pointer"
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  styleMode === 'custom'
+                    ? 'bg-amber-500 text-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <option value="custom" className="bg-[#121418] text-white">
-                  Estilo personalizado
-                </option>
-                {styles.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-[#121418] text-white">
-                    {s.name} ({s.category})
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-amber-400">
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
-
-            <textarea
-              rows={3}
-              value={customStyleInstructions}
-              onChange={(e) => setCustomStyleInstructions(e.target.value)}
-              placeholder="Instrucciones del Director de Fotografía..."
-              className="w-full bg-[#07090e] border border-white/[0.08] text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-amber-400 resize-none font-sans leading-relaxed"
-            />
-
-            <div className="flex items-center gap-2 pt-1">
+                ✏️ Personalizado
+              </button>
               <button
                 type="button"
                 onClick={handleAutoDetectStyle}
                 disabled={isDetectingStyle || !scriptText.trim()}
-                className="flex-1 py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 cursor-pointer"
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-40 ${
+                  styleMode === 'auto'
+                    ? 'bg-cyan-500 text-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                {isDetectingStyle ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Sparkles className="w-3.5 h-3.5 text-cyan-400" />}
-                <span>Auto-Detectar Estilo con IA</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSaveStyleToVault}
-                className="py-2 px-3.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                title="Guardar este estilo en el Banco de Estilos permanente"
-              >
-                <span>💾 Guardar en Banco</span>
+                {isDetectingStyle ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Analizando...
+                  </span>
+                ) : (
+                  '✨ Automático con IA'
+                )}
               </button>
             </div>
+
+            {/* Textarea de instrucciones de estilo */}
+            {styleMode === 'custom' ? (
+              <div className="space-y-1.5">
+                <textarea
+                  rows={3}
+                  value={customStyleInstructions}
+                  onChange={(e) => setCustomStyleInstructions(e.target.value)}
+                  placeholder="Describe el estilo visual que quieres (ej: fotografía 35mm, colores cálidos dorados, luz de atardecer, ultra realista...)&#10;&#10;💡 O usa el botón «Automático con IA» para que la IA lo detecte del guion."
+                  className="w-full bg-[#07090e] border border-white/[0.08] text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-amber-400 resize-none font-sans leading-relaxed"
+                />
+                {/* Selector de preset del banco (opcional) */}
+                {styles.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const matched = styles.find(s => s.id === e.target.value);
+                        if (matched) {
+                          setCustomStyleInstructions(matched.promptModifier || matched.description);
+                          onSelectStyle(matched.id);
+                        }
+                      }}
+                      className="flex-1 bg-[#0d111a] border border-white/[0.08] text-slate-300 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-400 cursor-pointer"
+                    >
+                      <option value="">📚 Cargar desde el banco de estilos...</option>
+                      {styles.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <textarea
+                  rows={3}
+                  value={customStyleInstructions}
+                  onChange={(e) => setCustomStyleInstructions(e.target.value)}
+                  placeholder="La IA completará aquí el estilo detectado del guion..."
+                  className="w-full bg-[#07090e] border border-cyan-500/30 text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-cyan-400 resize-none font-sans leading-relaxed"
+                />
+                {detectedStyleReason && (
+                  <p className="text-[10px] text-cyan-400 bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/20 leading-relaxed">
+                    💡 {detectedStyleReason}
+                  </p>
+                )}
+                {activeStyle && (
+                  <p className="text-[10px] text-amber-400/70 font-mono">
+                    Preset base: {activeStyle.name}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSaveStyleToVault}
+              disabled={!customStyleInstructions.trim()}
+              className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 shadow-sm cursor-pointer"
+              title="Guardar este estilo en el Banco de Estilos permanente"
+            >
+              <span>💾 Guardar Estilo en Banco</span>
+            </button>
           </div>
         </div>
 
@@ -2077,165 +2126,205 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           ))}
         </div>
 
-        {/* SECCIONES DE PERSONAJES: VACÍAS AL INICIO O LLENAS TRAS DETECTAR / SELECCIONAR */}
-        {(!activeChar && detectedCharacters.length === 0) ? (
-          /* ESTADO INICIAL VACÍO (Como pidió el usuario: secciones vacías con botón de auto-detección y guardado) */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
-                <UserCheck className="w-5 h-5 opacity-50" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-300 block">
-                  🎭 Protagonista Principal (Vacío - Sin asignar)
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 max-w-sm mx-auto">
-                  Haz clic en "Detectar Personajes con IA" arriba para analizar el guion y auto-completar esta ficha biométrica invariable.
-                </p>
-              </div>
-            </div>
+        {/* SECCIONES DE PERSONAJES */}
+        <div className="pt-2 space-y-3">
 
-            <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
-              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto">
-                <Users className="w-5 h-5 opacity-50" />
+          {/* PANEL SELECTOR DE PERSONAJES DEL BANCO */}
+          {characters.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span className="uppercase tracking-wider">Selecciona personajes del banco:</span>
+                <span className="text-purple-400">{activeCharacterId ? '1 seleccionado' : 'Ninguno seleccionado (modo sin personaje fijo)'}</span>
               </div>
-              <div>
-                <span className="text-xs font-bold text-slate-300 block">
-                  👥 Personaje Secundario (Opcional - Vacío)
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 max-w-sm mx-auto">
-                  La IA detectará personajes secundarios y calculará su continuidad o salida de escena automáticamente.
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* ESTADO ACTIVO: FICHAS CON DATOS Y BOTÓN DE GUARDADO EN BANCO */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {/* Ficha Protagonista */}
-            <div className="bg-[#07090e] border border-purple-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-purple-400" />
-                  <span>Protagonista: {activeChar?.name || detectedCharacters[0]?.name || 'Protagonista'}</span>
-                </span>
-                <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30 font-bold">
-                  Seed #{activeChar?.defaultSeed || detectedCharacters[0]?.defaultSeed || '482910'}
-                </span>
-              </div>
-
-              <div className="text-xs font-mono space-y-1.5 text-slate-300 bg-black/40 p-3 rounded-xl border border-white/[0.04]">
-                <div>
-                  <strong className="text-purple-400">Rostro/Cuerpo:</strong>{' '}
-                  {activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription}
-                </div>
-                <div>
-                  <strong className="text-purple-400">Vestimenta:</strong>{' '}
-                  {activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <select
-                  value={activeCharacterId || ''}
-                  onChange={(e) => onSelectCharacter(e.target.value || undefined)}
-                  className="bg-[#0d111a] border border-white/10 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-purple-400 flex-1 truncate"
+              <div className="flex flex-wrap gap-1.5">
+                {/* Chip "Sin personaje fijo" */}
+                <button
+                  type="button"
+                  onClick={() => onSelectCharacter(undefined)}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    !activeCharacterId
+                      ? 'bg-slate-600 border-slate-400 text-white shadow-md'
+                      : 'bg-white/[0.03] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/20'
+                  }`}
                 >
-                  <option value="">(Cambiar Protagonista)</option>
-                  {characters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} (Seed #{c.defaultSeed})
-                    </option>
-                  ))}
-                </select>
+                  🎭 Sin personaje fijo
+                </button>
+                {/* Chips de personajes del banco */}
+                {characters.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onSelectCharacter(c.id)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      activeCharacterId === c.id
+                        ? 'bg-purple-500 border-purple-400 text-black shadow-md shadow-purple-500/20'
+                        : 'bg-white/[0.03] border-white/[0.08] text-slate-300 hover:text-white hover:border-purple-500/50'
+                    }`}
+                    title={`Seed #${c.defaultSeed} — ${c.anchorDescription?.slice(0, 60)}...`}
+                  >
+                    👤 {c.name}
+                    {activeCharacterId === c.id && <span className="ml-1">✓</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* FICHA DEL PERSONAJE ACTIVO (si hay uno seleccionado o detectado) */}
+          {(activeChar || detectedCharacters.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Ficha Protagonista */}
+              <div className="bg-[#07090e] border border-purple-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                    <UserCheck className="w-4 h-4 text-purple-400" />
+                    <span>Protagonista: {activeChar?.name || detectedCharacters[0]?.name || 'Auto-detectado'}</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30 font-bold">
+                    Seed #{activeChar?.defaultSeed || detectedCharacters[0]?.defaultSeed || '482910'}
+                  </span>
+                </div>
+
+                <div className="text-xs font-mono space-y-1.5 text-slate-300 bg-black/40 p-3 rounded-xl border border-white/[0.04]">
+                  <div>
+                    <strong className="text-purple-400">Rostro/Cuerpo:</strong>{' '}
+                    {activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription || '—'}
+                  </div>
+                  <div>
+                    <strong className="text-purple-400">Vestimenta:</strong>{' '}
+                    {activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor || '—'}
+                  </div>
+                </div>
 
                 <button
                   type="button"
                   onClick={() => handleSaveCharacterToVault()}
-                  className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-sm"
+                  className="w-full px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                   title="Guardar este personaje en el Banco de Personajes permanente"
                 >
-                  <span>💾 Guardar en Banco</span>
+                  <span>💾 Guardar en Banco de Personajes</span>
                 </button>
               </div>
-            </div>
 
-            {/* Secundarios Detectados / Selector de Banco */}
-            <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-4 flex flex-col justify-between space-y-3">
-              <div>
-                <span className="text-xs font-bold text-white block mb-1">
-                  Continuidad y Ciclo Vital de Personajes
-                </span>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  El motor calcula automáticamente la consistencia biométrica. Si un personaje muere o desaparece en una escena, no saldrá en los planos posteriores.
-                </p>
-              </div>
-
-              {detectedCharacters.length > 1 && (
-                <div className="space-y-1.5 pt-2 border-t border-white/[0.04]">
-                  <span className="text-[10px] font-mono text-slate-400 block">Personajes Secundarios:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {detectedCharacters.slice(1).map((dc, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
-                      >
-                        <span>{dc.name}</span>
-                        <span className="opacity-60">({dc.alive ? 'Vivo' : 'Baja'})</span>
-                      </span>
-                    ))}
-                  </div>
+              {/* Secundarios Detectados */}
+              <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-4 flex flex-col justify-between space-y-3">
+                <div>
+                  <span className="text-xs font-bold text-white block mb-1">
+                    Personajes secundarios {detectedCharacters.length > 1 ? `(${detectedCharacters.length - 1} detectados)` : ''}
+                  </span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    La IA respeta la continuidad de todos los personajes. Si alguien muere o sale de escena, no aparecerá en planos posteriores.
+                  </p>
                 </div>
-              )}
+
+                {detectedCharacters.length > 1 && (
+                  <div className="space-y-1.5 pt-2 border-t border-white/[0.04]">
+                    <span className="text-[10px] font-mono text-slate-400 block">Detectados automáticamente:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {detectedCharacters.slice(1).map((dc, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSaveCharacterToVault(dc)}
+                          className="text-[10px] font-mono px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 hover:bg-cyan-500/20 transition-colors cursor-pointer"
+                          title="Clic para guardar este personaje en el banco"
+                        >
+                          <span>{dc.name}</span>
+                          <span className="opacity-60">({dc.alive ? 'Activo' : 'Baja'})</span>
+                          <span className="ml-1 opacity-50">💾</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {detectedCharacters.length <= 1 && !activeChar && (
+                  <p className="text-[10px] text-slate-500 italic">
+                    Los personajes secundarios aparecerán aquí tras detectar con IA.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* ESTADO VACÍO (sin personaje seleccionado ni detectado) */}
+          {!activeChar && detectedCharacters.length === 0 && characters.length === 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+                  <UserCheck className="w-5 h-5 opacity-50" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-300 block">🎭 Protagonista Principal</span>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Usa «Detectar Personajes con IA» para auto-completar esta ficha, o ve al Banco de Personajes para crear uno.
+                  </p>
+                </div>
+              </div>
+              <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto">
+                  <Layers className="w-5 h-5 opacity-50" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-300 block">👥 Personajes Secundarios</span>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    La IA los detectará automáticamente al analizar el guion.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 5. DIRECCIÓN DE CONTENIDO Y REPRESENTACIÓN (OPCIONAL) */}
+      {/* 5. DIRECCIÓN CINEMATOGRÁFICA (ENCUADRE E ILUMINACIÓN) */}
       <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
           <div className="flex items-center gap-2.5">
             <Sliders className="w-4 h-4 text-cyan-400" />
             <h3 className="text-sm font-bold text-white tracking-wide">
-              Dirección de Contenido y Representación Visual (Opcional)
+              Dirección Cinematográfica
             </h3>
           </div>
-          <span className="text-[10px] font-mono text-slate-400">
-            Ajusta encuadre y lentes sin modificar el estilo seleccionado
+          <span className="text-[10px] font-mono text-slate-500 hidden sm:block">
+            Define cómo se ve cada imagen generada
           </span>
         </div>
+
+        <p className="text-[11px] text-slate-400 leading-relaxed bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+          🎬 <strong className="text-slate-300">¿Para qué sirve esto?</strong> Estas opciones le indican a la IA cómo encuadrar cada toma y qué tipo de luz usar. Por ejemplo: si tu guion es épico, usa <em>Gran Plano General</em> + <em>Luz Volumétrica</em>. Si es íntimo o emocional, usa <em>Primeros Planos</em> + <em>Hora Dorada</em>.
+        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase font-bold block">
-              Encuadre y Escala de Planos:
+              📷 Encuadre y escala de planos:
             </label>
             <select
               value={cameraPreference}
               onChange={(e) => setCameraPreference(e.target.value)}
-              className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400"
+              className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400"
             >
-              <option value="variado_dinamico">Variado Dinámico (Plano general, medio y primer plano)</option>
-              <option value="primeros_planos">Primeros Planos Dramáticos (Enfoque en miradas y rostros)</option>
-              <option value="gran_plano_general">Gran Plano General Épico (Paisajes monumentales)</option>
-              <option value="camara_en_mano">Cámara en Mano de Acción (Sensación documental viva)</option>
+              <option value="variado_dinamico">🎥 Variado dinámico — mezcla planos generales, medios y primeros planos</option>
+              <option value="primeros_planos">👁️ Primeros planos — enfoque en rostros, emociones y miradas</option>
+              <option value="gran_plano_general">🌄 Gran plano general — paisajes monumentales y escenarios épicos</option>
+              <option value="camara_en_mano">🤝 Cámara en mano — sensación documental, cruda y real</option>
             </select>
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-mono text-slate-400 uppercase font-bold block">
-              Atmósfera de Iluminación Cinematográfica:
+              💡 Atmósfera de iluminación:
             </label>
             <select
               value={lightingPreference}
               onChange={(e) => setLightingPreference(e.target.value)}
-              className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-cyan-400"
+              className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-cyan-400"
             >
-              <option value="volumetrica_cinematica">Luz Volumétrica y Rayos de Dios (Cinemático)</option>
-              <option value="hora_dorada">Hora Dorada Cálida al Atardecer (Kodachrome)</option>
-              <option value="claroscuro_dramatico">Claroscuro Dramático de Alto Contraste (Rembrandt)</option>
-              <option value="neon_cyberpunk">Neón Contrastado Bicolor (Azul & Magenta)</option>
+              <option value="volumetrica_cinematica">✨ Volumétrica cinemática — rayos de luz y niebla épica</option>
+              <option value="hora_dorada">🌅 Hora dorada — luz cálida al amanecer o atardecer (Kodachrome)</option>
+              <option value="claroscuro_dramatico">🎭 Claroscuro dramático — alto contraste, sombras tensas (Rembrandt)</option>
+              <option value="neon_cyberpunk">🌆 Neón bicolor — azul y magenta, estética cyberpunk</option>
             </select>
           </div>
         </div>

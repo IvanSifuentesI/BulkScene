@@ -140,7 +140,17 @@ export const MainApplication: React.FC = () => {
       return DEFAULT_CHARACTERS;
     }
   });
-  const [activeCharacterId, setActiveCharacterId] = useState<string | undefined>('stickman-beard');
+  const [activeCharacterId, setActiveCharacterIdRaw] = useState<string | undefined>(() => {
+    return localStorage.getItem('bulkscene_active_character_id') || 'stickman-beard';
+  });
+  const setActiveCharacterId = (id: string | undefined) => {
+    setActiveCharacterIdRaw(id);
+    if (id) {
+      localStorage.setItem('bulkscene_active_character_id', id);
+    } else {
+      localStorage.removeItem('bulkscene_active_character_id');
+    }
+  };
 
   // Style Matrix
   const [styles, setStyles] = useState<StylePreset[]>(() => {
@@ -151,7 +161,17 @@ export const MainApplication: React.FC = () => {
       return DEFAULT_STYLES;
     }
   });
-  const [activeStyleId, setActiveStyleId] = useState<string | undefined>('stickman-doodle');
+  const [activeStyleId, setActiveStyleIdRaw] = useState<string | undefined>(() => {
+    return localStorage.getItem('bulkscene_active_style_id') || 'stickman-doodle';
+  });
+  const setActiveStyleId = (id: string | undefined) => {
+    setActiveStyleIdRaw(id);
+    if (id) {
+      localStorage.setItem('bulkscene_active_style_id', id);
+    } else {
+      localStorage.removeItem('bulkscene_active_style_id');
+    }
+  };
 
   // Active object references
   const activeCharacter = characters.find((c) => c.id === activeCharacterId);
