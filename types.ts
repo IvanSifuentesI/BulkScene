@@ -216,6 +216,46 @@ export interface CulturalTemporalContext {
   culture: string;
   environment: string;
   autoDetected?: boolean;
+  culturalLock?: string;
+  culturalAvoid?: string;
+  certaintyLevel?: string;
+}
+
+export interface ScriptDeepAnalysis {
+  premise?: {
+    theme?: string;
+    mainSituation?: string;
+    conflict?: string;
+    objective?: string;
+    problem?: string;
+    evolution?: string;
+    outcome?: string;
+    narrativeTone?: string;
+  };
+  narrativeStructure?: {
+    introduction?: string;
+    characterIntroduction?: string;
+    actions?: string;
+    plotTwist?: string;
+    revelations?: string;
+    conflicts?: string;
+    consequences?: string;
+    resolution?: string;
+  };
+  explicitElements?: {
+    people?: string[];
+    clothing?: string[];
+    objects?: string[];
+    places?: string[];
+    architecture?: string[];
+    actions?: string[];
+  };
+  physicalActions?: string[];
+  groundedEmotions?: string[];
+  continuityMemory?: string[];
+  doNotInventList?: string[];
+  visualSummary?: string;
+  rawText?: string;
 }
 
 export type CharacterConsistencyMode = 

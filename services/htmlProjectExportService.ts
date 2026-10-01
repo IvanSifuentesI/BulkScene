@@ -11,26 +11,35 @@
  * - Botones individuales de copiado por escena y personaje
  */
 
+import { ScriptDeepAnalysis } from '../types';
+
 export interface MasterStudioExportData {
   projectName: string;
   generatedAt?: string;
   scriptText: string;
   narrativeMode?: string;
+  deepAnalysis?: ScriptDeepAnalysis;
   culturalContext?: {
     epoch?: string;
     culture?: string;
     environment?: string;
+    culturalLock?: string;
+    culturalAvoid?: string;
+    certaintyLevel?: string;
   };
   visualStyle?: {
     name: string;
     modifier: string;
     reason?: string;
+    styleLock?: string;
+    styleAvoid?: string;
   };
   characters?: Array<{
     name: string;
     role?: string;
     anchorDescription?: string;
     clothingAnchor?: string;
+    characterLock?: string;
     defaultSeed?: number;
   }>;
   scenes: Array<{
@@ -52,6 +61,7 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
     generatedAt = new Date().toLocaleString('es-ES', { dateStyle: 'full', timeStyle: 'medium' }),
     scriptText,
     narrativeMode = 'Documental Secuencial',
+    deepAnalysis,
     culturalContext = {},
     visualStyle = { name: 'Personalizado', modifier: '' },
     characters = [],
@@ -410,27 +420,77 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
       <div class="card">
         <div class="card-title">
           <span>🏛️ Contexto Temporal y Cultural</span>
-          <span class="badge badge-cyan">Inferencia IA</span>
+          <span class="badge badge-cyan">${escapeHtml(culturalContext.certaintyLevel || 'Inferencia IA')}</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
-          <div><strong style="color: var(--cyan);">Época:</strong> ${escapeHtml(culturalContext.epoch || 'Contemporánea / Universal')}</div>
-          <div><strong style="color: var(--cyan);">Cultura:</strong> ${escapeHtml(culturalContext.culture || 'Cinematográfica')}</div>
+          <div><strong style="color: var(--cyan);">Época:</strong> ${escapeHtml(culturalContext.epoch || 'Contemporánea / Actual')}</div>
+          <div><strong style="color: var(--cyan);">Cultura:</strong> ${escapeHtml(culturalContext.culture || 'Universal')}</div>
           <div><strong style="color: var(--cyan);">Entorno:</strong> ${escapeHtml(culturalContext.environment || 'Atmosférico')}</div>
+          ${culturalContext.culturalLock ? `
+          <div style="margin-top: 6px; padding: 8px; background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; border-radius: 6px;">
+            <strong style="color: #34d399; font-size: 11px;">🔒 CULTURAL_LOCK:</strong>
+            <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(culturalContext.culturalLock)}</p>
+          </div>` : ''}
+          ${culturalContext.culturalAvoid ? `
+          <div style="margin-top: 4px; padding: 8px; background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; border-radius: 6px;">
+            <strong style="color: #f87171; font-size: 11px;">⛔ CULTURAL_AVOID:</strong>
+            <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(culturalContext.culturalAvoid)}</p>
+          </div>` : ''}
         </div>
       </div>
 
       <!-- ESTILO VISUAL CINEMATOGRÁFICO -->
       <div class="card">
         <div class="card-title">
-          <span>🎨 Estilo Visual Cinematográfico</span>
+          <span>🎨 Estilo Visual Personalizado</span>
           <span class="badge badge-amber">${escapeHtml(visualStyle.name || 'Personalizado')}</span>
         </div>
         <div style="font-size: 11px; font-family: monospace; color: #fde68a; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; line-height: 1.5;">
-          ${escapeHtml(visualStyle.modifier || 'Cinematic 35mm film photography, 8k')}
+          ${escapeHtml(visualStyle.modifier || 'Visual style custom tailored to script')}
         </div>
         ${visualStyle.reason ? `<p style="font-size: 11px; color: var(--text-muted); margin-top: 8px; font-style: italic;">${escapeHtml(visualStyle.reason)}</p>` : ''}
+        ${visualStyle.styleLock ? `
+        <div style="margin-top: 8px; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; border-radius: 6px;">
+          <strong style="color: #fbbf24; font-size: 11px;">🔒 STYLE_LOCK:</strong>
+          <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(visualStyle.styleLock)}</p>
+        </div>` : ''}
+        ${visualStyle.styleAvoid ? `
+        <div style="margin-top: 4px; padding: 8px; background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; border-radius: 6px;">
+          <strong style="color: #f87171; font-size: 11px;">⛔ STYLE_AVOID:</strong>
+          <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(visualStyle.styleAvoid)}</p>
+        </div>` : ''}
       </div>
     </div>
+
+    <!-- ANÁLISIS PROFUNDO DEL GUION (PASO 1) -->
+    ${deepAnalysis ? `
+    <div class="card">
+      <div class="card-title">
+        <span>🧠 Análisis Profundo del Guion (Paso 1 · Memoria Visual)</span>
+        <span class="badge badge-purple">Especificidad Garantizada</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; font-size: 12px;">
+        ${deepAnalysis.premise ? `
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+          <strong style="color: #c084fc;">📖 Premisa & Tema Central:</strong>
+          <p style="margin-top: 4px; color: #e2e8f0;">${escapeHtml(deepAnalysis.premise.theme || deepAnalysis.premise.mainSituation || '')}</p>
+          ${deepAnalysis.premise.narrativeTone ? `<p style="margin-top: 4px; color: var(--text-muted);"><strong>Tono:</strong> ${escapeHtml(deepAnalysis.premise.narrativeTone)}</p>` : ''}
+        </div>` : ''}
+        ${deepAnalysis.visualSummary ? `
+        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
+          <strong style="color: #38bdf8;">🎬 Resumen Visual:</strong>
+          <p style="margin-top: 4px; color: #e2e8f0;">${escapeHtml(deepAnalysis.visualSummary)}</p>
+        </div>` : ''}
+        ${deepAnalysis.doNotInventList && deepAnalysis.doNotInventList.length > 0 ? `
+        <div style="background: rgba(239,68,68,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(239,68,68,0.2);">
+          <strong style="color: #f87171;">🚫 NO Inventar (Indeterminado en Guion):</strong>
+          <ul style="margin-top: 4px; padding-left: 18px; color: #cbd5e1; font-size: 11px;">
+            ${deepAnalysis.doNotInventList.slice(0, 5).map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+      </div>
+    </div>
+    ` : ''}
 
     <!-- GUION COMPLETO DE LOCUCIÓN -->
     <div class="card">
@@ -458,7 +518,8 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
             <span class="badge badge-purple">${escapeHtml(c.role || 'PROTAGONIST')}</span>
           </div>
           <div class="char-detail"><strong>Aspecto Físico:</strong> ${escapeHtml(c.anchorDescription || 'Photorealistic consistent subject')}</div>
-          <div class="char-detail"><strong>Vestimenta:</strong> ${escapeHtml(c.clothingAnchor || 'Cinematic costume matching the era')}</div>
+          <div class="char-detail"><strong>Vestimenta:</strong> ${escapeHtml(c.clothingAnchor || 'Contextual wardrobe')}</div>
+          ${c.characterLock ? `<div class="char-detail" style="color: #c084fc;"><strong>CHARACTER_LOCK:</strong> ${escapeHtml(c.characterLock)}</div>` : ''}
           ${c.defaultSeed ? `<div class="char-detail"><strong>Seed:</strong> #${c.defaultSeed}</div>` : ''}
           <div style="margin-top: 10px;">
             <button class="btn-secondary" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(`${c.name}: ${c.anchorDescription}, ${c.clothingAnchor}`)}\`, 'Biometría de ${escapeJs(c.name)} copiada')">

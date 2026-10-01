@@ -15,9 +15,10 @@
  *   a la siguiente clave del pool. Cuando todo el pool se agota, reintenta
  *   desde la primera (round-robin). Si ninguna funciona → fallback NVIDIA → Groq.
  */
-import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter } from '../types';
-export type { ScriptDirectorCharacter };
+import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter, ScriptDeepAnalysis } from '../types';
+export type { ScriptDirectorCharacter, ScriptDeepAnalysis };
 import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
+import { studioLogger } from './studioLoggerService';
 
 export const DEFAULT_GROQ_API_KEY = '';
 export const DEFAULT_NVIDIA_NIM_API_KEY = '';
@@ -27,6 +28,138 @@ export const DEFAULT_NVIDIA_NIM_API_KEY = '';
 export const GEMINI_ANALYSIS_MODEL = 'gemini-3.8-flash';
 /** Motor de generación masiva: un prompt por escena, alta velocidad y volumen */
 export const GEMINI_LITE_MODEL = 'gemini-3.5-flash-lite';
+
+// ─── 5 MASTER PROMPTS OFICIALES DEL USUARIO ────────────────────────────────────
+export const MASTER_PROMPT_1_SCRIPT_ANALYSIS = `Analiza el guion completo antes de generar cualquier escena o prompt visual.
+Tu trabajo NO es resumir el guion ni convertir cada frase en una imagen genérica.
+Tu trabajo es construir una representación visual precisa de la historia para que posteriormente otro módulo pueda generar imágenes coherentes, específicas y visualmente conectadas con lo que realmente ocurre en el guion.
+
+REGLA PRINCIPAL:
+NO INVENTES información solamente para completar campos.
+Para cada elemento debes distinguir entre:
+* EXPLÍCITO: información directamente presente en el guion.
+* INFERIDO: información que puede deducirse razonablemente por el contexto narrativo.
+* INDETERMINADO: información que el guion no permite establecer.
+Cuando algo sea indeterminado, NO lo sustituyas por clichés cinematográficos.
+
+Analiza:
+1. HISTORIA Y PREMISA: Tema central, situación principal, conflicto, objetivo, problema, evolución de la situación, resultado o desenlace, tono narrativo.
+2. ESTRUCTURA NARRATIVA: Divide el guion en unidades narrativas (Introducción, Presentación de personajes, Acción, Cambio de situación, Revelaciones, Conflictos, Consecuencias, Resolución). Cada futura escena debe representar una acción, objeto o entorno REALMENTE relacionado.
+3. ELEMENTOS VISUALES EXPLÍCITOS: Personas, edad/sexo/apariencia si descrita, ropa, objetos, animales, lugares, arquitectura, naturaleza, vehículos, herramientas, comida, documentos, tecnología, elementos médicos/culturales, etc.
+4. ACCIONES: QUÉ está ocurriendo físicamente. Prioriza acciones observables (NO: "explica la situación"; MEJOR: "permanece sentado frente a la mesa señalando un documento abierto"). Si una acción no está presente ni puede inferirse razonablemente, no la inventes.
+5. EMOCIONES Y ESTADO DRAMÁTICO: Determina únicamente las emociones respaldadas por el texto.
+6. CONTINUIDAD: Identidad de personajes, edad aproximada, ropa, objetos importantes, lugares, época, arquitectura, iluminación dominante. Sirve como "memoria visual".
+7. ELEMENTOS QUE NO DEBEN INVENTARSE: Lista de información visual que el guion NO determina (ej. color de ojos no mencionado, ciudad no mencionada, año no mencionado, marca de ropa no mencionada). Estos elementos NO deben convertirse automáticamente en detalles arbitrarios.
+8. RESUMEN VISUAL DEL PROYECTO: Síntesis explicando quién aparece, dónde, cuándo, qué está pasando, qué elementos visuales son importantes, qué debe mantenerse constante y qué permanece abierto.`;
+
+export const MASTER_PROMPT_2_CULTURAL_TEMPORAL = `Analiza el guion para determinar el contexto histórico, geográfico, social y cultural necesario para representar visualmente la historia.
+NO inventes una época solamente porque necesitas completar el campo.
+NO utilices "cultura universal".
+NO utilices "period accurate" si no existe evidencia de una época histórica.
+
+Analiza:
+1. ÉPOCA: año exacto si aparece, década, siglo, período histórico, contemporáneo, futuro, o indeterminado. Indica el nivel de certeza.
+2. UBICACIÓN: país, región, ciudad, pueblo, zona rural, zona urbana, ubicación interior/exterior, entorno geográfico. Si no está determinado, indícalo como desconocido.
+3. CULTURA: idioma, vestimenta, religión, arquitectura, alimentación, costumbres, relaciones sociales, objetos, símbolos, tecnología, transporte.
+4. NIVEL DE CERTEZA: EXPLÍCITO / INFERENCIA FUERTE / INFERENCIA DÉBIL / NO DETERMINADO.
+5. ELEMENTOS VISUALES OBLIGATORIOS (CULTURAL_LOCK): Incluye solamente elementos que deben aparecer para mantener autenticidad.
+6. ELEMENTOS QUE NO DEBEN APARECER (CULTURAL_AVOID): Incluye anacronismos, objetos, ropa, arquitectura, tecnología o costumbres que contradigan el contexto determinado.
+7. ANACRONISMOS: Comprueba tecnología, ropa, vehículos, arquitectura, iluminación, armas, alimentos, documentos compatibles con época y lugar.
+8. CONTEXTO INDETERMINADO: Si el guion no permite establecer época o cultura específica, construye un contexto visual neutral pero coherente y explícitamente marca qué elementos quedan abiertos.
+
+OBJETIVO: La imagen debe parecer perteneciente al mismo lugar, época y cultura que la historia, no simplemente una imagen cinematográfica genérica.`;
+
+export const MASTER_PROMPT_3_VISUAL_STYLE = `Analiza el guion y determina cuál debe ser el lenguaje visual del proyecto.
+NO impongas automáticamente:
+* cinematic 35mm
+* film photography
+* 8k
+* shallow depth of field
+* dramatic lighting
+* golden hour
+* volumetric lighting
+Esos elementos solamente deben utilizarse si son coherentes con la historia.
+
+El estilo visual debe derivarse de: género narrativo, época, lugar, cultura, tono, tema, tipo de personajes, naturaleza de las acciones, intensidad dramática, ambiente y referencias visuales del guion.
+
+ANALIZA:
+1. GÉNERO VISUAL: documental, drama histórico, thriller, terror, comedia, romance, acción, religioso/bíblico, educativo, médico, social, biográfico, periodístico, cotidiano/realista, fantasía, ciencia ficción.
+2. REALISMO: fotográficas y realistas, documentalistas, hiperrealistas, cinematográficas, estilizadas, ilustrativas, etc.
+3. CÁMARA: handheld, estática, observacional, close-up, medium shot, wide shot, etc. NO utilices encuadres diferentes simplemente por hacer cada escena "más cinematográfica".
+4. ILUMINACIÓN: a partir del contexto (fuente natural, luz interior, velas, luz solar, luz urbana, luz hospitalaria, luz de oficina, noche, amanecer, etc.). La iluminación debe pertenecer al mundo de la historia.
+5. COLOR: paleta coherente con época, lugar, tono y ambiente. No agregues colores arbitrarios.
+6. TEXTURA VISUAL: imagen limpia, textura documental, grano de película, imagen digital, estética vintage, imagen clínica, etc.
+7. PROFUNDIDAD Y COMPOSICIÓN.
+8. REGLAS DE CONSISTENCIA (STYLE_LOCK): características visuales que deben mantenerse constantes entre todas las escenas.
+9. ELEMENTOS PROHIBIDOS (STYLE_AVOID): qué estilos NO deberían aparecer porque romperían la coherencia.
+
+IMPORTANTE: No conviertas "cinematic" en una respuesta automática. El objetivo es hacer que las imágenes parezcan pertenecer al MISMO UNIVERSO VISUAL que el guion.`;
+
+export const MASTER_PROMPT_4_CHARACTERS = `Analiza el guion exclusivamente para identificar y construir los personajes que deben aparecer visualmente.
+NO inventes personajes para llenar una cantidad mínima.
+NO conviertas automáticamente al narrador en protagonista visual.
+NO inventes rasgos físicos específicos que el guion no proporcione, salvo que sean necesarios para mantener coherencia visual y puedan establecerse como características neutrales.
+
+Para cada personaje identifica:
+1. IDENTIDAD: nombre, rol narrativo (protagonista, secundario, testigo, profesional, etc.).
+2. PRESENCIA: aparece físicamente vs solamente es mencionado vs habla vs es mostrado indirectamente. NO representes visualmente a alguien solamente porque su nombre aparece en el texto.
+3. EDAD: si no aparece, utiliza un rango visual razonable neutral, NO inventes una edad exacta.
+4. APARIENCIA: sexo/género, edad, cabello, piel, ojos, rostro, complexión. Clasifica cada rasgo como EXPLÍCITA / INFERIDA / NO DETERMINADA.
+5. VESTUARIO: época, profesión, situación, cultura, actividad. El vestuario debe ser coherente con el mundo narrativo. NO uses automáticamente "period-accurate tailored layered garments" si el guion no establece que sea histórico.
+6. OBJETOS PERSONALES: objetos que acompañen al personaje.
+7. COMPORTAMIENTO: postura, gestos, expresiones, actitud.
+8. IDENTIDAD VISUAL FIJA (CHARACTER_LOCK): características que deben permanecer constantes entre escenas. Si no está determinada, NO la inventes dentro del CHARACTER_LOCK.
+9. EVOLUCIÓN: si cambia físicamente, emocionalmente o en vestuario.
+10. REGLA FUNDAMENTAL: En cada escena donde aparezca, usar CHARACTER_LOCK como identidad base sin copiar toda la ficha literalmente, integrando solo lo necesario para esa escena.`;
+
+export const MASTER_PROMPT_5_SCENE_GENERATOR = `Genera las escenas visuales utilizando EXCLUSIVAMENTE la información obtenida de:
+1. ANALISIS_GUION
+2. STYLE_LOCK
+3. CHARACTER_LOCK
+4. CULTURAL_LOCK
+5. CONTEXT_LOCK
+
+REGLA PRINCIPAL:
+Cada escena debe representar visualmente el contenido específico de su fragmento de guion.
+NO generes una escena genérica que simplemente "represente la idea".
+NO repitas la misma acción con diferentes encuadres.
+NO introduzcas objetos, lugares, personajes o acciones que no tengan relación con el fragmento.
+
+NO utilices automáticamente:
+* cinematic 35mm
+* 8k
+* dramatic atmospheric lighting
+* golden hour
+* volumetric lighting
+* shallow depth of field
+* rustic room
+* wooden table
+* vintage laboratory
+* parchment
+* botanical charts
+Estos elementos solo pueden aparecer si los análisis previos los justifican.
+
+PARA CADA ESCENA determina:
+A. QUÉ ESTÁ DICIENDO EL GUION
+B. QUÉ INFORMACIÓN VISUAL PUEDE REPRESENTARLO
+C. QUÉ PERSONAJE O PERSONAJES PARTICIPAN
+D. QUÉ ESTÁ HACIENDO CADA PERSONAJE (ACCIÓN FÍSICA OBSERVABLE)
+E. DÓNDE ESTÁ OCURRIENDO
+F. QUÉ OBJETOS SON IMPORTANTES
+G. QUÉ EMOCIÓN DEBE TRANSMITIR
+H. QUÉ TIPO DE PLANO ES MÁS APROPIADO
+I. QUÉ ILUMINACIÓN ES COHERENTE CON EL ENTORNO
+J. QUÉ ELEMENTOS DEL STYLE_LOCK DEBEN APLICARSE
+K. QUÉ ELEMENTOS DEL CHARACTER_LOCK DEBEN APLICARSE
+L. QUÉ ELEMENTOS DEL CULTURAL_LOCK DEBEN APLICARSE
+
+REGLA DE VARIACIÓN: Las escenas pueden variar en plano, composición, distancia, perspectiva, pero NO variar arbitrariamente la identidad visual del proyecto.
+REGLA DE CONTINUIDAD: Conservar identidad de personajes, rasgos, vestuario, objetos, época y cultura.
+REGLA DE CAUSALIDAD: La escena debe ser consecuencia directa del texto. Si el texto dice "El hombre abre la puerta y entra", la imagen muestra al hombre abriendo o entrando por una puerta. NO mostrarlo mirando un documento o caminando por un bosque.
+REGLA DE ESPECIFICIDAD: Cada prompt debe responder claramente: ¿QUIÉN? ¿QUÉ HACE? ¿DÓNDE? ¿CUÁNDO? ¿CON QUÉ? ¿CÓMO? ¿POR QUÉ VISUALMENTE?
+COMPROBACIÓN INTERNA OBLIGATORIA ANTES DE ENTREGAR CADA PROMPT:
+"Si elimino el fragmento del guion, ¿el prompt todavía podría pertenecer a cualquier video genérico?"
+Si la respuesta es SÍ, el prompt es demasiado genérico y DEBES REHACERLO.`;
 
 
 // ─── ROTACIÓN DE CLAVES GEMINI ─────────────────────────────────────────────────
@@ -458,12 +591,12 @@ async function callLLMDirectorRaw(params: {
 export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise<DirectorAnalysisResponse> {
   const {
     scriptText,
-    model = 'gemini-2.0-flash',
+    model = GEMINI_LITE_MODEL,
     groqKey = DEFAULT_GROQ_API_KEY,
     nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
     geminiKey = '',
-    targetStyleName = 'Cinematográfico 35mm Hiperrealista',
-    targetStyleModifier = 'cinematic 35mm film photography, Kodak Portra 400 color science, natural atmospheric lighting, 8k',
+    targetStyleName = 'Estilo Específico del Guion',
+    targetStyleModifier = 'clean documentary photography, natural contextual lighting, sharp realistic textures',
     characterAnchor = '',
     narrativeMode = 'documental_secuencial',
     culturalContext,
@@ -474,64 +607,55 @@ export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise
     signal
   } = params;
 
+  studioLogger.addLog('STEP', 'Paso 5/5: Iniciando Generador de Escenas con IA...', {
+    model,
+    estilo: targetStyleName,
+    modo: narrativeMode,
+    totalPalabrasPacing: pacingWords
+  });
+
   const minWords = Math.max(4, pacingWords - 3);
   const maxWords = pacingWords + 5;
 
-  // Modos de Dirección Narrativa
-  const narrativeDirectives: Record<string, string> = {
-    documental_secuencial: 'MODO NARRATIVO: Documental Secuencial. Las escenas deben ser estrictamente consecutivas y conectadas por una relación de causa-efecto cronológica clara (la escena 2 nace directamente del final de la escena 1).',
-    motivacional_conceptual: 'MODO NARRATIVO: Motivacional / Conceptual. Cada escena debe ser una metáfora visual épica e impactante con gran carga emocional, no necesariamente ligada cronológicamente a la anterior, ideal para discursos de alta energía y ganchos de retención.',
-    storytelling_cinematico: 'MODO NARRATIVO: Storytelling Cinemático. Estructura clásica de 3 actos con gancho inicial, tensión creciente y clímax dramático.',
-    educativo_viral: 'MODO NARRATIVO: Educativo / Viral Faceless. Cortes muy rápidos, encuadres dinámicos y cambios de ángulo cada 1.8 a 2.5 segundos para retención máxima en Shorts/TikTok.'
-  };
-
-  // Directriz de Contexto Cultural y Temporal
+  // Directriz del Contexto Cultural y Temporal
   let culturalDirective = '';
-  if (culturalContext && (culturalContext.epoch || culturalContext.culture || culturalContext.environment)) {
+  if (culturalContext) {
     culturalDirective = `\nCONTEXTO TEMPORAL Y CULTURAL OBLIGATORIO:
-- Época: ${culturalContext.epoch || 'No especificada (interpretar del texto)'}
-- Cultura/Ambientación: ${culturalContext.culture || 'Universal'}
-- Entorno Visual: ${culturalContext.environment || 'Cinematográfico'}
-Todos los elementos de vestuario, arquitectura, utilería y atmósfera deben reflejar estrictamente este marco temporal y cultural en cada prompt visual.`;
+- Época: ${culturalContext.epoch || 'Contemporánea'}
+- Cultura: ${culturalContext.culture || 'Universal'}
+- Entorno: ${culturalContext.environment || 'Realista'}
+${culturalContext.culturalLock ? `- CULTURAL_LOCK: ${culturalContext.culturalLock}` : ''}
+${culturalContext.culturalAvoid ? `- CULTURAL_AVOID: ${culturalContext.culturalAvoid}` : ''}`;
   }
 
   // Directriz de Consistencia de Personajes
   let consistencyDirective = '';
-  if (characterConsistencyMode === 'nombre_en_prompt') {
-    consistencyDirective = '\nREGLA DE CONSISTENCIA: Si un personaje está presente en una escena, inyecta su nombre y rasgos físicos inmutables al inicio del prompt visual.';
-  } else if (characterConsistencyMode === 'detectar_muertes_salidas') {
-    consistencyDirective = '\nREGLA DE CONTINUIDAD VITAL: Si un personaje muere o abandona la historia en una escena, NO lo vuelvas a incluir en los prompts visuales de escenas posteriores.';
+  if (characterAnchor) {
+    consistencyDirective = `\nREGLA DE CONTINUIDAD (CHARACTER_LOCK):\n${characterAnchor}`;
   }
 
-  const baseSystemPrompt = `Eres el Director Supremo de Cine y Guiones para producciones de video viral de alta retención (YouTube Shorts, Reels, TikTok).
-Tu misión es transformar el guion del usuario en una estructura narrativa cinematográfica precisa y secuencial para generar imágenes escena por escena.
+  const baseSystemPrompt = `${MASTER_PROMPT_5_SCENE_GENERATOR}
 
-${narrativeDirectives[narrativeMode] || narrativeDirectives.documental_secuencial}
+MODO DE DIRECCIÓN Y CONTINUIDAD: ${narrativeMode}.
+Las escenas deben ser estrictamente consecutivas y conectadas por una relación de causa-efecto física clara.
+
+DIRECTRIZ DE ESTILO VISUAL:
+- Estilo: "${targetStyleName}".
+- Modificador: "${targetStyleModifier}".
+
 ${culturalDirective}
 ${consistencyDirective}
 
-DIRECTRIZ DE ESTILO VISUAL ABSOLUTA:
-- Estilo artístico ordenado: "${targetStyleName}".
-- Modificador visual clave: "${targetStyleModifier}".
-- REGLA DE ORO DE ESTILO: Cada uno de los prompts para cada escena DEBE estar escrito y concebido desde su primera palabra en el estilo visual seleccionado ("${targetStyleName}").
-- CERO PLANTILLAS GENÉRICAS: Está estrictamente prohibido usar fórmulas repetidas o clichés ("photorealistic 8k highly detailed"). Cada toma debe describir una pintura cinematográfica viva, específica e impactante.
-- REGLAS DE COHERENCIA OBLIGATORIA POR ESCENA:
-  1. PERSONAJES: Si la escena involucra personajes, describe su fisonomía exacta y su vestimenta específica definida para el proyecto.
-  2. CONTEXTO TEMPORAL/CULTURAL: La arquitectura, utilería, vehículos y entorno deben pertenecer de manera verosímil a la época.
-  3. MODO DE DIRECCIÓN Y CONTINUIDAD: Respeta la composición de cámara (establecimiento general, plano medio, primer plano, plano detalle dinámico) y la causa-efecto secuencial (la escena N fluye orgánicamente desde la escena N-1).
-  4. ACCIÓN VIVA DEL GUION: Visualiza el verbo y la acción de la frase específica.
-- LONGITUD POR PROMPT: Cada visualPrompt debe tener entre 250 y 650 caracteres en inglés. Rico en detalles visuales, lentes, iluminación y acción.
-- ANTI-CENSURA / CONTENIDO SEGURO: Evita terminología explícita de sangre ("blood"), muerte sangrienta ("slaughter/kill"); sustitúyelo por lenguaje dramático visual ("fallen silhouette", "engulfed by storm", "shadowy defeat") para que NVIDIA jamás active filtros de moderación.
+REGLAS DE ORO PARA CADA PROMPT VISUAL (visualPrompt):
+1. REGLA DE CAUSALIDAD: La imagen debe ser consecuencia DIRECTA del texto. Si el texto habla de niveles de glucosa o un vaso de agua, la imagen debe mostrar eso. NUNCA inventes una habitación rústica o un laboratorio vintage si no está en el guion.
+2. REGLA DE ESPECIFICIDAD: Cada prompt debe responder: ¿QUIÉN? ¿QUÉ HACE? ¿DÓNDE? ¿CON QUÉ? ¿CÓMO?
+3. EXTENSIÓN: Entre 200 y 480 caracteres en inglés. Sin clichés prohibidos ("rustic room", "vintage laboratory", "parchment", "golden hour", "cinematic 35mm", "8k").
+4. COMPROBACIÓN INTERNA: Si quitas el texto del guion y el prompt parece de cualquier video genérico, está mal concebido y debes rehacerlo para que sea 100% específico a esta escena.`;
 
-PROTOCOLO DE ACCIÓN DINÁMICA (CRÍTICO):
-- VISUALIZA EL VERBO: Si el texto dice correr, nadar o gritar, el sujeto debe estar en movimiento activo enérgico, jamás en una pose estática mirando a cámara.
-${characterAnchor ? `- PERSONAJE PROTAGÓNICO FIJADO: "${characterAnchor}". Mantén sus rasgos constantes.` : ''}`;
-
-  // Determinamos si el guion es extenso (> 18 escenas calculadas o > 200 palabras) para procesarlo por lotes
+  // Segmentación base en oraciones / frases
   const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
   const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
 
-  // Segmentación base en oraciones / frases
   const textSegments: string[] = [];
   if (precalculatedScenes && precalculatedScenes.length > 0) {
     precalculatedScenes.forEach(s => textSegments.push(s.text));
@@ -551,9 +675,9 @@ ${characterAnchor ? `- PERSONAJE PROTAGÓNICO FIJADO: "${characterAnchor}". Mant
 
   const isLongScript = textSegments.length > 16;
 
-  // CASO 1: Guion corto a moderado (<= 16 escenas) -> Procesamiento en 1 pasada completa
+  // CASO 1: Guion corto a moderado (<= 16 escenas)
   if (!isLongScript) {
-    if (onProgress) onProgress('Generando desglose cinematográfico con IA...', 1, 1);
+    if (onProgress) onProgress('Generando desglose de escenas con IA (Paso 5)...', 1, 1);
 
     const promptUser = `${baseSystemPrompt}
 
@@ -562,38 +686,31 @@ SEGMENTACIÓN Y CERO PÉRDIDA DE DATOS:
 - La unión de todos los campos "scriptSegment" DEBE reconstruir la totalidad del guion original sin omitir palabras.
 
 FORMATO DE RESPUESTA OBLIGATORIO:
-Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
+Responde ÚNICAMENTE con un objeto JSON válido:
 {
   "storyBible": {
     "summary": "Resumen conciso",
-    "genreAndTone": "Tono cinematográfico",
-    "culturalContext": "Contexto general"
+    "genreAndTone": "Tono visual específico",
+    "culturalContext": "${culturalContext?.epoch || 'Contemporáneo'}"
   },
-  "characters": [
-    {
-      "name": "Nombre",
-      "role": "PROTAGONIST",
-      "alive": true,
-      "description": "Rasgos visuales concisos"
-    }
-  ],
+  "characters": [],
   "scenes": [
     {
       "sceneNumber": 1,
       "scriptSegment": "Frase exacta del guion",
-      "visualPrompt": "Prompt en inglés <= 350 chars con ${targetStyleName} y acción dinámica",
-      "cameraAngle": "Extreme Close-Up | Dutch Angle | Wide Cinematic",
-      "lighting": "Volumetric golden hour | Neon contrast",
-      "charactersPresent": ["Protagonista"]
+      "visualPrompt": "Detailed English prompt strictly answering Who, What physical action, Where, and With what, matching the exact script segment without generic clichés",
+      "cameraAngle": "Medium observational shot | Extreme close-up on detail | Eye-level shot",
+      "lighting": "Natural daylight | Clean interior lighting | Clinical soft light",
+      "charactersPresent": []
     }
   ]
 }
 
-Analiza y segmenta cinematográficamente este guion:
+Analiza y genera las escenas visuales específicas para este guion:
 ${scriptText}`;
 
     const rawResponse = await callLLMDirectorRaw({
-      systemPrompt: 'Eres un director de cine experto en estructuración de guiones audiovisuales virales y prompts para IA.',
+      systemPrompt: 'Eres un director de cine documental y publicitario experto en prompts visuales específicos basados en guiones reales.',
       userPrompt: promptUser,
       model,
       geminiKey,
@@ -607,20 +724,23 @@ ${scriptText}`;
       throw new Error('La IA respondió pero no incluyó la lista de escenas en el JSON.');
     }
 
+    studioLogger.addLog('SUCCESS', `✓ Paso 5 completado: ${parsed.scenes.length} escenas generadas con causalidad estricta`, {
+      primeraEscena: parsed.scenes[0]?.visualPrompt?.slice(0, 100),
+      ultimaEscena: parsed.scenes[parsed.scenes.length - 1]?.visualPrompt?.slice(0, 100)
+    });
+
     return parsed as DirectorAnalysisResponse;
   }
 
-  // CASO 2: Guion largo (1h - 2h, 20 a 300+ escenas) -> Procesamiento por lotes secuenciales de 10-12 escenas
-  // Esto previene que se corte el JSON por límite de tokens de salida.
+  // CASO 2: Guion largo por lotes de 10-12 escenas
   const BATCH_SIZE = 12;
   const totalBatches = Math.ceil(textSegments.length / BATCH_SIZE);
   const allScenes: ScriptSceneResult[] = [];
   let globalStoryBible = {
     summary: scriptText.slice(0, 200) + '...',
     genreAndTone: targetStyleName,
-    culturalContext: culturalContext?.epoch || 'Cinematográfica'
+    culturalContext: culturalContext?.epoch || 'Contemporánea'
   };
-  let globalCharacters: any[] = [];
 
   for (let b = 0; b < totalBatches; b++) {
     const startIdx = b * BATCH_SIZE;
@@ -637,35 +757,37 @@ ${scriptText}`;
       );
     }
 
+    studioLogger.addLog('STEP', `Generando lote de escenas ${b + 1}/${totalBatches} (${sceneStartNum}-${sceneEndNum})...`);
+
     const previousContext = allScenes.length > 0
-      ? `CONTINUIDAD: La última escena generada (#${allScenes.length}) fue: "${allScenes[allScenes.length - 1].visualPrompt}". Mantén la coherencia visual con esta escena.`
+      ? `CONTINUIDAD: La última escena generada (#${allScenes.length}) fue: "${allScenes[allScenes.length - 1].visualPrompt}". Mantén la coherencia visual.`
       : '';
 
     const batchPrompt = `${baseSystemPrompt}
 
 ${previousContext}
 
-INSTRUCCIÓN ESPECÍFICA PARA ESTE LOTE DE ESCENAS:
-Debes procesar exactamente las siguientes ${batchSegments.length} frases numeradas del guion (desde la escena #${sceneStartNum} hasta la #${sceneEndNum}):
+INSTRUCCIÓN PARA ESTE LOTE:
+Procesa exactamente las siguientes ${batchSegments.length} frases numeradas del guion (Escenas #${sceneStartNum} a #${sceneEndNum}):
 ${batchSegments.map((seg, i) => `[Escena ${sceneStartNum + i}]: "${seg}"`).join('\n')}
 
-FORMATO DE RESPUESTA OBLIGATORIO:
-Responde ÚNICAMENTE con un JSON válido con este formato:
+FORMATO DE RESPUESTA:
+Responde ÚNICAMENTE con un JSON válido:
 {
   "scenes": [
     {
       "sceneNumber": ${sceneStartNum},
       "scriptSegment": "Frase exacta del guion",
-      "visualPrompt": "Prompt en inglés <= 350 chars con ${targetStyleName} y acción dinámica",
-      "cameraAngle": "Extreme Close-Up | Dutch Angle | Wide Cinematic",
-      "lighting": "Volumetric golden hour | Neon contrast",
-      "charactersPresent": ["Protagonista"]
+      "visualPrompt": "Prompt en inglés específico respetando la acción física del fragmento sin clichés genéricos",
+      "cameraAngle": "Medium observational shot | Close-up | Eye-level shot",
+      "lighting": "Natural contextual lighting",
+      "charactersPresent": []
     }
   ]
 }`;
 
     const rawBatch = await callLLMDirectorRaw({
-      systemPrompt: 'Eres un director de cine experto en estructuración de guiones por lotes y prompts de IA.',
+      systemPrompt: 'Eres un director de cine documental y publicitario experto en prompts visuales específicos basados en guiones reales.',
       userPrompt: batchPrompt,
       model,
       geminiKey,
@@ -682,39 +804,39 @@ Responde ÚNICAMENTE con un JSON válido con este formato:
         allScenes.push({
           sceneNumber: sceneStartNum + idx,
           scriptSegment: sc.scriptSegment || batchSegments[idx] || '',
-          visualPrompt: sc.visualPrompt || `Cinematic ${targetStyleName} capturing ${batchSegments[idx]}`,
-          cameraAngle: sc.cameraAngle || 'Medium cinematic shot',
-          lighting: sc.lighting || 'Volumetric cinematic lighting',
-          charactersPresent: sc.charactersPresent || (characterAnchor ? ['Protagonista'] : [])
+          visualPrompt: sc.visualPrompt || `Detailed realistic scene showing ${batchSegments[idx]}, ${targetStyleModifier}`,
+          cameraAngle: sc.cameraAngle || 'Medium observational shot',
+          lighting: sc.lighting || 'Natural contextual lighting',
+          charactersPresent: sc.charactersPresent || []
         });
       });
     } else {
-      // Si un lote específico falló en la estructura del JSON, autocompletar ese lote manteniendo el orden
       batchSegments.forEach((seg, idx) => {
         allScenes.push({
           sceneNumber: sceneStartNum + idx,
           scriptSegment: seg,
-          visualPrompt: `Cinematic ${targetStyleName}, ${characterAnchor ? `${characterAnchor}, ` : ''}capturing "${seg.slice(0, 100)}", ${targetStyleModifier}`,
-          cameraAngle: 'Dynamic cinematic framing',
-          lighting: 'Cinematic lighting',
-          charactersPresent: characterAnchor ? ['Protagonista'] : []
+          visualPrompt: `Realistic documentary framing showing ${seg.slice(0, 100)}, ${targetStyleModifier}`,
+          cameraAngle: 'Eye-level observational shot',
+          lighting: 'Natural lighting',
+          charactersPresent: []
         });
       });
     }
   }
 
+  studioLogger.addLog('SUCCESS', `✓ Generación por lotes completada: ${allScenes.length} escenas generadas`);
+
   return {
     storyBible: globalStoryBible,
-    characters: globalCharacters,
+    characters: [],
     scenes: allScenes
   };
 }
 
 /**
  * Motor de Desglose de Emergencia Local:
- * Si la API de LLM no responde (Failed to fetch, error de cuota o sin conexión),
- * este motor analiza las oraciones del guion de forma algorítmica y genera los prompts
- * cinemáticos en inglés respetando el estilo y personaje sin bloquear al usuario.
+ * Genera prompts limpios y neutros directamente de cada fragmento del guion,
+ * sin inventar clichés medievales ni cuero envejecido.
  */
 export function createLocalFallbackScenes(params: {
   scriptText: string;
@@ -725,11 +847,13 @@ export function createLocalFallbackScenes(params: {
 }): DirectorAnalysisResponse {
   const {
     scriptText,
-    targetStyleName = 'Cinematográfico 35mm Hiperrealista',
-    targetStyleModifier = 'cinematic 35mm film still, photorealistic, 8k',
+    targetStyleName = 'Fotografía Realista',
+    targetStyleModifier = 'clean realistic photography, natural lighting, high detail',
     characterAnchor = '',
     pacingWords = 8
   } = params;
+
+  studioLogger.addLog('WARN', 'Iniciando generación local algorítmica de respaldo para escenas');
 
   const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
   const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
@@ -749,20 +873,18 @@ export function createLocalFallbackScenes(params: {
   });
 
   const angles = [
-    'Cinematic wide angle establishing shot',
-    'Intense medium close-up, dramatic subject focus',
-    'Low angle heroic perspective, majestic depth',
-    'Dynamic action tracking shot, cinematic blur on motion',
-    'Dutch angle, high psychological tension and mystery',
-    'Extreme close-up macro detail, sharp cinematic lighting'
+    'Observational medium shot',
+    'Clear close-up perspective',
+    'Eye-level realistic framing',
+    'Detailed macro focus on subject',
+    'Contextual wide angle establishing view'
   ];
 
   const lightings = [
-    'volumetric god rays, atmospheric cinematic haze',
-    'dramatic high-contrast chiaroscuro shadows',
-    'golden hour warm twilight glow',
-    'cyberpunk neon rim light and reflection',
-    'natural soft diffuse daylight, 8k resolution'
+    'natural ambient daylight',
+    'clean soft interior illumination',
+    'balanced realistic lighting',
+    'clear direct contextual light'
   ];
 
   const scenes: ScriptSceneResult[] = rawChunks.map((segment, idx) => {
@@ -770,7 +892,7 @@ export function createLocalFallbackScenes(params: {
     const lighting = lightings[idx % lightings.length];
     const charPart = characterAnchor ? `${characterAnchor}, ` : '';
     
-    const visualPrompt = `${angle} capturing "${segment.slice(0, 100)}", ${charPart}${targetStyleModifier}, ${lighting}`.slice(0, 360);
+    const visualPrompt = `${angle} capturing "${segment.slice(0, 120)}", ${charPart}${targetStyleModifier}, ${lighting}`.slice(0, 360);
 
     return {
       sceneNumber: idx + 1,
@@ -778,7 +900,7 @@ export function createLocalFallbackScenes(params: {
       visualPrompt,
       cameraAngle: angle,
       lighting,
-      charactersPresent: characterAnchor ? ['Protagonista'] : []
+      charactersPresent: characterAnchor ? ['Sujeto'] : []
     };
   });
 
@@ -786,7 +908,7 @@ export function createLocalFallbackScenes(params: {
     storyBible: {
       summary: cleanText.slice(0, 180) + '...',
       genreAndTone: targetStyleName,
-      culturalContext: 'Producción de video viral automatizado'
+      culturalContext: 'Contemporáneo'
     },
     scenes
   };
@@ -1289,10 +1411,219 @@ export async function executeAnalysisWithFallbacks(params: {
 }
 
 /**
- * Detecta automáticamente el mejor estilo visual a partir del guion analizado con el LLM activo.
+ * PASO 1 (Gemini 3.8 Flash): Análisis Profundo del Guion y Memoria Visual
+ * Basado en MASTER_PROMPT_1_SCRIPT_ANALYSIS
+ */
+export async function analyzeFullScriptStructureWithAI(params: {
+  scriptText: string;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<ScriptDeepAnalysis> {
+  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim()) {
+    return {
+      premise: { theme: 'Sin guion proporcionado' },
+      visualSummary: 'Guion vacío'
+    };
+  }
+
+  studioLogger.addLog('STEP', 'Paso 1/5: Iniciando Análisis Profundo del Guion con IA...', {
+    model: model || GEMINI_ANALYSIS_MODEL,
+    caracteres: scriptText.length
+  });
+
+  const system = `${MASTER_PROMPT_1_SCRIPT_ANALYSIS}
+
+Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
+{
+  "premise": {
+    "theme": "Tema central específico del guion (ej: control de la glucosa y prevención de diabetes tipo 2 mediante hábitos)",
+    "mainSituation": "Situación principal observable",
+    "conflict": "Conflicto o dilema que aborda el texto",
+    "objective": "Objetivo de la narrativa",
+    "problem": "Problema principal",
+    "evolution": "Evolución de la situación",
+    "outcome": "Resultado o conclusión",
+    "narrativeTone": "Tono (ej: divulgativo científico, dramático urgente, inspiracional sobrio)"
+  },
+  "narrativeStructure": {
+    "introduction": "Unidad de apertura",
+    "actions": "Desarrollo de acciones principales",
+    "resolution": "Desenlace o mensaje final"
+  },
+  "explicitElements": {
+    "people": ["Personas explícitamente mencionadas con rol"],
+    "clothing": ["Prendas o vestuario explícitamente mencionado si lo hay"],
+    "objects": ["Objetos concretos del texto (ej: glucómetro, alimentos, vasos de agua)"],
+    "places": ["Lugares concretos (ej: consultorio, cocina moderna, laboratorio)"],
+    "actions": ["Acciones físicas observables directas"]
+  },
+  "physicalActions": ["Lista de acciones físicas concretas que ocurren en el texto"],
+  "groundedEmotions": ["Emociones respaldadas únicamente por el texto"],
+  "continuityMemory": ["Elementos que deben mantenerse constantes"],
+  "doNotInventList": ["Información visual que el guion NO determina y NO debe inventarse con clichés"],
+  "visualSummary": "Síntesis visual precisa de la historia explicando quién, dónde, cuándo y qué pasa realmente"
+}`;
+
+  const user = `GUION COMPLETO A ANALIZAR:
+"""
+${scriptText}
+"""
+
+Construye la representación visual precisa de la historia siguiendo las reglas de distinción entre EXPLÍCITO, INFERIDO e INDETERMINADO:`;
+
+  try {
+    const raw = await executeAnalysisWithFallbacks({
+      model: model || GEMINI_ANALYSIS_MODEL,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(raw);
+    const result: ScriptDeepAnalysis = {
+      premise: parsed.premise || { theme: 'Análisis de historia completado' },
+      narrativeStructure: parsed.narrativeStructure || {},
+      explicitElements: parsed.explicitElements || {},
+      physicalActions: Array.isArray(parsed.physicalActions) ? parsed.physicalActions : [],
+      groundedEmotions: Array.isArray(parsed.groundedEmotions) ? parsed.groundedEmotions : [],
+      continuityMemory: Array.isArray(parsed.continuityMemory) ? parsed.continuityMemory : [],
+      doNotInventList: Array.isArray(parsed.doNotInventList) ? parsed.doNotInventList : [],
+      visualSummary: parsed.visualSummary || 'Análisis visual del guion completado con éxito.',
+      rawText: raw
+    };
+
+    studioLogger.addLog('AI', '✓ Paso 1 (Análisis Profundo) completado exitosamente', {
+      tema: result.premise?.theme,
+      resumenVisual: result.visualSummary,
+      noInventar: result.doNotInventList?.slice(0, 3)
+    });
+
+    return result;
+  } catch (err: any) {
+    studioLogger.addLog('WARN', 'Aviso en Paso 1: Usando análisis heurístico de respaldo', { error: err?.message });
+    return {
+      premise: {
+        theme: scriptText.slice(0, 120),
+        narrativeTone: 'Informativo / Cinematográfico'
+      },
+      visualSummary: `Historia centrada en: ${scriptText.slice(0, 200)}...`,
+      doNotInventList: ['No inventar clichés medievales o de época si el tema es moderno/médico']
+    };
+  }
+}
+
+/**
+ * PASO 2 (Gemini 3.8 Flash): Extracción de Contexto Temporal y Cultural
+ * Basado en MASTER_PROMPT_2_CULTURAL_TEMPORAL
+ */
+export async function extractCulturalContextWithAI(params: {
+  scriptText: string;
+  deepAnalysis?: ScriptDeepAnalysis;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<CulturalTemporalContext> {
+  const { scriptText, deepAnalysis, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim()) {
+    return {
+      epoch: 'Contemporánea / Actual',
+      culture: 'Universal',
+      environment: 'Urbano / Realista'
+    };
+  }
+
+  studioLogger.addLog('STEP', 'Paso 2/5: Extrayendo Contexto Temporal, Geográfico y Cultural...', {
+    model: model || GEMINI_ANALYSIS_MODEL
+  });
+
+  const deepContext = deepAnalysis?.visualSummary
+    ? `\nMEMORIA VISUAL PREVIA DEL GUION:
+- Resumen Visual: ${deepAnalysis.visualSummary}
+- Elementos que NO deben inventarse: ${deepAnalysis.doNotInventList?.join(', ') || 'Ninguno'}`
+    : '';
+
+  const system = `${MASTER_PROMPT_2_CULTURAL_TEMPORAL}
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "epoch": "Época exacta o contemporánea (ej: Contemporánea actual, Siglo I d.C., Década de 1950, Año 2088)",
+  "culture": "Cultura y sociedad respaldada por el guion (ej: Sociedad médica contemporánea, Cultura urbana moderna, Galia romana)",
+  "environment": "Ubicación y entorno físico específico (ej: Consultorio médico iluminado y cocina contemporánea, Ciudad nocturna, Campo abierto)",
+  "certaintyLevel": "EXPLÍCITO | INFERENCIA FUERTE | INFERENCIA DÉBIL | NO DETERMINADO",
+  "culturalLock": "CULTURAL_LOCK: Elementos visuales estrictamente obligatorios para autenticidad temporal y cultural",
+  "culturalAvoid": "CULTURAL_AVOID: Anacronismos, objetos, vestuario o épocas que contradigan este contexto (ej: vestimenta medieval en video de salud actual)",
+  "autoDetected": true
+}`;
+
+  const user = `GUION COMPLETO:${deepContext}
+"""
+${scriptText}
+"""
+
+Extrae el contexto histórico, geográfico y cultural exacto respetando la autenticidad y evitando anacronismos:`;
+
+  try {
+    const raw = await executeAnalysisWithFallbacks({
+      model: model || GEMINI_ANALYSIS_MODEL,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(raw);
+    const result: CulturalTemporalContext = {
+      epoch: parsed.epoch || 'Contemporánea / Actual',
+      culture: parsed.culture || 'Contemporánea',
+      environment: parsed.environment || 'Entorno realista acorde al guion',
+      certaintyLevel: parsed.certaintyLevel || 'INFERENCIA FUERTE',
+      culturalLock: parsed.culturalLock || '',
+      culturalAvoid: parsed.culturalAvoid || '',
+      autoDetected: true
+    };
+
+    studioLogger.addLog('AI', '✓ Paso 2 (Contexto Cultural) completado', {
+      epoca: result.epoch,
+      cultura: result.culture,
+      entorno: result.environment,
+      culturalLock: result.culturalLock?.slice(0, 80)
+    });
+
+    return result;
+  } catch (err: any) {
+    studioLogger.addLog('WARN', 'Aviso en Paso 2: Usando contexto contemporáneo de respaldo', { error: err?.message });
+    return {
+      epoch: 'Contemporánea / Actual',
+      culture: 'Contemporánea',
+      environment: 'Entorno visual realista',
+      certaintyLevel: 'INFERENCIA DÉBIL',
+      culturalLock: 'Elementos visuales modernos coherentes con la temática del guion',
+      culturalAvoid: 'Anacronismos históricos o vestuario de época no justificado',
+      autoDetected: true
+    };
+  }
+}
+
+/**
+ * PASO 3 (Gemini 3.8 Flash): Extracción del Estilo Visual Único
+ * Basado en MASTER_PROMPT_3_VISUAL_STYLE
  */
 export async function detectStyleWithAI(params: {
   scriptText: string;
+  deepAnalysis?: ScriptDeepAnalysis;
   culturalContext?: CulturalTemporalContext;
   styles?: StylePreset[];
   model?: string;
@@ -1300,52 +1631,62 @@ export async function detectStyleWithAI(params: {
   nvidiaNimKey?: string;
   groqKey?: string;
   signal?: AbortSignal;
-}): Promise<{ recommendedStyleId: string; styleName: string; reason: string; customInstructions: string }> {
-  const { scriptText, culturalContext, styles = [], model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+}): Promise<{
+  recommendedStyleId: string;
+  styleName: string;
+  reason: string;
+  customInstructions: string;
+  styleLock?: string;
+  styleAvoid?: string;
+}> {
+  const { scriptText, deepAnalysis, culturalContext, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim()) {
     return {
       recommendedStyleId: 'custom',
-      styleName: 'Cinematográfico 35mm Hiperrealista',
+      styleName: 'Realismo Fotográfico Contemporáneo',
       reason: 'Estilo predeterminado para el guion.',
-      customInstructions: 'cinematic 35mm film photography, 8k, shallow depth of field, natural lighting, highly detailed'
+      customInstructions: 'clean contemporary photographic realism, natural soft studio and ambient lighting, sharp focus'
     };
   }
 
-  const contextStr = culturalContext
-    ? `\nCONTEXTO HISTÓRICO Y NARRATIVO DETECTADO DEL GUION:
-- Época: ${culturalContext.epoch || 'Universal'}
-- Cultura/Entorno: ${culturalContext.culture || 'Cinematográfica'} • ${culturalContext.environment || 'Atmosférico'}`
-    : '';
+  studioLogger.addLog('STEP', 'Paso 3/5: Formulando Lenguaje Visual y Estilo Específico...', {
+    model: model || GEMINI_ANALYSIS_MODEL
+  });
 
-  const system = `Eres un Director de Arte y Fotografía Cinematográfica galardonado con el Premio Óscar.
-Tu misión es leer el guion COMPLETO y diseñar una fórmula estética visual y cinematográfica ÚNICA, personalizada y específica para esta historia y su época.
+  const contextStr = [
+    culturalContext?.epoch ? `Época: ${culturalContext.epoch}` : '',
+    culturalContext?.culture ? `Cultura: ${culturalContext.culture}` : '',
+    culturalContext?.environment ? `Entorno: ${culturalContext.environment}` : '',
+    culturalContext?.culturalLock ? `CULTURAL_LOCK: ${culturalContext.culturalLock}` : '',
+    deepAnalysis?.visualSummary ? `Resumen Visual: ${deepAnalysis.visualSummary}` : ''
+  ].filter(Boolean).join('\n');
 
-REGLAS ABSOLUTAS:
-1. NO uses plantillas genéricas ni presets preexistentes.
-2. NO digas "con base a...". Diseña una propuesta cinematográfica original e irrepetible que defina:
-   - Óptica y lente (ej: anamorphic lenses, 35mm film stock, 70mm IMAX, telephoto lens con bokeh suave, etc.)
-   - Iluminación y atmósfera (ej: volumetric light shafts, high-contrast chiaroscuro, natural golden hour, cold neon diffusion, niebla y partículas, etc.)
-   - Paleta cromática y etalonaje (color grading) acorde al tono emocional del guion
-   - Textura, grano de película o acabado fotográfico ultra nítido
+  const system = `${MASTER_PROMPT_3_VISUAL_STYLE}
 
 Responde ÚNICAMENTE en formato JSON válido:
 {
-  "styleName": "Nombre evocador y específico del estilo creado (ej: Claroscuro Noir Cuántico 35mm, Épica Antigua de Alesia 70mm, Hiperrealismo Minimalista Ámbar)",
-  "customInstructions": "Fórmula completa de estilo en inglés (45-75 palabras) con la óptica, iluminación, paleta cromática y acabado fotográfico exacto para el generador de imágenes",
-  "reason": "Explicación concisa (1-2 oraciones) de por qué esta estética visual fue diseñada para la narrativa de este guion."
+  "styleName": "Nombre evocador y específico del estilo creado acorde al guion (ej: Fotografía Médica y Nutricional Contemporánea, Crónica Documental Urbana, Realismo Épico Antiguo)",
+  "visualGenre": "Género visual exacto (ej: médico, documental, drama, thriller, educativo)",
+  "customInstructions": "Fórmula completa de estilo en inglés (45-75 palabras) con la óptica, iluminación contextual del mundo de la historia, paleta cromática y textura exacta para el generador de imágenes. NUNCA fuerces 35mm ni golden hour si no corresponden al tema.",
+  "reason": "Explicación concisa (1-2 oraciones) de por qué esta estética visual fue diseñada para este guion.",
+  "styleLock": "STYLE_LOCK: Reglas de consistencia visual que deben mantenerse constantes entre todas las escenas",
+  "styleAvoid": "STYLE_AVOID: Estilos prohibidos que romperían la coherencia (ej: fantasía barroca, grano vintage en video científico)"
 }`;
 
-  const user = `GUION COMPLETO A ANALIZAR:${contextStr}
+  const user = `CONTEXTO DETERMINADO DEL PROYECTO:
+${contextStr || 'Interpretar directamente del guion'}
+
+GUION COMPLETO A ANALIZAR:
 """
 ${scriptText}
 """
 
-Diseña el estilo visual cinematográfico único para este guion:`;
+Diseña el lenguaje visual específico y coherente con el universo del guion:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
-      model,
+      model: model || GEMINI_ANALYSIS_MODEL,
       systemPrompt: system,
       userPrompt: user,
       geminiKey,
@@ -1353,100 +1694,46 @@ Diseña el estilo visual cinematográfico único para este guion:`;
       groqKey,
       signal
     });
+
     const parsed = extractCleanJson(raw);
-    const generatedInstructions = parsed.customInstructions || parsed.promptModifier || 'cinematic 35mm film still, photorealistic, 8k';
-    return {
+    const generatedInstructions = parsed.customInstructions || parsed.promptModifier || 'clean documentary photography, natural contextual lighting, sharp realistic textures';
+
+    const result = {
       recommendedStyleId: 'custom',
-      styleName: parsed.styleName || 'Estilo Cinemático Personalizado',
-      reason: parsed.reason || 'Estilo cinematográfico formulado exclusivamente para la atmósfera de este guion.',
-      customInstructions: generatedInstructions
+      styleName: parsed.styleName || 'Estilo Visual Específico del Guion',
+      reason: parsed.reason || 'Estilo visual derivado exclusivamente del género y la temática del guion.',
+      customInstructions: generatedInstructions,
+      styleLock: parsed.styleLock || '',
+      styleAvoid: parsed.styleAvoid || ''
     };
-  } catch (err) {
-    console.warn('[detectStyleWithAI] Falló el análisis de estilo:', err);
-    return {
-      recommendedStyleId: 'custom',
-      styleName: 'Cinematográfico 35mm Director',
-      reason: 'Estilo cinematográfico generado según el guion.',
-      customInstructions: 'cinematic 35mm film photography, 8k, shallow depth of field, dramatic atmospheric lighting'
-    };
-  }
-}
 
-/**
- * Extrae automáticamente el contexto temporal, cultural y ambiental del guion con análisis PROFUNDO.
- */
-export async function extractCulturalContextWithAI(params: {
-  scriptText: string;
-  model?: string;
-  geminiKey?: string;
-  nvidiaNimKey?: string;
-  groqKey?: string;
-  signal?: AbortSignal;
-}): Promise<CulturalTemporalContext> {
-  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
-
-  if (!scriptText.trim()) {
-    return {
-      epoch: 'Contemporánea / Actual',
-      culture: 'Universal / Cinematográfica',
-      environment: 'Urbano / Realista'
-    };
-  }
-
-  const system = `Eres un Historiador Cultural y Director de Producción Cinematográfica con décadas de experiencia en producciones de época.
-
-Tu tarea es leer el guion COMPLETO y extraer con máxima precisión:
-1. La ÉPOCA histórica o futurista (año exacto si se menciona, década, siglo, o período narrativo)
-2. La CULTURA y civilización dominante (sociedad, valores, costumbres, clase social)
-3. El ENTORNO físico y atmosférico donde ocurre la historia (locaciones, clima, arquitectura, objetos)
-
-NO uses palabras genéricas. Sé específico y concreto basándote en las pistas que el guion entrega.
-Por ejemplo: si el guion habla de "legiones" y "muros de Alesia", deduces "52 a.C., Galia romana".
-Si menciona "monitores cuánticos" y "apagón masivo", deduces "futuro cercano 2070-2090, metrópolis tecnológica".
-
-Responde ÚNICAMENTE en formato JSON:
-{
-  "epoch": "Época histórica precisa (ej: Siglo I d.C. Imperio Romano, Año 2088 Era Post-Colapso, Década de 1920 Jazz Age)",
-  "culture": "Cultura y ambientación específica (ej: Aristocracia romana militar, Corporaciones cyberpunk distópicas, Comunidades nativas amazónicas)",
-  "environment": "Entorno físico y atmosférico detallado (ej: Coliseo romano al atardecer con multitudes, Megaurbe neon bajo lluvia perpetua, Selva tropical con templos mayas)",
-  "autoDetected": true
-}`;
-
-  const user = `GUION COMPLETO:
-"""
-${scriptText}
-"""
-
-Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con máxima precisión:`;
-
-  try {
-    const raw = await executeAnalysisWithFallbacks({
-      model,
-      systemPrompt: system,
-      userPrompt: user,
-      geminiKey,
-      nvidiaNimKey,
-      groqKey,
-      signal
+    studioLogger.addLog('AI', '✓ Paso 3 (Estilo Visual) completado', {
+      nombreEstilo: result.styleName,
+      formula: result.customInstructions?.slice(0, 90),
+      styleLock: result.styleLock?.slice(0, 80)
     });
-    const parsed = extractCleanJson(raw);
+
+    return result;
+  } catch (err: any) {
+    studioLogger.addLog('WARN', 'Aviso en Paso 3: Usando estilo fotográfico limpio de respaldo', { error: err?.message });
     return {
-      epoch: parsed.epoch || 'Contemporánea',
-      culture: parsed.culture || 'Cinematográfica',
-      environment: parsed.environment || 'Urbano Atmosférico',
-      autoDetected: true
+      recommendedStyleId: 'custom',
+      styleName: 'Fotografía Realista Contemporánea',
+      reason: 'Estilo limpio y fidedigno adaptado a la narrativa.',
+      customInstructions: 'clean realistic photography, natural balanced lighting, true-to-life colors, sharp details',
+      styleLock: 'Consistencia en iluminación realista y paleta natural',
+      styleAvoid: 'Clichés medievales, grano antiguo y estilización fantástica'
     };
-  } catch (err) {
-    console.warn('[extractCulturalContextWithAI] Falló el análisis de contexto:', err);
-    return { epoch: 'Época determinada por la narración', culture: 'Cinematográfica universal', environment: 'Entorno narrativo inmersivo', autoDetected: true };
   }
 }
 
 /**
- * Detecta personajes, protagonistas y secundarios, ropa invariante y ciclo vital con análisis PROFUNDO.
+ * PASO 4 (Gemini 3.8 Flash): Extracción de Personajes y Construcción de CHARACTER_LOCK
+ * Basado en MASTER_PROMPT_4_CHARACTERS
  */
 export async function detectCharactersWithAI(params: {
   scriptText: string;
+  deepAnalysis?: ScriptDeepAnalysis;
   culturalContext?: CulturalTemporalContext;
   visualStyle?: { name?: string; modifier?: string };
   model?: string;
@@ -1455,43 +1742,46 @@ export async function detectCharactersWithAI(params: {
   groqKey?: string;
   signal?: AbortSignal;
 }): Promise<ScriptDirectorCharacter[]> {
-  const { scriptText, culturalContext, visualStyle, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+  const { scriptText, deepAnalysis, culturalContext, visualStyle, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim()) return [];
+
+  studioLogger.addLog('STEP', 'Paso 4/5: Identificando Personajes y Generando CHARACTER_LOCK...', {
+    model: model || GEMINI_ANALYSIS_MODEL
+  });
 
   const contextStr = [
     culturalContext?.epoch ? `Época: ${culturalContext.epoch}` : '',
     culturalContext?.culture ? `Cultura: ${culturalContext.culture}` : '',
     culturalContext?.environment ? `Entorno: ${culturalContext.environment}` : '',
-    visualStyle?.name ? `Estilo Visual: ${visualStyle.name}` : ''
+    visualStyle?.name ? `Estilo Visual: ${visualStyle.name}` : '',
+    deepAnalysis?.visualSummary ? `Resumen Visual: ${deepAnalysis.visualSummary}` : ''
   ].filter(Boolean).join(' | ');
 
-  const system = `Eres el Director de Casting y Continuidad Visual de grandes superproducciones de Hollywood.
+  const system = `${MASTER_PROMPT_4_CHARACTERS}
 
-Tu misión es leer el guion COMPLETO y:
-1. Identificar con precisión TODOS los personajes que tienen presencia en la historia (protagonistas y secundarios relevantes).
-2. Para cada personaje, construir una ficha biométrica y de vestuario INVARIABLE e INMUTABLE.
-3. REGLA ESTRICTA DE DETALLE (PROHIBIDO LO GENÉRICO):
-   - Aspecto Físico (anchorDescription): En inglés. Debes definir edad aproximada exacta, etnia, estructura facial (mandíbula, pómulos), ojos (color y forma), cabello (largo, textura, corte, color), complexión física (altura, contextura atlética/delgada/robusta), y rasgos únicos (cicatrices, barba, miradas).
-   - Vestimenta (clothingAnchor): En inglés. Si el guion no detalla la ropa, TÚ DEBES ESTIMARLA Y DEFINIRLA con prendas concretas acordes a la época y cultura (${contextStr || 'la época de la historia'}), indicando colores precisos, telas, capas, calzado y accesorios (capas de lana roja, armadura de placas, gabardina de cuero envejecido con cuello alto, joyas, botas, etc.).
-   - PROHIBIDO USAR FRASES GENÉRICAS como "cinematic costume matching the setting" o "subject with facial features". Cada personaje debe sonar como un actor real con vestuario de producción.
+REGLAS ESTRICTAS DE RESPUESTA:
+1. Si el guion es expositivo/educativo (ej: sobre salud, nutrición, ciencia, tecnología) y NO hay protagonistas explícitos con nombres o biografías, puedes definir arquetipos contextuales (ej: paciente contemporáneo, médico especialista en bata clínica blanca, persona en cocina moderna) O dejar la lista vacía si las escenas se enfocarán en objetos, alimentos y procesos biológicos.
+2. VESTUARIO CONTEXTUAL (PROHIBIDO "period-accurate tailored layered garments"): El vestuario DEBE pertenecer a la profesión y época real (${contextStr || 'época contemporánea'}).
+3. Clasifica la presencia: Solo incluye personajes que aparezcan físicamente (no aquellos meramente mencionados).
 
 Responde ÚNICAMENTE en formato JSON:
 {
   "characters": [
     {
-      "name": "Nombre del personaje",
-      "role": "PROTAGONIST",
+      "name": "Nombre o Rol concreto (ej: Paciente adulto, Doctora especialista, Marcus)",
+      "role": "PROTAGONIST | SECONDARY",
       "alive": true,
       "exitScene": null,
-      "anchorDescription": "Detailed facial and physical biometrics in English: exact age, eye color, hair style and color, facial structure, skin tone, build, distinctive marks",
-      "clothingAnchor": "Detailed wardrobe in English: specific garments, fabrics, colors, period-accurate accessories, footwear",
+      "anchorDescription": "Biometría facial y física en inglés: edad aproximada realista, estructura facial, cabello, piel, complexión",
+      "clothingAnchor": "Vestuario contextual en inglés acorde al rol y época: prendas contemporáneas/médicas/laborales concretas con telas y colores",
+      "characterLock": "CHARACTER_LOCK conciso con los rasgos inmutables que deben mantenerse entre escenas",
       "defaultSeed": 482910
     }
   ]
 }`;
 
-  const user = `MARCO TEMPORAL Y ESTÉTICO DEL PROYECTO:
+  const user = `MARCO TEMPORAL Y NARRATIVO:
 ${contextStr || 'Interpretar directamente del guion'}
 
 GUION COMPLETO:
@@ -1499,11 +1789,11 @@ GUION COMPLETO:
 ${scriptText}
 """
 
-Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos y vestimenta detallada e invariable:`;
+Extrae los personajes que deben aparecer físicamente y define su CHARACTER_LOCK:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
-      model,
+      model: model || GEMINI_ANALYSIS_MODEL,
       systemPrompt: system,
       userPrompt: user,
       geminiKey,
@@ -1511,32 +1801,33 @@ Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biom�
       groqKey,
       signal
     });
+
     const parsed = extractCleanJson(raw);
     if (parsed.characters && Array.isArray(parsed.characters) && parsed.characters.length > 0) {
-      return parsed.characters.map((c: any) => ({
-        name: c.name || 'Protagonista',
-        role: c.role === 'SECONDARY' ? 'SECONDARY' : 'PROTAGONIST',
+      const mapped = parsed.characters.map((c: any) => ({
+        name: c.name || 'Sujeto',
+        role: c.role === 'SECONDARY' ? 'SECONDARY' as const : 'PROTAGONIST' as const,
         alive: c.alive !== false,
         exitScene: c.exitScene ?? null,
-        anchorDescription: c.anchorDescription || 'Photorealistic 35yo subject with defined sharp facial features, intense gaze, athletic build',
-        clothingAnchor: c.clothingAnchor || 'Detailed cinematic tailored costume with realistic textile textures matching the narrative era',
-        defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000)
+        anchorDescription: c.anchorDescription || 'Contemporary realistic subject with natural facial features',
+        clothingAnchor: c.clothingAnchor || 'Contemporary casual or professional clothing matching the scene setting',
+        defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000),
+        characterLock: c.characterLock || `${c.name || 'Sujeto'}: consistent appearance and contextual attire`
       }));
+
+      studioLogger.addLog('AI', `✓ Paso 4 (Personajes) completado: ${mapped.length} personaje(s) identificado(s)`, {
+        personajes: mapped.map((m: any) => `${m.name} (${m.role}) - ${m.clothingAnchor.slice(0, 45)}`)
+      });
+
+      return mapped;
     }
-  } catch (err) {
-    console.warn('[detectCharactersWithAI] Falló detección de personajes:', err);
+  } catch (err: any) {
+    studioLogger.addLog('WARN', 'Aviso en Paso 4: Sin personajes explícitos detectados o fallo de IA', { error: err?.message });
   }
 
-  const sampleSeed = Math.floor(Math.random() * 900000) + 100000;
-  return [{
-    name: 'Protagonista',
-    role: 'PROTAGONIST',
-    alive: true,
-    exitScene: null,
-    anchorDescription: 'Photorealistic character with sharp facial features, determined cinematic gaze, defined cheekbones and weathered hair',
-    clothingAnchor: 'Period-accurate tailored layered garments with weathered leather and textile textures',
-    defaultSeed: sampleSeed
-  }];
+  // Fallback neutral contextual: NO forzar ropa de cuero medieval
+  studioLogger.addLog('INFO', 'Paso 4: Guion sin personajes ficticios obligatorios; se usarán sujetos contextuales limpios');
+  return [];
 }
 
 /**
@@ -1553,44 +1844,37 @@ export async function detectCinematographyWithAI(params: {
   const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim()) {
-    return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
+    return { cameraPreference: 'variado_dinamico', lightingPreference: 'natural_contextual', reason: 'Valores por defecto.' };
   }
 
-  const system = `Eres el Director de Fotografía (DP) más premiado del mundo, con Óscar honorífico en cinematografía.
+  const system = `Eres un Director de Fotografía (DP) cinematográfico y documentalista.
+Lee el guion COMPLETO y determina el encuadre e iluminación más adecuados para este tema específico.
 
-Lee el guion COMPLETO y determina:
-1. El ENCUADRE más efectivo para este contenido específico
-2. La ILUMINACIÓN más apropiada para la atmósfera emocional del guion
+Opciones para encuadre (cameraPreference):
+- "variado_dinamico": Mezcla fluida de planos generales, planos medios y primeros planos.
+- "primeros_planos": Enfoque en expresiones, rostros o detalles íntimos.
+- "gran_plano_general": Paisajes amplios, escenarios monumentales o entornos globales.
+- "camara_en_mano": Sensación documental cercana, realista e inmediata.
 
-Opciones disponibles para encuadre (cameraPreference):
-- "variado_dinamico": Mezcla de planos generales, medios y primeros planos. Para historias con múltiples locaciones y acción variada.
-- "primeros_planos": Enfoque en rostros, emociones y miradas. Para historias íntimas, psicológicas o emocionales.
-- "gran_plano_general": Paisajes monumentales y escenarios épicos. Para epopeyas, naturaleza, guerra, fantasía épica.
-- "camara_en_mano": Sensación documental cruda y real. Para reportajes, mockumentary, acción urbana, realismo social.
-
-Opciones disponibles para iluminación (lightingPreference):
-- "volumetrica_cinematica": Rayos de luz, niebla y volumen. Para drama épico, ciencia ficción, fantasía oscura.
-- "hora_dorada": Luz cálida al amanecer o atardecer (Kodachrome). Para romance, nostalgia, drama emocional positivo.
-- "claroscuro_dramatico": Alto contraste, sombras tensas (Rembrandt). Para thriller, noir, suspenso, drama psicológico.
-- "neon_cyberpunk": Azul y magenta, neón bicolor. Para ciencia ficción urbana, cyberpunk, futuro distópico.
+Opciones para iluminación (lightingPreference):
+- "natural_contextual": Iluminación realista y natural del entorno (luz de día, interiores limpios, clínicas o cocinas según corresponda).
+- "volumetrica_cinematica": Rayos de luz, niebla y volumen para drama épico o ciencia ficción.
+- "hora_dorada": Luz cálida al atardecer para nostalgia o romance.
+- "claroscuro_dramatico": Alto contraste y sombras marcadas para suspenso o crimen.
+- "neon_cyberpunk": Luces de neón para entornos urbanos futuristas.
 
 Responde ÚNICAMENTE en formato JSON:
 {
   "cameraPreference": "valor-exacto-de-la-lista",
   "lightingPreference": "valor-exacto-de-la-lista",
-  "reason": "Explicación de 1-2 oraciones de por qué estas elecciones potencian este guion específico."
+  "reason": "Explicación concisa de por qué estas elecciones respetan la historia."
 }`;
 
-  const user = `GUION COMPLETO:
-"""
-${scriptText}
-"""
-
-Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
+  const user = `GUION COMPLETO:\n"""\n${scriptText}\n"""\nDetermina encuadre e iluminación coherentes:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
-      model,
+      model: model || GEMINI_ANALYSIS_MODEL,
       systemPrompt: system,
       userPrompt: user,
       geminiKey,
@@ -1599,13 +1883,15 @@ Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
       signal
     });
     const parsed = extractCleanJson(raw);
-    return {
+    const res = {
       cameraPreference: parsed.cameraPreference || 'variado_dinamico',
-      lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
-      reason: parsed.reason || 'Cinematografía optimizada para el guion.'
+      lightingPreference: parsed.lightingPreference || 'natural_contextual',
+      reason: parsed.reason || 'Cinematografía adaptada al tema del guion.'
     };
-  } catch (err) {
-    console.warn('[detectCinematographyWithAI] Falló detección de cinematografía:', err);
-    return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
+    studioLogger.addLog('AI', 'Encuadre e iluminación configurados', res);
+    return res;
+  } catch (err: any) {
+    return { cameraPreference: 'variado_dinamico', lightingPreference: 'natural_contextual', reason: 'Cinematografía contextual balanceada.' };
   }
 }
+

@@ -42,15 +42,19 @@ import {
   generateMasterStudioHtml, 
   saveMasterStudioHtmlFile 
 } from '../services/htmlProjectExportService';
+import { StudioTerminal } from './StudioTerminal';
+import { studioLogger } from '../services/studioLoggerService';
 import { 
   CharacterPersona, 
   StylePreset, 
   ScriptSceneResult,
   DirectionNarrativeMode,
   CulturalTemporalContext,
-  CharacterConsistencyMode
+  CharacterConsistencyMode,
+  ScriptDeepAnalysis
 } from '../types';
 import { 
+  analyzeFullScriptStructureWithAI,
   analyzeScriptWithLLM, 
   createLocalFallbackScenes,
   detectStyleWithAI,
@@ -337,6 +341,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [narrativeMode, setNarrativeMode] = useState<DirectionNarrativeMode>(() => {
     return savedSession?.narrativeMode ?? 'documental_secuencial';
   });
+
+  // 6.1. Deep Script Analysis (Paso 1 · Memoria Visual)
+  const [deepScriptAnalysis, setDeepScriptAnalysis] = useState<ScriptDeepAnalysis | null>(null);
 
   // 7. Cultural & Temporal Context
   const [culturalContext, setCulturalContext] = useState<CulturalTemporalContext>(() => {
@@ -669,6 +676,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const result = await detectStyleWithAI({
         scriptText,
+        deepAnalysis: deepScriptAnalysis || undefined,
         culturalContext,
         styles,
         model: selectedAnalysisModel,
@@ -704,7 +712,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   const handleConfirmSaveStyleToVault = () => {
     const finalName = newStyleNameInput.trim() || 'Estilo Cinemático Personalizado';
-    const styleModifier = customStyleInstructions.trim() || 'cinematic 35mm film photography, 8k';
+    const styleModifier = customStyleInstructions.trim() || 'clean realistic photography, natural lighting';
     const newStyle: StylePreset = {
       id: `style-custom-${Date.now()}`,
       name: finalName,
@@ -740,6 +748,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const extracted = await extractCulturalContextWithAI({
         scriptText,
+        deepAnalysis: deepScriptAnalysis || undefined,
         model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
@@ -768,6 +777,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const detected = await detectCharactersWithAI({
         scriptText,
+        deepAnalysis: deepScriptAnalysis || undefined,
         culturalContext,
         visualStyle: { name: detectedStyleName, modifier: customStyleInstructions },
         model: selectedAnalysisModel,
@@ -903,17 +913,41 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       }
 
       // Variable para guardar el contexto activo
+      let deepAnalysisResult: ScriptDeepAnalysis | undefined = undefined;
       let activeContext = { ...culturalContext };
       let styleNameToUse = detectedStyleName || 'Estilo Cinemático Personalizado';
       let styleModifierToUse = customStyleInstructions.trim();
       let activeCharactersList = detectedCharacters;
 
+      studioLogger.addLog('STEP', `▶ Iniciando Pipeline de Dirección (${mode === 'full_auto' ? 'Modo Automático Total' : 'Solo Prompts'})...`, {
+        modeloAnalisis: selectedAnalysisModel,
+        modeloPrompts: selectedPromptModel,
+        caracteresGuion: currentScript.length
+      });
+
       if (mode === 'full_auto') {
-        // PASO 1 (Gemini 3.8 Flash): Crear el Contexto Temporal y Cultural
-        setPipelineProgressText('Paso 1/4 (Gemini 3.8 Flash): Analizando Época, Cultura y Entorno del guion...');
+        // PASO 1 (Gemini 3.8 Flash): Análisis Profundo del Guion y Memoria Visual
+        setPipelineProgressText('Paso 1/5 (Gemini 3.8 Flash): Análisis Profundo del Guion y Memoria Visual...');
+        try {
+          deepAnalysisResult = await analyzeFullScriptStructureWithAI({
+            scriptText: currentScript,
+            model: selectedAnalysisModel,
+            geminiKey: resolveGeminiKey(),
+            nvidiaNimKey: resolveNvidiaKey(),
+            groqKey: resolveGroqKey()
+          });
+          setDeepScriptAnalysis(deepAnalysisResult);
+        } catch (p1Err: any) {
+          console.warn('Aviso Paso 1:', p1Err);
+          studioLogger.addLog('WARN', 'Fallo en Paso 1, continuando con inferencia directa', { error: p1Err?.message });
+        }
+
+        // PASO 2 (Gemini 3.8 Flash): Crear el Contexto Temporal y Cultural
+        setPipelineProgressText('Paso 2/5 (Gemini 3.8 Flash): Extrayendo Contexto Temporal y Cultural (CULTURAL_LOCK)...');
         try {
           activeContext = await extractCulturalContextWithAI({
             scriptText: currentScript,
+            deepAnalysis: deepAnalysisResult,
             model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
@@ -922,15 +956,17 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setCulturalContext(activeContext);
           const textSummary = [activeContext.epoch, activeContext.culture, activeContext.environment].filter(Boolean).join(' • ');
           setCulturalContextInput(textSummary || activeContext.epoch || '');
-        } catch (cErr) {
+        } catch (cErr: any) {
           console.warn('Aviso Contexto:', cErr);
+          studioLogger.addLog('WARN', 'Fallo en Paso 2', { error: cErr?.message });
         }
 
-        // PASO 2 (Gemini 3.8 Flash): Crear el Estilo Visual único acorde al guion y contexto
-        setPipelineProgressText('Paso 2/4 (Gemini 3.8 Flash): Diseñando Estilo Visual Cinematográfico único para el guion...');
+        // PASO 3 (Gemini 3.8 Flash): Crear el Estilo Visual único acorde al guion y contexto
+        setPipelineProgressText('Paso 3/5 (Gemini 3.8 Flash): Formulando Estilo Visual Específico (STYLE_LOCK)...');
         try {
           const styleRes = await detectStyleWithAI({
             scriptText: currentScript,
+            deepAnalysis: deepAnalysisResult,
             culturalContext: activeContext,
             styles,
             model: selectedAnalysisModel,
@@ -944,15 +980,17 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setCustomStyleInstructions(styleRes.customInstructions);
           setDetectedStyleReason(styleRes.reason);
           setStyleMode('auto');
-        } catch (sErr) {
+        } catch (sErr: any) {
           console.warn('Aviso Estilo:', sErr);
+          studioLogger.addLog('WARN', 'Fallo en Paso 3', { error: sErr?.message });
         }
 
-        // PASO 3 (Gemini 3.8 Flash): Crear los Personajes con detalle no genérico (Físico + Vestimenta)
-        setPipelineProgressText('Paso 3/4 (Gemini 3.8 Flash): Detectando Personajes, Rasgos Físicos y Vestimenta de Época...');
+        // PASO 4 (Gemini 3.8 Flash): Crear los Personajes con detalle no genérico (Físico + Vestimenta)
+        setPipelineProgressText('Paso 4/5 (Gemini 3.8 Flash): Detectando Personajes Físicos y Vestimenta (CHARACTER_LOCK)...');
         try {
           const detected = await detectCharactersWithAI({
             scriptText: currentScript,
+            deepAnalysis: deepAnalysisResult,
             culturalContext: activeContext,
             visualStyle: { name: styleNameToUse, modifier: styleModifierToUse },
             model: selectedAnalysisModel,
@@ -975,18 +1013,19 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             if (onAddCharacter) onAddCharacter(newPersona);
             onSelectCharacter(newPersona.id);
           }
-        } catch (charErr) {
+        } catch (charErr: any) {
           console.warn('Aviso Personajes:', charErr);
+          studioLogger.addLog('WARN', 'Fallo en Paso 4', { error: charErr?.message });
         }
       } else {
         // En modo manual o solo prompts, usar lo configurado actualmente
         if (!styleModifierToUse) {
-          styleModifierToUse = activeStyle?.promptModifier || 'cinematic 35mm film still, photorealistic, 8k';
+          styleModifierToUse = activeStyle?.promptModifier || 'clean documentary photography, natural contextual lighting';
         }
       }
 
-      // PASO 4 (Gemini 3.5 Flash Lite): Generación de Prompts de todas las escenas
-      setPipelineProgressText('Paso 4/4 (Gemini 3.5 Flash Lite): Generando Prompts Cinemáticos Secuenciales...');
+      // PASO 5 (Gemini 3.5 Flash Lite): Generación de Prompts de todas las escenas
+      setPipelineProgressText('Paso 5/5 (Gemini 3.5 Flash Lite): Generando Prompts Cinemáticos Secuenciales...');
 
       const charDirective = activeCharactersList.length > 0
         ? activeCharactersList.map(c => 
@@ -1041,12 +1080,13 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         };
       });
 
-      // PASO 5: Generar y Guardar Archivo HTML Maestro de Verificación
+      // PASO 6: Generar y Guardar Archivo HTML Maestro de Verificación
       setPipelineProgressText('Generando y Guardando Archivo Maestro HTML del Proyecto...');
       const htmlContent = generateMasterStudioHtml({
         projectName: currentProjectName,
         scriptText: currentScript,
         narrativeMode,
+        deepAnalysis: deepAnalysisResult,
         culturalContext: activeContext,
         visualStyle: {
           name: styleNameToUse,
@@ -1072,9 +1112,14 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       });
       setSavedHtmlFilename(saveRes.filename);
 
+      studioLogger.addLog('SUCCESS', `¡HTML Maestro guardado exitosamente como ${saveRes.filename}!`, {
+        escenas: finalScenes.length,
+        archivo: saveRes.filename
+      });
+
       setPipelineProgressText(`¡Completado! HTML guardado como ${saveRes.filename}. Pasando a Generar Escenas...`);
 
-      // PASO 6: Transición automática al Generador Masivo
+      // PASO 7: Transición automática al Generador Masivo
       if (onProceedToImages) {
         onProceedToImages(finalScenes);
       } else {
@@ -1083,6 +1128,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     } catch (err: any) {
       console.error('Error en pipeline:', err);
       const errMsg = err?.message || String(err) || 'Error desconocido';
+      studioLogger.addLog('ERROR', `Error en pipeline de dirección: ${errMsg}`, { error: errMsg });
 
       // Fallback algorítmico de emergencia
       const runEmergencyFallback = () => {
@@ -2707,6 +2753,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </span>
           </div>
         )}
+
+        {/* TERMINAL DE DIAGNÓSTICO E HISTORIAL EN VIVO */}
+        <div className="pt-2">
+          <StudioTerminal />
+        </div>
       </div>
 
       {/* MODAL EMERGENTE: GUARDAR ESTILO VISUAL EN BANCO */}
