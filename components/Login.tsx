@@ -173,7 +173,7 @@ export const Login: React.FC = () => {
             <div className="mt-6 pt-5 border-t border-white/5 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Hasta 1,000 imágenes</span>
+                <span>Imágenes Ilimitadas</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />

@@ -17,7 +17,14 @@ import {
   Lock 
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { isSubscriptionActive, triggerSubscriptionModal } from '../services/subscriptionService';
+import { 
+  isSubscriptionActive, 
+  triggerSubscriptionModal, 
+  getProSubscriptionInfo, 
+  startSubscriptionHeartbeat, 
+  ProSubscriptionInfo, 
+  SKOOL_CHECKOUT_URL 
+} from '../services/subscriptionService';
 
 export type AppStage = 
   | 'guion' 
@@ -59,7 +66,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
     navigate('/login');
   };
 
-  const isSubscribed = isSubscriptionActive();
+  const [proInfo, setProInfo] = React.useState<ProSubscriptionInfo>(() => getProSubscriptionInfo());
+
+  React.useEffect(() => {
+    // Escucha de heartbeat cada 1 minuto
+    const unsubscribe = startSubscriptionHeartbeat((info) => {
+      setProInfo(info);
+    });
+
+    const handleUpdate = (e: Event) => {
+      const custom = e as CustomEvent<ProSubscriptionInfo>;
+      if (custom.detail) {
+        setProInfo(custom.detail);
+      } else {
+        setProInfo(getProSubscriptionInfo());
+      }
+    };
+
+    window.addEventListener('bulkscene_subscription_updated', handleUpdate);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('bulkscene_subscription_updated', handleUpdate);
+    };
+  }, []);
+
+  const isSubscribed = proInfo.isPro;
 
   const navItems = [
     {
@@ -299,11 +330,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {/* Estado de Suscripción */}
-            {isSubscriptionActive() ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-400 font-mono">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="font-bold">Membresía Activa</span>
+            {/* Estado de Suscripción PRO / Verificación en tiempo real */}
+            {proInfo.isPro ? (
+              <div
+                className={`p-2.5 rounded-xl border flex flex-col gap-2 transition-all ${
+                  proInfo.urgency === 'red'
+                    ? 'bg-rose-500/10 border-rose-500/35 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+                    : proInfo.urgency === 'yellow'
+                    ? 'bg-amber-500/10 border-amber-500/35 text-amber-300'
+                    : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        proInfo.urgency === 'red'
+                          ? 'bg-rose-400 animate-pulse'
+                          : proInfo.urgency === 'yellow'
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400'
+                      }`}
+                    />
+                    <span className="font-black px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider bg-white/10 text-white font-sans shrink-0">
+                      PRO
+                    </span>
+                    <span className="font-bold text-[10px] truncate" title={proInfo.label}>
+                      {proInfo.label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Recordatorio de renovación directo a Skool */}
+                <a
+                  href={proInfo.skoolUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`text-[9px] font-bold py-1 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1 ${
+                    proInfo.urgency === 'red'
+                      ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm animate-pulse'
+                      : proInfo.urgency === 'yellow'
+                      ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40'
+                      : 'text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                  }`}
+                  title="Renovar suscripción en Skool para mantener acceso ilimitado"
+                >
+                  <span>
+                    {proInfo.urgency === 'red'
+                      ? '⚠️ Renovar Urgente en Skool'
+                      : proInfo.urgency === 'yellow'
+                      ? '⚡ Renovar en Skool'
+                      : 'Membresía Skool →'}
+                  </span>
+                </a>
               </div>
             ) : (
               <button
@@ -331,6 +410,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </>
         ) : (
           <div className="flex flex-col items-center gap-2">
+            {proInfo.isPro ? (
+              <a
+                href={proInfo.skoolUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                  proInfo.urgency === 'red'
+                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse'
+                    : proInfo.urgency === 'yellow'
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                }`}
+                title={`Usuario PRO: ${proInfo.label}. Clic para gestionar en Skool.`}
+              >
+                <span className="text-[9px] font-black uppercase font-sans">PRO</span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
+                    proInfo.urgency === 'red'
+                      ? 'bg-rose-400'
+                      : proInfo.urgency === 'yellow'
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-400'
+                  }`}
+                />
+              </a>
+            ) : (
+              <button
+                onClick={() => triggerSubscriptionModal({ featureName: 'Desbloqueo de Suite Completa', stage: 'Sidebar' })}
+                className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 hover:bg-amber-500/25"
+                title="Sin suscripción activa - Clic para desbloquear"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="p-2 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"

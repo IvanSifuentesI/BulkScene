@@ -83,7 +83,7 @@ export const SubscriptionRequiredModal: React.FC = () => {
         <div className="grid grid-cols-2 gap-2 mb-5 p-3 rounded-2xl bg-[#0e121d] border border-white/5 text-[11px] text-slate-300">
           <div className="flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Hasta 1,000 imágenes</span>
+            <span>Imágenes Ilimitadas</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Film className="w-3.5 h-3.5 text-cyan-400 shrink-0" />

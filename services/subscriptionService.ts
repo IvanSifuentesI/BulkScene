@@ -219,6 +219,172 @@ export function isSubscriptionActive(): boolean {
 }
 
 /**
+ * Información detallada para usuarios PRO con contador de días restantes y colores de urgencia.
+ */
+export interface ProSubscriptionInfo {
+  isPro: boolean;
+  email: string;
+  expirationDate: string | null;
+  daysRemaining: number | null;
+  hoursRemaining: number | null;
+  urgency: 'green' | 'yellow' | 'red' | 'none';
+  label: string;
+  isExpiringSoon: boolean;
+  skoolUrl: string;
+}
+
+/**
+ * Calcula el estado de membresía PRO, días restantes y color de urgencia:
+ * - Verde: muchos días restantes (> 5 días)
+ * - Amarillo: ya está próximo (3 a 5 días)
+ * - Rojo: hoy o mañana ya vence la suscripción (<= 2 días)
+ */
+export function getProSubscriptionInfo(): ProSubscriptionInfo {
+  const email = (localStorage.getItem(STORAGE_USER_EMAIL_KEY) || '').toLowerCase().trim();
+  const isActive = isSubscriptionActive();
+  const expDateStr = localStorage.getItem(STORAGE_EXPIRATION_DATE_KEY) || null;
+
+  if (email === 'admin@bulkscene.ai') {
+    return {
+      isPro: true,
+      email,
+      expirationDate: null,
+      daysRemaining: 999,
+      hoursRemaining: 999 * 24,
+      urgency: 'green',
+      label: 'Acceso Permanente',
+      isExpiringSoon: false,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  if (!isActive) {
+    return {
+      isPro: false,
+      email,
+      expirationDate: expDateStr,
+      daysRemaining: 0,
+      hoursRemaining: 0,
+      urgency: 'none',
+      label: 'Sin suscripción',
+      isExpiringSoon: false,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  if (!expDateStr) {
+    return {
+      isPro: true,
+      email,
+      expirationDate: null,
+      daysRemaining: null,
+      hoursRemaining: null,
+      urgency: 'green',
+      label: 'Activo',
+      isExpiringSoon: false,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  const expTime = new Date(expDateStr).getTime();
+  const now = Date.now();
+  const diffMs = expTime - now;
+
+  if (diffMs <= 0) {
+    return {
+      isPro: false,
+      email,
+      expirationDate: expDateStr,
+      daysRemaining: 0,
+      hoursRemaining: 0,
+      urgency: 'none',
+      label: 'Vencido',
+      isExpiringSoon: true,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  const hoursRemaining = Math.floor(diffMs / (1000 * 60 * 60));
+  const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  // Clasificación de color solicitada:
+  // - verde: muchos días restantes
+  // - amarillo: próximo a vencer
+  // - rojo: hoy o mañana ya vence
+  if (daysRemaining <= 2) {
+    const timeText = daysRemaining <= 1 ? (hoursRemaining <= 24 ? `${hoursRemaining}h restantes` : 'Vence mañana') : '2 días restantes';
+    return {
+      isPro: true,
+      email,
+      expirationDate: expDateStr,
+      daysRemaining,
+      hoursRemaining,
+      urgency: 'red',
+      label: timeText,
+      isExpiringSoon: true,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  if (daysRemaining <= 5) {
+    return {
+      isPro: true,
+      email,
+      expirationDate: expDateStr,
+      daysRemaining,
+      hoursRemaining,
+      urgency: 'yellow',
+      label: `${daysRemaining} días restantes`,
+      isExpiringSoon: true,
+      skoolUrl: SKOOL_CHECKOUT_URL
+    };
+  }
+
+  return {
+    isPro: true,
+    email,
+    expirationDate: expDateStr,
+    daysRemaining,
+    hoursRemaining,
+    urgency: 'green',
+    label: `${daysRemaining} días restantes`,
+    isExpiringSoon: false,
+    skoolUrl: SKOOL_CHECKOUT_URL
+  };
+}
+
+/**
+ * Inicia la verificación periódica de suscripción cada 1 minuto (60 segundos).
+ * Comprueba contra la base de datos de Supabase y recalcula los días restantes.
+ * Notifica a la UI mediante 'bulkscene_subscription_updated' para que se actualice de inmediato.
+ */
+export function startSubscriptionHeartbeat(onTick?: (info: ProSubscriptionInfo) => void): () => void {
+  const check = async () => {
+    const currentEmail = localStorage.getItem(STORAGE_USER_EMAIL_KEY);
+    if (currentEmail && currentEmail !== 'admin@bulkscene.ai') {
+      try {
+        await validateUserSubscription(currentEmail);
+      } catch (e) {
+        console.warn('[SUBSCRIPTION HEARTBEAT] Error verificando con Supabase:', e);
+      }
+    }
+    const info = getProSubscriptionInfo();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('bulkscene_subscription_updated', { detail: info }));
+    }
+    if (onTick) onTick(info);
+  };
+
+  // Verificación inicial
+  check();
+
+  // Verificación constante cada 1 minuto (60,000 ms)
+  const timer = setInterval(check, 60000);
+
+  return () => clearInterval(timer);
+}
+
+/**
  * Obtiene los detalles de suscripción guardados en la sesión actual.
  */
 export function getSubscriptionDetails() {

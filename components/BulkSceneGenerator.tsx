@@ -595,7 +595,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-sm text-white flex items-center gap-2">
               <Layers className="w-4 h-4 text-emerald-400" />
-              <span>Entrada Masiva de Escenas (Hasta 1,000 Prompts)</span>
+              <span>Entrada Masiva de Escenas (Prompts Ilimitados)</span>
             </h3>
             <span className="text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
               {totalSlots} Prompts cargados

@@ -146,7 +146,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
     {
       step: 'Paso 3',
       title: 'Generación Masiva & ZIP',
-      desc: 'El motor genera hasta 1,000 imágenes secuenciales en minutos. Descarga un solo archivo ZIP ordenado (#001-#1000) listo para arrastrar directamente a CapCut o Premiere.'
+      desc: 'El motor genera imágenes ilimitadas en minutos. Descarga un solo archivo ZIP ordenado (#001-#N) listo para arrastrar directamente a CapCut o Premiere.'
     }
   ];
 
@@ -371,17 +371,17 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
         {/* Core Category Badge */}
         <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] sm:text-xs font-bold tracking-wide uppercase border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.15)] max-w-full truncate">
           <Zap className="w-3.5 h-3.5 fill-emerald-400 shrink-0" />
-          <span className="truncate">HASTA 1,000 IMÁGENES EN MINUTOS • CERO APIS</span>
+          <span className="truncate">IMÁGENES ILIMITADAS EN MINUTOS • CERO APIS</span>
         </div>
 
         {/* The Core Headline (La Gran Promesa) */}
         <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.1] sm:leading-[1.08]">
-          Genera Lotes de Hasta <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">1,000 Imágenes en Minutos</span>
+          Genera Lotes de <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">Imágenes Ilimitadas</span>
         </h1>
 
         {/* Subheadline (Resolución de Dolor & Mecanismo) */}
         <p className="text-sm sm:text-lg lg:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-          Produce escenas cinematográficas con <strong>consistencia facial</strong> de tus personajes, estilos visuales de alta retención y descarga ordenada (#001 a #1000) lista para CapCut o Premiere. <strong className="text-slate-200">Sin pagos de tokens ni facturas de APIs.</strong>
+          Produce escenas cinematográficas con <strong>consistencia facial</strong> de tus personajes, estilos visuales de alta retención y descarga ordenada lista para CapCut o Premiere. <strong className="text-slate-200">Sin pagos de tokens ni facturas de APIs.</strong>
         </p>
 
         {/* Rediseño Premium del Precio Especial de Lanzamiento (Hero Card) */}
@@ -552,7 +552,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Guardián Astral: túnica oscura, runas luminosas en antebrazos y ojos celestiales. Mismo rostro y rasgos asegurados en las 1,000 tomas.
+                    Guardián Astral: túnica oscura, runas luminosas en antebrazos y ojos celestiales. Mismo rostro y rasgos asegurados en todas las tomas.
                   </p>
                 </div>
 
@@ -580,7 +580,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     Lote Masivo Generado (Escenas del Guion Místico)
                   </span>
                   <span className="text-emerald-400 font-mono text-[10px] sm:text-[11px] font-bold">
-                    ✓ Lote de 1,000 Escenas Listo (100%)
+                    ✓ Lote de Escenas Ilimitadas Listo (100%)
                   </span>
                 </div>
 
@@ -805,7 +805,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
               </li>
               <li className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span><strong>Lotes en ZIP Ordenados (#001 a #1000):</strong> Arrastras la carpeta directamente a CapCut o Premiere y el video queda sincronizado.</span>
+                <span><strong>Lotes en ZIP Ordenados (#001 a #N):</strong> Arrastras la carpeta directamente a CapCut o Premiere y el video queda sincronizado.</span>
               </li>
             </ul>
           </div>
@@ -939,7 +939,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
                     <div>
                       <strong className="text-white text-xs sm:text-sm block">1. Software BulkScene Studio (Suite Ilimitada)</strong>
                       <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-                        Generación de hasta 1,000 imágenes en minutos, sin APIs, consistencia de personajes, 7 modos de creación y escalado 4K Ultra HD.
+                        Generación de imágenes ilimitadas en minutos, sin APIs, consistencia de personajes, 7 modos de creación y escalado 4K Ultra HD.
                       </p>
                     </div>
                   </div>

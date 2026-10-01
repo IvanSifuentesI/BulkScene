@@ -44,7 +44,11 @@ import ReportErrorModal from './ReportErrorModal';
 import { 
   isSubscriptionActive, 
   triggerSubscriptionModal, 
-  refreshCurrentSubscription 
+  refreshCurrentSubscription,
+  getProSubscriptionInfo,
+  startSubscriptionHeartbeat,
+  ProSubscriptionInfo,
+  SKOOL_CHECKOUT_URL
 } from '../services/subscriptionService';
 
 // Initial API Keys (loaded dynamically from localStorage / user settings)
@@ -58,17 +62,33 @@ export const MainApplication: React.FC = () => {
   const [userEmail, setUserEmail] = useState<string>('creador@bulkscene.ai');
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportTechnicalContext, setReportTechnicalContext] = useState<any>(null);
+  const [proInfo, setProInfo] = useState<ProSubscriptionInfo>(() => getProSubscriptionInfo());
   const [isSubscribed, setIsSubscribed] = useState<boolean>(() => isSubscriptionActive());
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('bulkscene_user_email');
     if (savedEmail) {
       setUserEmail(savedEmail);
-      // Validar en segundo plano para asegurar consistencia con Supabase
-      refreshCurrentSubscription().then((active) => {
-        setIsSubscribed(active);
-      });
     }
+
+    // Monitoreo en tiempo real cada 1 minuto
+    const unsubscribe = startSubscriptionHeartbeat((info) => {
+      setProInfo(info);
+      setIsSubscribed(info.isPro);
+    });
+
+    const handleUpdate = (e: Event) => {
+      const custom = e as CustomEvent<ProSubscriptionInfo>;
+      const info = custom.detail || getProSubscriptionInfo();
+      setProInfo(info);
+      setIsSubscribed(info.isPro);
+    };
+
+    window.addEventListener('bulkscene_subscription_updated', handleUpdate);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('bulkscene_subscription_updated', handleUpdate);
+    };
   }, []);
 
   // API Keys by Category (Persistent in localStorage)
@@ -343,11 +363,50 @@ export const MainApplication: React.FC = () => {
 
           {/* Right Header Status Bar */}
           <div className="flex items-center gap-2.5">
-            {/* Subscription Status Badge */}
-            {isSubscribed ? (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 font-mono shadow-inner">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-bold">Membresía Activa</span>
+            {/* Subscription Status Badge PRO / Urgency Indicator */}
+            {proInfo.isPro ? (
+              <div className="flex items-center gap-2">
+                <div
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono shadow-inner transition-all ${
+                    proInfo.urgency === 'red'
+                      ? 'bg-rose-500/15 border-rose-500/35 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                      : proInfo.urgency === 'yellow'
+                      ? 'bg-amber-500/15 border-amber-500/35 text-amber-300'
+                      : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                  }`}
+                  title={`Membresía PRO Activa • ${proInfo.label}`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      proInfo.urgency === 'red'
+                        ? 'bg-rose-400 animate-pulse'
+                        : proInfo.urgency === 'yellow'
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
+                  />
+                  <span className="font-black px-1.5 py-0.5 rounded text-[10px] bg-white/10 text-white font-sans tracking-wider">
+                    PRO
+                  </span>
+                  <span className="font-bold text-[11px] hidden sm:inline">{proInfo.label}</span>
+                </div>
+
+                {/* Reminder button to renew if expiring soon (yellow/red) */}
+                {proInfo.isExpiringSoon && (
+                  <a
+                    href={SKOOL_CHECKOUT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm ${
+                      proInfo.urgency === 'red'
+                        ? 'bg-rose-500 hover:bg-rose-600 text-white animate-pulse'
+                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40'
+                    }`}
+                    title="Renovar suscripción en Skool para mantener acceso ilimitado"
+                  >
+                    <span>Renovar</span>
+                  </a>
+                )}
               </div>
             ) : (
               <button
