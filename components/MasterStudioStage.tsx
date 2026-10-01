@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Clapperboard, 
   Sparkles, 
@@ -18,6 +18,7 @@ import {
   Pause,
   Upload,
   Sliders,
+  SlidersHorizontal,
   Wand2,
   Eye,
   Skull,
@@ -28,7 +29,10 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
-  Volume2
+  Volume2,
+  Scissors,
+  X,
+  CheckCheck
 } from 'lucide-react';
 import { 
   CharacterPersona, 
@@ -48,7 +52,10 @@ import {
 } from '../services/llmDirectorService';
 import { 
   transcribeAudioWithGroq, 
-  TranscriptionResult 
+  TranscriptionResult,
+  calculateSmartBeatsSegmentation,
+  SmartBeatScene,
+  SmartBeatsConfig
 } from '../services/audioTranscriptionService';
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
@@ -123,8 +130,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioDuration, setAudioDuration] = useState<number>(initialAudioDuration);
   const [isPlayingAudio, setIsPlayingAudio] = useState<boolean>(false);
+  const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
+  const [playingBeatIndex, setPlayingBeatIndex] = useState<number | null>(null);
   const [transcription, setTranscription] = useState<TranscriptionResult | null>(initialTranscription);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [whisperModel, setWhisperModel] = useState<'whisper-large-v3-turbo' | 'whisper-large-v3'>('whisper-large-v3-turbo');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -134,9 +144,74 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   });
   const [currentProjectName, setCurrentProjectName] = useState<string>(projectName);
 
-  // 5. Pacing & Beats Construction
-  const [sceneDurationRange, setSceneDurationRange] = useState<number>(2.5); // 2.5s por escena
+  // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
+  const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(false);
+  const [hookScenesCount, setHookScenesCount] = useState<number>(4);
+  const [hookDurationSec, setHookDurationSec] = useState<number>(1.8);
+  const [restDurationSec, setRestDurationSec] = useState<number>(3.2);
+  const [snapToPunctuation, setSnapToPunctuation] = useState<boolean>(true);
+  const [snapToSilences, setSnapToSilences] = useState<boolean>(true);
+  const [showWordsCloud, setShowWordsCloud] = useState<boolean>(false);
+  const [sceneDurationRange, setSceneDurationRange] = useState<number>(2.5); // Fallback compatible
   const [pacingWords, setPacingWords] = useState<number>(8);
+
+  // Segmentación Dinámica de Beats en Tiempo Real
+  const calculatedScenes: SmartBeatScene[] = useMemo(() => {
+    return calculateSmartBeatsSegmentation(
+      transcription?.words || [],
+      audioDuration || estimatedSeconds,
+      {
+        hookScenesCount,
+        hookDurationSec,
+        restDurationSec,
+        snapToPunctuation,
+        snapToSilences
+      },
+      scriptText
+    );
+  }, [
+    transcription?.words,
+    audioDuration,
+    estimatedSeconds,
+    hookScenesCount,
+    hookDurationSec,
+    restDurationSec,
+    snapToPunctuation,
+    snapToSilences,
+    scriptText
+  ]);
+
+  const playAudioSegment = (start: number, end: number, beatIndex?: number) => {
+    if (!audioRef.current) return;
+    try {
+      audioRef.current.currentTime = Math.max(0, start);
+      audioRef.current.play();
+      setIsPlayingAudio(true);
+      if (typeof beatIndex === 'number') {
+        setPlayingBeatIndex(beatIndex);
+      }
+
+      const checkStop = () => {
+        if (audioRef.current && audioRef.current.currentTime >= end) {
+          audioRef.current.pause();
+          setIsPlayingAudio(false);
+          setPlayingBeatIndex(null);
+          audioRef.current.removeEventListener('timeupdate', checkStop);
+        }
+      };
+      audioRef.current.addEventListener('timeupdate', checkStop);
+    } catch (e) {
+      console.warn('Fallo en reproducción de segmento:', e);
+    }
+  };
+
+  const formatTime = (sec: number) => {
+    if (isNaN(sec) || sec < 0) return '00:00.0';
+    const mins = Math.floor(sec / 60);
+    const secs = Math.floor(sec % 60);
+    const ms = Math.floor((sec % 1) * 10);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`;
+  };
 
   // 6. Narrative Direction Mode
   const [narrativeMode, setNarrativeMode] = useState<DirectionNarrativeMode>('documental_secuencial');
@@ -209,6 +284,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     tempAudio.src = URL.createObjectURL(file);
     tempAudio.onloadedmetadata = () => {
       setAudioDuration(tempAudio.duration);
+      setIsBeatsInspectorOpen(true);
     };
   };
 
@@ -271,9 +347,10 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       return;
     }
     setIsTranscribing(true);
+    setIsBeatsInspectorOpen(true);
     try {
       const activeGroqKey = groqKeys[0] || localStorage.getItem('bulk_groq_api_keys') || '';
-      const result = await transcribeAudioWithGroq(audioBlob, activeGroqKey);
+      const result = await transcribeAudioWithGroq(audioBlob, activeGroqKey, whisperModel);
       setTranscription(result);
       if (result.duration) {
         setAudioDuration(result.duration);
@@ -281,6 +358,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       if (!scriptText.trim() && result.text) {
         setScriptText(result.text);
       }
+      setIsBeatsInspectorOpen(true);
     } catch (err: any) {
       console.error('Error al extraer beats con Whisper:', err);
       triggerGlobalErrorModal({
@@ -288,7 +366,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         stage: '1. Estudio Master - Beats Fonéticos',
         errorCode: 'WHISPER_EXTRACTION_FAILURE',
         errorMessage: err?.message || 'Fallo en la transcripción fonética con Groq Whisper',
-        technicalDetails: { hasGroqKey: Boolean(groqKeys[0]), audioDuration }
+        technicalDetails: { hasGroqKey: Boolean(groqKeys[0]), audioDuration, whisperModel }
       });
     } finally {
       setIsTranscribing(false);
@@ -450,16 +528,29 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         throw new Error('El motor de dirección no devolvió escenas válidas.');
       }
 
-      // 5. Asignar tiempos fonéticos a las escenas si existe transcripción de Whisper
+      // 5. Asignar tiempos fonéticos a las escenas usando la segmentación de Smart Beats
       const finalScenes = analysis.scenes.map((sc, idx) => {
-        let dur = sceneDurationRange;
-        if (transcription && transcription.segments && transcription.segments[idx]) {
+        let dur = restDurationSec;
+        let start = idx * restDurationSec;
+        let end = (idx + 1) * restDurationSec;
+
+        if (calculatedScenes && calculatedScenes[idx]) {
+          const beat = calculatedScenes[idx];
+          dur = beat.duration;
+          start = beat.startTime;
+          end = beat.endTime;
+        } else if (transcription && transcription.segments && transcription.segments[idx]) {
           const seg = transcription.segments[idx];
           dur = Math.max(1.5, Number((seg.end - seg.start).toFixed(2)));
+          start = seg.start;
+          end = seg.end;
         }
+
         return {
           ...sc,
-          durationSeconds: sc.durationSeconds || dur
+          durationSeconds: sc.durationSeconds || dur,
+          startTime: Number(start.toFixed(2)),
+          endTime: Number(end.toFixed(2))
         };
       });
 
@@ -773,26 +864,73 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                     <audio
                       ref={audioRef}
                       src={audioUrl}
-                      onEnded={() => setIsPlayingAudio(false)}
+                      onEnded={() => {
+                        setIsPlayingAudio(false);
+                        setPlayingBeatIndex(null);
+                      }}
+                      onTimeUpdate={() => {
+                        if (audioRef.current) {
+                          setAudioCurrentTime(audioRef.current.currentTime);
+                        }
+                      }}
                       className="hidden"
                     />
                   )}
+
+                  {/* Selector de Modelo Whisper */}
+                  <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                      <span>MODELO WHISPER:</span>
+                      <span className="text-cyan-400 font-bold">{whisperModel === 'whisper-large-v3-turbo' ? '8x Más Rápido' : '1.55B Params'}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setWhisperModel('whisper-large-v3-turbo')}
+                        className={`p-1.5 rounded-lg text-left border transition-all ${
+                          whisperModel === 'whisper-large-v3-turbo'
+                            ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
+                            : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold text-cyan-300">⚡ Turbo (Recomendado)</div>
+                        <div className="text-[9px] text-slate-400">~1.5s velocidad</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWhisperModel('whisper-large-v3')}
+                        className={`p-1.5 rounded-lg text-left border transition-all ${
+                          whisperModel === 'whisper-large-v3'
+                            ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
+                            : 'bg-white/[0.02] border-white/[0.05] text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-[10px] font-bold text-white">🎯 Large V3</div>
+                        <div className="text-[9px] text-slate-400">Máx resolución</div>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Extract Beats with Whisper Button */}
                   <button
                     type="button"
                     onClick={handleExtractWhisperBeats}
                     disabled={isTranscribing}
-                    className="w-full py-2.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
                     {isTranscribing ? (
                       <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
                         <span>Extrayendo Beats Fonéticos con Whisper...</span>
+                      </>
+                    ) : transcription ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>✓ Beats Listos ({transcription.words.length} palabras detectadas)</span>
                       </>
                     ) : (
                       <>
-                        <Mic className="w-3.5 h-3.5" />
+                        <Mic className="w-3.5 h-3.5 text-cyan-400" />
                         <span>Extraer Timestamps Palabra por Palabra</span>
                       </>
                     )}
@@ -802,54 +940,558 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </div>
           </div>
 
-          {/* BEATS PACING & DURATION RANGE SELECTOR */}
-          <div className="bg-[#07090e] border border-white/[0.04] rounded-2xl p-4 space-y-3">
+          {/* BEATS PACING & MULTI-RANGO CONTROLLER */}
+          <div className="bg-[#07090e] border border-cyan-500/20 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Rango por Escena (Beats de Retención)</span>
+                <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Ritmo Multi-Rango & Retención</span>
               </span>
-              <span className="text-xs font-mono font-bold text-cyan-400">
-                {sceneDurationRange.toFixed(1)}s / escena
+              <span className="text-xs font-mono font-bold text-emerald-400">
+                {calculatedScenes.length} Escenas Dinámicas
               </span>
             </div>
 
-            {/* Quick preset buttons */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { label: '1.8s', val: 1.8, desc: 'TikTok' },
-                { label: '2.5s', val: 2.5, desc: 'Recomendado' },
-                { label: '3.5s', val: 3.5, desc: 'Cinemático' },
-                { label: '5.0s', val: 5.0, desc: 'Lento' }
-              ].map((p) => (
-                <button
-                  key={p.val}
-                  type="button"
-                  onClick={() => setSceneDurationRange(p.val)}
-                  className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all text-center ${
-                    Math.abs(sceneDurationRange - p.val) < 0.2
-                      ? 'bg-cyan-500 text-black shadow-md font-black'
-                      : 'bg-white/[0.04] text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <div>{p.label}</div>
-                  <div className="text-[9px] opacity-75">{p.desc}</div>
-                </button>
-              ))}
+            {/* Quick Multi-Range Overview */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-2.5">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px] mb-0.5">
+                  <Flame className="w-3 h-3" />
+                  <span>Gancho ({hookScenesCount} Escenas)</span>
+                </div>
+                <div className="text-[11px] text-slate-300 font-mono">
+                  <strong>{hookDurationSec.toFixed(1)}s</strong> / escena (~{(hookScenesCount * hookDurationSec).toFixed(1)}s)
+                </div>
+              </div>
+
+              <div className="bg-cyan-950/20 border border-cyan-500/20 rounded-xl p-2.5">
+                <div className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px] mb-0.5">
+                  <Film className="w-3 h-3" />
+                  <span>Desarrollo ({Math.max(0, calculatedScenes.length - hookScenesCount)} Esc.)</span>
+                </div>
+                <div className="text-[11px] text-slate-300 font-mono">
+                  <strong>{restDurationSec.toFixed(1)}s</strong> / escena
+                </div>
+              </div>
             </div>
 
-            <input
-              type="range"
-              min={1.2}
-              max={6.0}
-              step={0.1}
-              value={sceneDurationRange}
-              onChange={(e) => setSceneDurationRange(parseFloat(e.target.value))}
-              className="w-full accent-cyan-400 bg-white/10 h-1.5 rounded-lg cursor-pointer"
-            />
+            {/* Primary Action Button to Open Gran Mockup */}
+            <button
+              type="button"
+              onClick={() => setIsBeatsInspectorOpen(true)}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-black text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>🔍 Abrir Mockup de Beats & Rangos de Escena</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* 2.5 GRAN MOCKUP / INSPECTOR DE BEATS FONÉTICOS Y RANGOS MULTI-RITMO */}
+      {isBeatsInspectorOpen && (
+        <div className="bg-[#0b0e17] border-2 border-cyan-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(6,182,212,0.15)] space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+          {/* HEADER */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-black flex items-center justify-center font-black shadow-lg shadow-cyan-500/30 shrink-0">
+                <SlidersHorizontal className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-black text-white tracking-wide">
+                    Inspector de Beats Fonéticos & Mockup de Rangos Temporales
+                  </h2>
+                  <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2.5 py-0.5 rounded-full">
+                    Sincronización Milimétrica
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Elige los rangos del Gancho y del resto del video. Si cambias los segundos, el total de escenas y los cortes con sentido se recalculan instantáneamente.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                🔥 {calculatedScenes.length} Escenas Calculadas
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsBeatsInspectorOpen(false)}
+                className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors"
+                title="Cerrar Mockup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* TOP CONTROLS: RANGOS MULTI-RITMO & MODELO WHISPER */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* COL 1: FASE 1 - GANCHO INICIAL (4 COLS) */}
+            <div className="lg:col-span-4 bg-[#07090e] border border-emerald-500/30 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+                    1
+                  </span>
+                  <span className="text-xs font-bold text-emerald-300">
+                    Fase 1: Gancho Inicial (Hook)
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md font-bold">
+                  Retención Rápida
+                </span>
+              </div>
+
+              {/* Cantidad de escenas de gancho */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Primeras escenas como Gancho:</span>
+                  <strong className="text-emerald-400 font-mono text-sm">{hookScenesCount} escenas</strong>
+                </div>
+                <div className="grid grid-cols-5 gap-1">
+                  {[2, 3, 4, 5, 6].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setHookScenesCount(num)}
+                      className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        hookScenesCount === num
+                          ? 'bg-emerald-500 text-black shadow-md font-black'
+                          : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Duración por escena de gancho */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Duración por escena de gancho:</span>
+                  <strong className="text-emerald-400 font-mono text-sm">{hookDurationSec.toFixed(1)}s</strong>
+                </div>
+                <input
+                  type="range"
+                  min={1.0}
+                  max={3.0}
+                  step={0.1}
+                  value={hookDurationSec}
+                  onChange={(e) => setHookDurationSec(parseFloat(e.target.value))}
+                  className="w-full accent-emerald-400 bg-white/10 h-1.5 rounded-lg cursor-pointer"
+                />
+                <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                  <span>1.0s (Ultra rápido)</span>
+                  <span>1.8s (TikTok/Shorts)</span>
+                  <span>3.0s (Moderado)</span>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-400 bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04]">
+                💡 <strong>Efecto Retención:</strong> Las primeras {hookScenesCount} escenas sumarán ~{(hookScenesCount * hookDurationSec).toFixed(1)}s, forzando cortes rápidos para evitar que el usuario deslice el dedo.
+              </div>
+            </div>
+
+            {/* COL 2: FASE 2 - RESTO DEL VIDEO / DESARROLLO (4 COLS) */}
+            <div className="lg:col-span-4 bg-[#07090e] border border-cyan-500/30 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">
+                    2
+                  </span>
+                  <span className="text-xs font-bold text-cyan-300">
+                    Fase 2: Resto del Video (Desarrollo)
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono bg-cyan-500/15 text-cyan-400 px-2 py-0.5 rounded-md font-bold">
+                  {Math.max(0, calculatedScenes.length - hookScenesCount)} Escenas
+                </span>
+              </div>
+
+              {/* Duración por escena del resto */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Duración por escena de desarrollo:</span>
+                  <strong className="text-cyan-400 font-mono text-sm">{restDurationSec.toFixed(1)}s</strong>
+                </div>
+                <input
+                  type="range"
+                  min={2.0}
+                  max={6.0}
+                  step={0.1}
+                  value={restDurationSec}
+                  onChange={(e) => setRestDurationSec(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-400 bg-white/10 h-1.5 rounded-lg cursor-pointer"
+                />
+                <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                  <span>2.0s (Ágil)</span>
+                  <span>3.2s (Recomendado)</span>
+                  <span>6.0s (Cinemático)</span>
+                </div>
+              </div>
+
+              {/* Presets rápidos */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] text-slate-400 font-mono">Presets rápidos:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { label: '2.5s', val: 2.5, name: 'Dinámico' },
+                    { label: '3.2s', val: 3.2, name: 'Estándar' },
+                    { label: '4.5s', val: 4.5, name: 'Documental' }
+                  ].map((p) => (
+                    <button
+                      key={p.val}
+                      type="button"
+                      onClick={() => setRestDurationSec(p.val)}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all text-center ${
+                        Math.abs(restDurationSec - p.val) < 0.15
+                          ? 'bg-cyan-500 text-black shadow-md font-black'
+                          : 'bg-white/[0.04] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      <div>{p.label}</div>
+                      <div className="text-[9px] opacity-75">{p.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-400 bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04]">
+                🎬 <strong>Ritmo Narrativo:</strong> Permite que las tomas respiren para que el espectador absorba el contexto y la emoción sin saturarse.
+              </div>
+            </div>
+
+            {/* COL 3: REGLAS DE CORTE INTELIGENTE & MODELO WHISPER (4 COLS) */}
+            <div className="lg:col-span-4 bg-[#07090e] border border-white/[0.08] rounded-2xl p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Scissors className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Cortes Semánticos con Sentido</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                  Sin Frases Rotas
+                </span>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] p-2 rounded-xl border border-white/[0.04] transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={snapToPunctuation}
+                    onChange={(e) => setSnapToPunctuation(e.target.checked)}
+                    className="mt-0.5 accent-cyan-400 rounded cursor-pointer"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-slate-200 block">
+                      Alinear a puntuación gramatical
+                    </span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">
+                      Corta en puntos, comas y signos (?, !, :) para que cada escena sea una idea completa.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer bg-white/[0.02] hover:bg-white/[0.04] p-2 rounded-xl border border-white/[0.04] transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={snapToSilences}
+                    onChange={(e) => setSnapToSilences(e.target.checked)}
+                    className="mt-0.5 accent-cyan-400 rounded cursor-pointer"
+                  />
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-slate-200 block">
+                      Detección acústica de pausas
+                    </span>
+                    <span className="text-[10px] text-slate-400 block leading-tight">
+                      Corta en silencios entre palabras, jamás a mitad de una palabra ("ca-sa").
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Selector de Modelo Whisper */}
+              <div className="pt-2 border-t border-white/[0.04] space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Modelo Groq Whisper:</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setWhisperModel('whisper-large-v3-turbo')}
+                    className={`p-2 rounded-xl text-left border transition-all ${
+                      whisperModel === 'whisper-large-v3-turbo'
+                        ? 'bg-cyan-500/20 border-cyan-400 text-white'
+                        : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold flex items-center gap-1">
+                      <span>⚡ Turbo</span>
+                      <span className="text-[9px] text-cyan-300 font-mono bg-cyan-950/80 px-1 rounded">Recomendado</span>
+                    </div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">~1.5s velocidad (216x real)</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setWhisperModel('whisper-large-v3')}
+                    className={`p-2 rounded-xl text-left border transition-all ${
+                      whisperModel === 'whisper-large-v3'
+                        ? 'bg-cyan-500/20 border-cyan-400 text-white'
+                        : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold">🎯 Large V3</div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">1.55B params (máx fidelidad)</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Botón de Extraer Whisper si aún no lo ha hecho */}
+              {audioBlob && (
+                <button
+                  type="button"
+                  onClick={handleExtractWhisperBeats}
+                  disabled={isTranscribing}
+                  className="w-full py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {isTranscribing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Analizando audio en memoria...</span>
+                    </>
+                  ) : transcription ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Re-extraer con Whisper ({transcription.words.length} palabras)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Extraer Timestamps de Audio con Whisper</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* AUDIO TIMELINE STRIP */}
+          <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={togglePlayAudio}
+                  disabled={!audioBlob}
+                  className="w-8 h-8 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black flex items-center justify-center font-bold shadow-md shadow-cyan-500/20 transition-all disabled:opacity-40"
+                >
+                  {isPlayingAudio ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                </button>
+                <div className="text-xs font-mono">
+                  <span className="text-cyan-300 font-bold">{formatTime(audioCurrentTime)}</span>
+                  <span className="text-slate-500"> / </span>
+                  <span className="text-slate-400">{formatTime(audioDuration || estimatedSeconds)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs font-mono flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-emerald-500/80 inline-block" />
+                  <span className="text-slate-400">Gancho ({hookScenesCount} escenas)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-cyan-500/80 inline-block" />
+                  <span className="text-slate-400">Desarrollo ({Math.max(0, calculatedScenes.length - hookScenesCount)} escenas)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWordsCloud(!showWordsCloud)}
+                  className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 font-sans cursor-pointer"
+                >
+                  <span>{showWordsCloud ? 'Ocultar Nube Fonética' : 'Ver Nube Fonética de Palabras'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Visual Multi-Segment Bar */}
+            <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden flex border border-white/[0.06] cursor-pointer">
+              {calculatedScenes.map((sc, idx) => {
+                const totDur = audioDuration || estimatedSeconds || 1;
+                const widthPct = Math.max(1, (sc.duration / totDur) * 100);
+                const isCurrent = audioCurrentTime >= sc.startTime && audioCurrentTime < sc.endTime;
+                return (
+                  <div
+                    key={sc.sceneNumber}
+                    onClick={() => playAudioSegment(sc.startTime, sc.endTime, idx)}
+                    style={{ width: `${widthPct}%` }}
+                    title={`Escena ${sc.sceneNumber} (${sc.startTime}s - ${sc.endTime}s): "${sc.text.slice(0, 30)}..."`}
+                    className={`h-full border-r border-black/40 transition-all ${
+                      isCurrent
+                        ? 'bg-yellow-400 animate-pulse'
+                        : sc.isHook
+                        ? 'bg-emerald-500 hover:bg-emerald-400'
+                        : 'bg-cyan-600 hover:bg-cyan-500'
+                    }`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* WORDS PHONETIC CLOUD (EXPANDABLE) */}
+          {showWordsCloud && (
+            <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-4 space-y-2 max-h-60 overflow-y-auto">
+              <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-white/[0.04]">
+                <span className="font-mono">
+                  Nube de Palabras Whisper ({transcription?.words?.length || calculatedScenes.reduce((a, b) => a + b.wordsCount, 0)} palabras extraídas):
+                </span>
+                <span className="text-[10px] text-slate-500">Haz clic en cualquier palabra para escuchar desde ese segundo</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {(transcription?.words && transcription.words.length > 0
+                  ? transcription.words
+                  : calculatedScenes.flatMap(s => s.words)
+                ).map((w, wIdx) => {
+                  const isPlayingThisWord = audioCurrentTime >= w.start && audioCurrentTime <= w.end;
+                  return (
+                    <button
+                      key={wIdx}
+                      type="button"
+                      onClick={() => playAudioSegment(w.start, w.end + 0.3)}
+                      className={`px-2 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isPlayingThisWord
+                          ? 'bg-yellow-400 text-black font-black shadow-lg shadow-yellow-500/50 scale-105'
+                          : 'bg-white/[0.03] hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-200 border border-white/[0.05]'
+                      }`}
+                    >
+                      <span>{w.word}</span>
+                      <span className="text-[9px] opacity-60">[{w.start.toFixed(1)}s]</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* DYNAMIC SCENE CARDS LIST (REAL-TIME RECALCULATION) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs pb-1 border-b border-white/[0.04]">
+              <div className="flex items-center gap-2">
+                <Film className="w-4 h-4 text-cyan-400" />
+                <h3 className="font-bold text-white uppercase tracking-wider text-xs">
+                  Desglose Dinámico de Escenas ({calculatedScenes.length} Escenas Resultantes)
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                Cada tarjeta representa un plano de video exacto con su duración y frase de locución.
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[460px] overflow-y-auto pr-1">
+              {calculatedScenes.map((sc, scIdx) => {
+                const isCurrentlyPlaying = playingBeatIndex === scIdx || (audioCurrentTime >= sc.startTime && audioCurrentTime < sc.endTime);
+                return (
+                  <div
+                    key={sc.sceneNumber}
+                    className={`rounded-2xl p-3.5 border transition-all flex flex-col justify-between space-y-2.5 ${
+                      isCurrentlyPlaying
+                        ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
+                        : sc.isHook
+                        ? 'bg-[#07090e] border-emerald-500/30 hover:border-emerald-400/60'
+                        : 'bg-[#07090e] border-white/[0.06] hover:border-cyan-500/40'
+                    }`}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-md ${
+                          sc.isHook
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                        }`}>
+                          {sc.isHook ? `🔥 GANCHO #${sc.sceneNumber}` : `🎬 ESCENA #${sc.sceneNumber}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-300">
+                        <Clock className="w-3 h-3 text-cyan-400" />
+                        <span>{sc.duration.toFixed(2)}s</span>
+                      </div>
+                    </div>
+
+                    {/* Time Range Badge */}
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-white/[0.02] px-2.5 py-1 rounded-lg border border-white/[0.03]">
+                      <span>Inicio: <strong className="text-white">{sc.startTime.toFixed(2)}s</strong></span>
+                      <span>➔</span>
+                      <span>Fin: <strong className="text-white">{sc.endTime.toFixed(2)}s</strong></span>
+                      <span>({sc.wordsCount} pal.)</span>
+                    </div>
+
+                    {/* Text content */}
+                    <p className="text-xs text-slate-200 leading-relaxed font-sans line-clamp-3">
+                      "{sc.text}"
+                    </p>
+
+                    {/* Card Footer: Play Segment Button */}
+                    <div className="pt-2 border-t border-white/[0.04] flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => playAudioSegment(sc.startTime, sc.endTime, scIdx)}
+                        disabled={!audioBlob}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isCurrentlyPlaying
+                            ? 'bg-yellow-400 text-black shadow-md'
+                            : 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        }`}
+                      >
+                        {isCurrentlyPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        <span>{isCurrentlyPlaying ? 'Reproduciendo...' : 'Escuchar Beat'}</span>
+                      </button>
+
+                      <span className="text-[10px] font-mono text-slate-500">
+                        {sc.isHook ? 'Pacing Rápido' : 'Pacing Fijo'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* FOOTER ACTIONS */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/[0.08]">
+            <div className="text-xs text-slate-400 font-mono">
+              ✓ <strong className="text-white">{calculatedScenes.length} escenas listas</strong> • Gancho ({hookScenesCount} esc. @ {hookDurationSec}s) • Resto (@ {restDurationSec}s)
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsBeatsInspectorOpen(false)}
+                className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cerrar Inspector
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBeatsInspectorOpen(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              >
+                <CheckCheck className="w-4 h-4" />
+                <span>✓ Aplicar Rangos y Sincronizar Guion</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* 3. DIRECTION PARAMETERS: NARRATIVE MODE, STYLE & CONTEXT */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
