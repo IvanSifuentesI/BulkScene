@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import MainApplication from './components/MainApplication';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
+import GlobalDynamicErrorModal from './components/GlobalDynamicErrorModal';
 import { initGlobalErrorTelemetry } from './services/errorTelemetryService';
 
 const LandingRoute: React.FC = () => {
@@ -78,6 +79,9 @@ const App: React.FC = () => {
         {/* 6. Fallback a portada */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Modal Dinámico Interceptor de Errores con Reporte a Telegram */}
+      <GlobalDynamicErrorModal />
     </Router>
   );
 };

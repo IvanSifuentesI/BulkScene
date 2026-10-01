@@ -16,8 +16,10 @@ import {
 } from '../types';
 import { 
   analyzeScriptWithLLM, 
+  createLocalFallbackScenes,
   DirectorAnalysisResponse 
 } from '../services/llmDirectorService';
+import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { TranscriptionResult } from '../services/audioTranscriptionService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
 
@@ -112,7 +114,39 @@ export const ScenesStage: React.FC<ScenesStageProps> = ({
       setScenes(calculatedScenes);
     } catch (err: any) {
       console.error('Error dirigiendo escenas:', err);
-      alert('Error al generar escenas: ' + (err?.message || err));
+      const errMsg = err?.message || String(err) || 'Error desconocido';
+
+      const characterDirective = activeChar
+        ? `${activeChar.name}: ${activeChar.anchorDescription}, ${activeChar.clothingAnchor}`
+        : '';
+
+      const runEmergencyFallback = () => {
+        const fallbackData = createLocalFallbackScenes({
+          scriptText,
+          targetStyleName: activeStyle?.name || 'Cinematográfico 35mm Hiperrealista',
+          targetStyleModifier: activeStyle?.promptModifier || '',
+          characterAnchor: characterDirective,
+          pacingWords
+        });
+        if (fallbackData && fallbackData.scenes.length > 0) {
+          setScenes(fallbackData.scenes);
+        }
+      };
+
+      triggerGlobalErrorModal({
+        title: 'Error al Segmentar Escenas',
+        stage: '5. Desglose de Escenas',
+        errorCode: 'SCENES_LLM_FAILURE',
+        errorMessage: errMsg,
+        technicalDetails: {
+          model: selectedLlm,
+          audioDuration,
+          hasGroqKey: Boolean(groqKeys[0]),
+          hasNvidiaKey: Boolean(nvidiaNimKeys[0])
+        },
+        fallbackActionLabel: '⚡ Aplicar Desglose Inmediato (Motor Local)',
+        onFallbackAction: runEmergencyFallback
+      });
     } finally {
       setIsDirecting(false);
     }

@@ -14,7 +14,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { CharacterPersona, StylePreset, ScriptSceneResult } from '../types';
-import { analyzeScriptWithLLM } from '../services/llmDirectorService';
+import { analyzeScriptWithLLM, createLocalFallbackScenes } from '../services/llmDirectorService';
+import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
 
 interface ScriptStageProps {
@@ -91,11 +92,45 @@ Un holograma parpadeante proyecta una cuenta regresiva que llega a cero, y la me
       if (directorData && directorData.scenes && directorData.scenes.length > 0) {
         onProceedToScenes(directorData.scenes);
       } else {
-        alert('El análisis no devolvió escenas estructuradas. Revisa tu clave API.');
+        throw new Error('El análisis del cluster no devolvió escenas estructuradas.');
       }
     } catch (err: any) {
       console.error('Error al analizar guion:', err);
-      alert('Error al generar escenas: ' + (err?.message || err));
+      const errMsg = err?.message || String(err) || 'Error desconocido';
+
+      // Función de respaldo automático de emergencia si el usuario decide continuar
+      const characterDirective = activeChar
+        ? `${activeChar.name}: ${activeChar.anchorDescription}, ${activeChar.clothingAnchor}`
+        : '';
+
+      const runEmergencyFallback = () => {
+        const fallbackData = createLocalFallbackScenes({
+          scriptText,
+          targetStyleName: activeStyle?.name || 'Cinematográfico 35mm Hiperrealista',
+          targetStyleModifier: activeStyle?.promptModifier || '',
+          characterAnchor: characterDirective,
+          pacingWords
+        });
+        if (fallbackData && fallbackData.scenes.length > 0) {
+          onProceedToScenes(fallbackData.scenes);
+        }
+      };
+
+      // Disparar modal dinámico interceptor
+      triggerGlobalErrorModal({
+        title: 'Error al Generar Escenas del Guion',
+        stage: '1. Director de Guion',
+        errorCode: 'DIRECTOR_LLM_FAILURE',
+        errorMessage: errMsg,
+        technicalDetails: {
+          model: selectedModel,
+          wordCount,
+          hasGroqKey: Boolean(groqKeys[0]),
+          hasNvidiaKey: Boolean(nvidiaNimKeys[0])
+        },
+        fallbackActionLabel: '⚡ Desglosar Guion Inmediatamente (Motor Local)',
+        onFallbackAction: runEmergencyFallback
+      });
     } finally {
       setIsDirecting(false);
     }

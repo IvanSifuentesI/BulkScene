@@ -206,6 +206,88 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
 }
 
 /**
+ * Motor de Desglose de Emergencia Local:
+ * Si la API de LLM no responde (Failed to fetch, error de cuota o sin conexión),
+ * este motor analiza las oraciones del guion de forma algorítmica y genera los prompts
+ * cinemáticos en inglés respetando el estilo y personaje sin bloquear al usuario.
+ */
+export function createLocalFallbackScenes(params: {
+  scriptText: string;
+  targetStyleName?: string;
+  targetStyleModifier?: string;
+  characterAnchor?: string;
+  pacingWords?: number;
+}): DirectorAnalysisResponse {
+  const {
+    scriptText,
+    targetStyleName = 'Cinematográfico 35mm Hiperrealista',
+    targetStyleModifier = 'cinematic 35mm film still, photorealistic, 8k',
+    characterAnchor = '',
+    pacingWords = 8
+  } = params;
+
+  const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
+  const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
+
+  const rawChunks: string[] = [];
+
+  sentences.forEach((sentence) => {
+    const words = sentence.trim().split(/\s+/);
+    if (words.length <= pacingWords + 3) {
+      rawChunks.push(sentence.trim());
+    } else {
+      for (let i = 0; i < words.length; i += pacingWords) {
+        const chunk = words.slice(i, i + pacingWords).join(' ');
+        if (chunk.trim()) rawChunks.push(chunk.trim());
+      }
+    }
+  });
+
+  const angles = [
+    'Cinematic wide angle establishing shot',
+    'Intense medium close-up, dramatic subject focus',
+    'Low angle heroic perspective, majestic depth',
+    'Dynamic action tracking shot, cinematic blur on motion',
+    'Dutch angle, high psychological tension and mystery',
+    'Extreme close-up macro detail, sharp cinematic lighting'
+  ];
+
+  const lightings = [
+    'volumetric god rays, atmospheric cinematic haze',
+    'dramatic high-contrast chiaroscuro shadows',
+    'golden hour warm twilight glow',
+    'cyberpunk neon rim light and reflection',
+    'natural soft diffuse daylight, 8k resolution'
+  ];
+
+  const scenes: ScriptSceneResult[] = rawChunks.map((segment, idx) => {
+    const angle = angles[idx % angles.length];
+    const lighting = lightings[idx % lightings.length];
+    const charPart = characterAnchor ? `${characterAnchor}, ` : '';
+    
+    const visualPrompt = `${angle} capturing "${segment.slice(0, 100)}", ${charPart}${targetStyleModifier}, ${lighting}`.slice(0, 360);
+
+    return {
+      sceneNumber: idx + 1,
+      scriptSegment: segment,
+      visualPrompt,
+      cameraAngle: angle,
+      lighting,
+      charactersPresent: characterAnchor ? ['Protagonista'] : []
+    };
+  });
+
+  return {
+    storyBible: {
+      summary: cleanText.slice(0, 180) + '...',
+      genreAndTone: targetStyleName,
+      culturalContext: 'Producción de video viral automatizado'
+    },
+    scenes
+  };
+}
+
+/**
  * Auto-Reformulador de Prompts:
  * Toma un prompt existente y lo enriquece con iluminación cinemática,
  * lentes de cámara y composición visual, manteniéndolo dentro del límite de 600 caracteres para FLUX.

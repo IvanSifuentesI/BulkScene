@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabaseClient';
+import { triggerGlobalErrorModal } from './adminReportingService';
 
 export interface TelemetryErrorReport {
   id: string;
@@ -238,6 +239,17 @@ export function initGlobalErrorTelemetry(): void {
       error: event.error || event.message,
       stage: 'Sistema'
     });
+
+    const msg = String(event.error?.message || event.message || '');
+    if (!msg.includes('ResizeObserver') && !msg.includes('Script error')) {
+      triggerGlobalErrorModal({
+        title: 'Excepción No Capturada en el Sistema',
+        stage: 'Sistema / Scripts',
+        errorCode: 'UNHANDLED_ERROR',
+        errorMessage: msg,
+        technicalDetails: { stack: event.error?.stack }
+      });
+    }
   });
 
   window.addEventListener('unhandledrejection', (event) => {
@@ -245,5 +257,16 @@ export function initGlobalErrorTelemetry(): void {
       error: event.reason,
       stage: 'Sistema'
     });
+
+    const msg = String(event.reason?.message || event.reason || '');
+    if (!msg.includes('ResizeObserver')) {
+      triggerGlobalErrorModal({
+        title: 'Fallo Asíncrono no Controlado',
+        stage: 'Sistema / Conexión',
+        errorCode: 'UNHANDLED_REJECTION',
+        errorMessage: msg,
+        technicalDetails: { reason: String(event.reason) }
+      });
+    }
   });
 }

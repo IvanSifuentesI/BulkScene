@@ -263,3 +263,25 @@ export function clearAllUserReports(): void {
     localStorage.removeItem(STORAGE_USER_REPORTS_KEY);
   } catch {}
 }
+
+export interface GlobalErrorModalEventDetail {
+  title?: string;
+  stage: string;
+  errorCode?: string;
+  errorMessage: string;
+  possibleCause?: string;
+  suggestedSolution?: string;
+  technicalDetails?: any;
+  onRetry?: () => void;
+  onFallbackAction?: () => void;
+  fallbackActionLabel?: string;
+}
+
+/**
+ * Dispara el modal dinámico e interactivo de captura de error en cualquier parte de la app
+ */
+export function triggerGlobalErrorModal(detail: GlobalErrorModalEventDetail): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bulkscene_dynamic_error_trigger', { detail }));
+  }
+}
