@@ -33,7 +33,8 @@ import {
   Scissors,
   X,
   CheckCheck,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react';
 import { 
   CharacterPersona, 
@@ -68,7 +69,11 @@ import {
   AVAILABLE_ANALYSIS_MODELS, 
   AVAILABLE_PROMPT_MODELS 
 } from '../config/stylePresets';
-import { requireSubscription } from '../services/subscriptionService';
+import { 
+  requireSubscription, 
+  isSubscriptionActive, 
+  triggerSubscriptionModal 
+} from '../services/subscriptionService';
 import { 
   saveLocalStudioSession, 
   loadLocalStudioSession, 
@@ -175,6 +180,15 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   });
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
   const estimatedSeconds = Math.round((wordCount / 140) * 60);
+
+  // Estado de suscripción PRO (para proteger proveedores de IA a usuarios gratuitos)
+  const [isPro, setIsPro] = useState<boolean>(() => isSubscriptionActive());
+
+  useEffect(() => {
+    const handleSubChange = () => setIsPro(isSubscriptionActive());
+    window.addEventListener('bulkscene_subscription_updated', handleSubChange);
+    return () => window.removeEventListener('bulkscene_subscription_updated', handleSubChange);
+  }, []);
 
   // 2. LLM Director Engine Selection (Dual: Análisis Profundo + Prompts Escenas)
   const [selectedAnalysisModel, setSelectedAnalysisModel] = useState<string>(() => {
@@ -1097,24 +1111,41 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   1. Análisis Guion
                 </label>
                 <span className="text-[9px] font-mono text-blue-300 bg-blue-500/20 px-1.5 rounded">
-                  Profundo
+                  {isPro ? 'Profundo' : 'Modo Auto'}
                 </span>
               </div>
-              <select
-                value={selectedAnalysisModel}
-                onChange={(e) => {
-                  setSelectedAnalysisModel(e.target.value);
-                  localStorage.setItem('bulkscene_selected_analysis_model', e.target.value);
-                }}
-                className="w-full bg-[#0d111a] border border-blue-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-blue-400 truncate cursor-pointer"
-                title="Modelo asignado para analizar el guion completo, personajes invariables, época y estilo visual."
-              >
-                {AVAILABLE_ANALYSIS_MODELS.map((m, idx) => (
-                  <option key={m.id} value={m.id}>
-                    #{idx + 1} {m.name} ({m.provider})
-                  </option>
-                ))}
-              </select>
+              {isPro ? (
+                <select
+                  value={selectedAnalysisModel}
+                  onChange={(e) => {
+                    setSelectedAnalysisModel(e.target.value);
+                    localStorage.setItem('bulkscene_selected_analysis_model', e.target.value);
+                  }}
+                  className="w-full bg-[#0d111a] border border-blue-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-blue-400 truncate cursor-pointer"
+                  title="Modelo asignado para analizar el guion completo, personajes invariables, época y estilo visual."
+                >
+                  {AVAILABLE_ANALYSIS_MODELS.map((m, idx) => (
+                    <option key={m.id} value={m.id}>
+                      #{idx + 1} {m.name} ({m.provider})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => triggerSubscriptionModal({ featureName: 'Selección Avanzada de Motores de IA', stage: 'Estudio Master' })}
+                  className="w-full bg-[#0d111a] border border-blue-500/20 hover:border-blue-500/50 rounded-lg px-2 py-1 flex items-center justify-between transition-all group text-left cursor-pointer"
+                  title="Motor calibrado para máxima calidad narrativa. Desbloquea selección manual con PRO."
+                >
+                  <span className="text-[11px] font-bold text-slate-200 truncate">
+                    Motor Neuronal Master · Ultra HD
+                  </span>
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>PRO</span>
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1129,25 +1160,42 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   2. Prompts Escenas
                 </label>
                 <span className="text-[9px] font-mono text-emerald-300 bg-emerald-500/20 px-1.5 rounded">
-                  Masivo
+                  {isPro ? 'Masivo' : 'Modo Auto'}
                 </span>
               </div>
-              <select
-                value={selectedPromptModel}
-                onChange={(e) => {
-                  setSelectedPromptModel(e.target.value);
-                  localStorage.setItem('bulkscene_selected_prompt_model', e.target.value);
-                  handleModelChange(e.target.value);
-                }}
-                className="w-full bg-[#0d111a] border border-emerald-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-emerald-400 truncate cursor-pointer"
-                title="Modelo asignado para redactar el prompt fotográfico individual de cada escena."
-              >
-                {AVAILABLE_PROMPT_MODELS.map((m, idx) => (
-                  <option key={m.id} value={m.id}>
-                    #{idx + 1} {m.name} ({m.provider})
-                  </option>
-                ))}
-              </select>
+              {isPro ? (
+                <select
+                  value={selectedPromptModel}
+                  onChange={(e) => {
+                    setSelectedPromptModel(e.target.value);
+                    localStorage.setItem('bulkscene_selected_prompt_model', e.target.value);
+                    handleModelChange(e.target.value);
+                  }}
+                  className="w-full bg-[#0d111a] border border-emerald-500/30 text-white rounded-lg px-2 py-1 text-[11px] font-semibold focus:outline-none focus:border-emerald-400 truncate cursor-pointer"
+                  title="Modelo asignado para redactar el prompt fotográfico individual de cada escena."
+                >
+                  {AVAILABLE_PROMPT_MODELS.map((m, idx) => (
+                    <option key={m.id} value={m.id}>
+                      #{idx + 1} {m.name} ({m.provider})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => triggerSubscriptionModal({ featureName: 'Selección Avanzada de Motores de IA', stage: 'Estudio Master' })}
+                  className="w-full bg-[#0d111a] border border-emerald-500/20 hover:border-emerald-500/50 rounded-lg px-2 py-1 flex items-center justify-between transition-all group text-left cursor-pointer"
+                  title="Motor calibrado para generar prompts fotográficos de alta retención. Desbloquea selección manual con PRO."
+                >
+                  <span className="text-[11px] font-bold text-slate-200 truncate">
+                    Generador Cinemático Multi-Escena
+                  </span>
+                  <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>PRO</span>
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1201,38 +1249,65 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
         {/* POOL ROTATOR STATUS STRIP */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 px-1 text-[11px] font-mono text-slate-400 border-t border-white/[0.03]">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-              <span>Análisis: <strong>{selectedAnalysisModel}</strong></span>
-            </span>
-            <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Prompts: <strong>{selectedPromptModel}</strong></span>
-            </span>
-            {geminiPoolCount > 0 ? (
-              <span className="text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
-                🔄 Pool Gemini: <strong>{geminiPoolCount} clave(s)</strong> (Rotación 429 activa)
-              </span>
-            ) : (
+          {isPro ? (
+            // Vista PRO: Datos técnicos completos y pool de claves
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1.5 text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                  <span>Análisis: <strong>{selectedAnalysisModel}</strong></span>
+                </span>
+                <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Prompts: <strong>{selectedPromptModel}</strong></span>
+                </span>
+                {geminiPoolCount > 0 ? (
+                  <span className="text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                    🔄 Pool Gemini: <strong>{geminiPoolCount} clave(s)</strong> (Rotación 429 activa)
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onNavigateToSettings}
+                    className="text-amber-400 hover:text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 underline cursor-pointer"
+                  >
+                    ⚠️ Sin claves Gemini añadidas → Ir a Configuración
+                  </button>
+                )}
+              </div>
+
+              {onNavigateToSettings && (
+                <button
+                  type="button"
+                  onClick={onNavigateToSettings}
+                  className="text-slate-400 hover:text-cyan-300 transition-colors text-[10px] underline shrink-0 cursor-pointer"
+                >
+                  Cambiar orden y claves en Ajustes ➔
+                </button>
+              )}
+            </>
+          ) : (
+            // Vista Gratuita: Información propietaria protegida, cero nombres de APIs/proveedores
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1.5 text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Motor Neuronal Cloud · <strong>100% Calibrado en Modo Automático</strong></span>
+                </span>
+                <span className="text-slate-500 text-[10px]">
+                  Generación de Prompts Cinemáticos Ilimitados
+                </span>
+              </div>
+
               <button
                 type="button"
-                onClick={onNavigateToSettings}
-                className="text-amber-400 hover:text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 underline cursor-pointer"
+                onClick={() => triggerSubscriptionModal({ featureName: 'Personalización de Modelos y APIs', stage: 'Estudio Master' })}
+                className="text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-all text-[10px] font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
               >
-                ⚠️ Sin claves Gemini añadidas → Ir a Configuración
+                <Lock className="w-3 h-3 text-amber-400" />
+                <span>Desbloquear Ajustes Avanzados de IA con PRO ➔</span>
               </button>
-            )}
-          </div>
-
-          {onNavigateToSettings && (
-            <button
-              type="button"
-              onClick={onNavigateToSettings}
-              className="text-slate-400 hover:text-cyan-300 transition-colors text-[10px] underline shrink-0 cursor-pointer"
-            >
-              Cambiar orden y claves en Ajustes ➔
-            </button>
+            </>
           )}
         </div>
       </div>
@@ -1296,7 +1371,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                 </h2>
               </div>
               <span className="text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-                Groq Turbo
+                {isPro ? 'Groq Turbo' : 'Voz a Texto HD'}
               </span>
             </div>
 
@@ -1374,31 +1449,52 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                     />
                   )}
 
-                  {/* Selector de Motor STT (Groq, NVIDIA, Assembly, Deepgram) */}
-                  <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                      <span>MOTOR VOZ A TEXTO:</span>
-                      <span className="text-cyan-400 font-bold">
-                        {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name || 'Groq Whisper Turbo'}
-                      </span>
-                    </div>
+                  {/* Selector de Motor STT */}
+                  {isPro ? (
+                    <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                        <span>MOTOR VOZ A TEXTO:</span>
+                        <span className="text-cyan-400 font-bold">
+                          {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name || 'Whisper Turbo HD'}
+                        </span>
+                      </div>
 
-                    <select
-                      value={selectedSTTModel}
-                      onChange={(e) => {
-                        setSelectedSTTModel(e.target.value);
-                        localStorage.setItem('bulkscene_selected_stt_model', e.target.value);
-                      }}
-                      className="w-full bg-[#0d111a] border border-cyan-500/30 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 cursor-pointer"
+                      <select
+                        value={selectedSTTModel}
+                        onChange={(e) => {
+                          setSelectedSTTModel(e.target.value);
+                          localStorage.setItem('bulkscene_selected_stt_model', e.target.value);
+                        }}
+                        className="w-full bg-[#0d111a] border border-cyan-500/30 text-white rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-400 cursor-pointer"
+                      >
+                        {AVAILABLE_STT_MODELS.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.provider === 'deepgram' ? '🚀 [Deepgram] ' : m.provider === 'assemblyai' ? '💎 [AssemblyAI] ' : m.provider === 'nvidia' ? '🟢 [NVIDIA] ' : '⚡ [Groq] '}
+                            {m.name} ({m.speed})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => triggerSubscriptionModal({ featureName: 'Selección de Motores de Voz y STT', stage: 'Estudio Master' })}
+                      className="pt-2 border-t border-white/[0.06] cursor-pointer group"
                     >
-                      {AVAILABLE_STT_MODELS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.provider === 'deepgram' ? '🚀 [Deepgram] ' : m.provider === 'assemblyai' ? '💎 [AssemblyAI] ' : m.provider === 'nvidia' ? '🟢 [NVIDIA] ' : '⚡ [Groq] '}
-                          {m.name} ({m.speed})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[#0d111a] border border-cyan-500/20 hover:border-cyan-500/40 transition-all">
+                        <div className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                          <div>
+                            <div className="text-[11px] font-bold text-slate-200">Motor Voz a Texto HD</div>
+                            <div className="text-[9px] text-slate-400 font-mono">Sincronización Fonética Automática</div>
+                          </div>
+                        </div>
+                        <span className="flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>PRO</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Extract Beats Button */}
                   <button
@@ -1706,40 +1802,60 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                 </label>
               </div>
 
-              {/* Selector de Motor STT (Groq, NVIDIA NIM, AssemblyAI, Deepgram) */}
+              {/* Selector de Motor STT */}
               <div className="pt-2 border-t border-white/[0.04] space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400 font-mono text-[10px] uppercase tracking-wider">Motor de Voz a Texto:</span>
                   <span className="text-[10px] text-cyan-400 font-mono font-bold">
-                    {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.badge}
+                    {isPro ? AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.badge : 'Whisper AI Ultra'}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {AVAILABLE_STT_MODELS.map((m) => {
-                    const isSelected = selectedSTTModel === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSTTModel(m.id);
-                          localStorage.setItem('bulkscene_selected_stt_model', m.id);
-                        }}
-                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md'
-                            : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <div className="text-[11px] font-bold flex items-center justify-between">
-                          <span className="truncate">{m.name.split(' ')[0]} {m.name.split(' ')[1]}</span>
-                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
-                        </div>
-                        <div className="text-[9px] text-slate-400 mt-0.5 truncate">{m.badge} • {m.speed}</div>
-                      </button>
-                    );
-                  })}
-                </div>
+                {isPro ? (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {AVAILABLE_STT_MODELS.map((m) => {
+                      const isSelected = selectedSTTModel === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSTTModel(m.id);
+                            localStorage.setItem('bulkscene_selected_stt_model', m.id);
+                          }}
+                          className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-md'
+                              : 'bg-white/[0.02] border-white/[0.06] text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <div className="text-[11px] font-bold flex items-center justify-between">
+                            <span className="truncate">{m.name.split(' ')[0]} {m.name.split(' ')[1]}</span>
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
+                          </div>
+                          <div className="text-[9px] text-slate-400 mt-0.5 truncate">{m.badge} • {m.speed}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => triggerSubscriptionModal({ featureName: 'Configuración Avanzada de Motores de Voz', stage: 'Estudio Master - Beats' })}
+                    className="w-full p-2.5 rounded-xl bg-white/[0.02] border border-cyan-500/20 hover:border-cyan-500/50 text-left flex items-center justify-between transition-all cursor-pointer group"
+                    title="Motor fonético calibrado en modo automático. Desbloquea selección manual con PRO."
+                  >
+                    <div>
+                      <div className="text-[11px] font-bold text-white flex items-center gap-1.5">
+                        <span>Transcripción Fonética Automática</span>
+                      </div>
+                      <div className="text-[9px] text-slate-400 mt-0.5">Calibrado en ultra alta velocidad con detección milimétrica</div>
+                    </div>
+                    <span className="flex items-center gap-1 text-[9px] font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded shrink-0">
+                      <Lock className="w-2.5 h-2.5" />
+                      <span>PRO</span>
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Botón de Extraer STT */}

@@ -178,7 +178,7 @@ export const ScenesStage: React.FC<ScenesStageProps> = ({
                 Paso 3: Dirección de Escenas y Consistencia Narrativa
               </h2>
               <p className="text-xs text-slate-400 max-w-2xl leading-relaxed mt-0.5">
-                Desglose inteligente de planos con consistencia de personajes, iluminación uniforme y generación de prompts visuales optimizados para NVIDIA NIM y FLUX.
+                Desglose inteligente de planos con consistencia de personajes, iluminación uniforme y generación de prompts visuales cinematográficos de alta fidelidad.
               </p>
             </div>
           </div>

@@ -242,7 +242,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
 
       if (selectedModel === 'google-imagen-3') {
         if (!geminiKey) {
-          throw new Error('Clave API de Gemini no configurada.');
+          throw new Error('Motor de renderizado no inicializado. Revisa tus credenciales.');
         }
         finalImageUrl = await generateImageForScene(
           geminiKey,
@@ -328,9 +328,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
       setSelectedTelemetryError({
         id: `ERR-${slot.paddedNumber}`,
         timestamp: new Date().toISOString(),
-        errorCode: 'ERR_NVIDIA_RENDER',
+        errorCode: 'ERR_RENDER_ENGINE',
         errorMessage: slot.errorDetail || 'Error desconocido de renderizado',
-        possibleCause: 'Fallo de inferencia o límite en la API de NVIDIA.',
+        possibleCause: 'Fallo de inferencia o límite en el servicio de renderizado neural.',
         suggestedSolution: 'Verifica tu clave API en Ajustes o prueba un modelo alternativo.',
         stage: 'Generador Masivo',
         contextData: {
@@ -655,7 +655,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
               </span>
             </div>
             <span className="text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-              NVIDIA NIM / FLUX / GEMINI
+              Motor de Render 8K Ultra
             </span>
           </div>
 
@@ -747,8 +747,8 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-emerald-500/10 font-mono">
-            <span className="text-emerald-400">⚡ {nvidiaKeys.length} {nvidiaKeys.length === 1 ? 'Clave NVIDIA Activa' : 'Claves en Rotación'}</span>
-            <span className="text-slate-500">Round-Robin API Cluster</span>
+            <span className="text-emerald-400">⚡ Inferencia Neural Activa · Render Multihilo</span>
+            <span className="text-slate-500">Ultra Fast Processing</span>
           </div>
         </div>
       </div>

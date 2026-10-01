@@ -224,7 +224,7 @@ export const AudioStage: React.FC<AudioStageProps> = ({
               Paso 2: Generación de Audio y Purgado de Silencios
             </h2>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed mt-0.5">
-              Fraccionamiento inteligente de guiones, purgado de silencios muertos y sincronización milimétrica con Groq Whisper Large v3 Turbo.
+              Fraccionamiento inteligente de guiones, purgado de silencios muertos y sincronización milimétrica palabra por palabra.
             </p>
           </div>
         </div>

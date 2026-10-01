@@ -23,7 +23,8 @@ import {
   Globe,
   Mic,
   Volume2,
-  Flame
+  Flame,
+  Lock
 } from 'lucide-react';
 import { CharacterPersona, StylePreset } from '../types';
 import { CharacterVault } from './CharacterVault';
@@ -51,6 +52,7 @@ import {
   TelemetryErrorReport 
 } from '../services/errorTelemetryService';
 import { copyAllErrorsForAntigravityAndPurge } from '../services/adminReportingService';
+import { isSubscriptionActive } from '../services/subscriptionService';
 
 interface SettingsStageProps {
   nvidiaKeys: string[];
@@ -326,6 +328,38 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
     navigator.clipboard.writeText(formatErrorForClipboard(report));
     triggerSaveNotification(`Reporte ${report.id} copiado al portapapeles.`);
   };
+
+  if (!isSubscriptionActive()) {
+    return (
+      <div className="space-y-6 max-w-2xl mx-auto py-16 text-center animate-in fade-in duration-300">
+        <div className="p-8 sm:p-10 rounded-3xl bg-[#0e111a] border border-amber-500/30 space-y-6 shadow-2xl shadow-black/60 relative overflow-hidden">
+          <div className="absolute -right-12 -top-12 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/30 shadow-lg shadow-amber-500/20">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              Configuración y Control de IA Bloqueado
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+              El panel de configuración avanzada, gestión de claves y calibración de motores neuronales está reservado exclusivamente para creadores con membresía activa en nuestra Academia.
+            </p>
+          </div>
+          <div className="pt-2">
+            <a
+              href="https://www.skool.com/ia-automatiza-7412"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-black font-black text-xs shadow-xl shadow-amber-500/25 transition-all uppercase tracking-wider cursor-pointer"
+            >
+              <span>Desbloquear Membresía en Skool</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Clapperboard, 
   Sparkles, 
@@ -11,13 +11,14 @@ import {
   Mic, 
   FileText,
   Flame,
-  ArrowRight
+  ArrowRight,
+  Lock
 } from 'lucide-react';
 import { CharacterPersona, StylePreset, ScriptSceneResult } from '../types';
 import { analyzeScriptWithLLM, createLocalFallbackScenes } from '../services/llmDirectorService';
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
-import { requireSubscription } from '../services/subscriptionService';
+import { requireSubscription, isSubscriptionActive, triggerSubscriptionModal } from '../services/subscriptionService';
 
 interface ScriptStageProps {
   groqKeys: string[];
@@ -50,6 +51,13 @@ export const ScriptStage: React.FC<ScriptStageProps> = ({
   const [selectedModel, setSelectedModel] = useState<string>('deepseek-r1-32b');
   const [pacingWords, setPacingWords] = useState<number>(8); // 8 palabras por corte (~2.0s)
   const [isDirecting, setIsDirecting] = useState<boolean>(false);
+  const [isPro, setIsPro] = useState<boolean>(() => isSubscriptionActive());
+
+  useEffect(() => {
+    const handleSubUpdate = () => setIsPro(isSubscriptionActive());
+    window.addEventListener('bulkscene_subscription_updated', handleSubUpdate);
+    return () => window.removeEventListener('bulkscene_subscription_updated', handleSubUpdate);
+  }, []);
 
   const activeChar = characters.find((c) => c.id === activeCharacterId);
   const activeStyle = styles.find((s) => s.id === activeStyleId) || styles[0];
@@ -155,7 +163,7 @@ Un holograma parpadeante proyecta una cuenta regresiva que llega a cero, y la me
                   Director de Guion a Escenas & Prompts
                 </h2>
                 <span className="text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-                  Groq Turbo Engine
+                  {isPro ? 'Motor Neuronal Turbo' : 'Motor Ultra HD'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 max-w-3xl leading-relaxed mt-1">
@@ -185,22 +193,38 @@ Un holograma parpadeante proyecta una cuenta regresiva que llega a cero, y la me
             </span>
           </div>
 
-          <div>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="w-full bg-[#08090d] border border-cyan-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-400 font-semibold"
+          {isPro ? (
+            <div>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="w-full bg-[#08090d] border border-cyan-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-400 font-semibold"
+              >
+                {AVAILABLE_SCRIPT_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id === 'deepseek-r1-32b' ? '🔥 ' : ''}{m.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
+                Motor Neuronal Cloud sin censura.
+              </p>
+            </div>
+          ) : (
+            <div 
+              onClick={() => triggerSubscriptionModal('Selección de Motor de IA')}
+              className="group cursor-pointer rounded-xl bg-[#08090d] border border-cyan-500/20 p-2.5 hover:border-cyan-500/40 transition-all flex items-center justify-between"
             >
-              {AVAILABLE_SCRIPT_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.id === 'deepseek-r1-32b' ? '🔥 ' : ''}{m.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
-              NVIDIA A100 Cloud & Groq Turbo sin censura.
-            </p>
-          </div>
+              <div>
+                <div className="text-xs font-bold text-slate-200">Motor Neuronal Cloud · Auto</div>
+                <div className="text-[10px] text-slate-400 font-mono">Calibrado automáticamente</div>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                <Lock className="w-3 h-3" />
+                <span>PRO</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Box 2: ESTILO VISUAL DE ESCENAS (AMBER / YELLOW) */}
@@ -298,7 +322,7 @@ Un holograma parpadeante proyecta una cuenta regresiva que llega a cero, y la me
               className="w-full py-1.5 rounded-xl bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
             >
               <Mic className="w-3.5 h-3.5 text-purple-400" />
-              <span>Voz en Off (Whisper)</span>
+              <span>Voz en Off (Audio)</span>
             </button>
           </div>
         </div>

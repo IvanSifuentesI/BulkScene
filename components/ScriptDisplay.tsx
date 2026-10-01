@@ -533,7 +533,7 @@ const SceneEditor = memo<{
                                     {onReformulatePrompt && (
                                         <button
                                             onClick={() => onReformulatePrompt(scriptIndex, scene.id)}
-                                            title="✨ Auto-Reformular Prompt con IA (Groq / NVIDIA)"
+                                            title="✨ Auto-Reformular Prompt con IA Cloud"
                                             disabled={scene.isReformulating || scene.isRegeneratingDescription}
                                             className="p-1.5 rounded bg-slate-800 hover:bg-amber-600 hover:text-white text-amber-300 transition-colors disabled:opacity-40"
                                         >
@@ -772,7 +772,7 @@ const SceneEditor = memo<{
                                 {onReformulatePrompt && (
                                     <button 
                                         onClick={() => onReformulatePrompt(scriptIndex, scene.id)} 
-                                        title="✨ Auto-Reformular Prompt con IA (Groq/NVIDIA)" 
+                                        title="✨ Auto-Reformular Prompt con IA Cloud" 
                                         className="p-2 rounded-md bg-slate-700 hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center text-amber-300 hover:text-white" 
                                         disabled={scene.isReformulating || scene.isRegeneratingDescription}
                                     >

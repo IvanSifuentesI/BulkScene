@@ -311,7 +311,7 @@ const ScriptGenerator: React.FC<ScriptGeneratorProps> = ({
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-2xl font-black text-white">🎬 Director de Producción</h2>
                 <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-mono font-bold">
-                    NVIDIA + Groq
+                    IA Cloud Ultra
                 </span>
             </div>
             <p className="text-slate-400 text-xs mb-5">
@@ -321,12 +321,12 @@ const ScriptGenerator: React.FC<ScriptGeneratorProps> = ({
             {/* Hidden Audio Element for Metadata Extraction */}
             <audio ref={audioRef} className="hidden" />
 
-            {/* SELECCIÓN DE MOTORES DE IA (NVIDIA FLUX & GROQ LLAMA) */}
+            {/* SELECCIÓN DE MOTORES DE IA */}
             <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-700/80 mb-5 space-y-3">
                 <div>
                     <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                         <span>🎨 Motor de Imagen</span>
-                        <span className="text-[10px] text-slate-400 lowercase font-normal">NVIDIA FLUX / Google</span>
+                        <span className="text-[10px] text-slate-400 lowercase font-normal">Render 8K Ultra</span>
                     </label>
                     <select
                         value={imageEngine}
@@ -345,7 +345,7 @@ const ScriptGenerator: React.FC<ScriptGeneratorProps> = ({
                     <div>
                         <label className="text-xs font-bold text-amber-400 uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                             <span>🧠 Director de Guion</span>
-                            <span className="text-[10px] text-slate-400 lowercase font-normal">Groq / NVIDIA NIM</span>
+                            <span className="text-[10px] text-slate-400 lowercase font-normal">Modo Neural</span>
                         </label>
                         <select
                             value={scriptEngine}
@@ -488,7 +488,7 @@ const ScriptGenerator: React.FC<ScriptGeneratorProps> = ({
                                 {isTranscribingAudio && (
                                     <div className="flex items-center gap-2 p-2 rounded-lg bg-violet-950/60 border border-violet-500/40 text-[11px] text-violet-300 animate-pulse">
                                         <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-violet-400 border-t-transparent" />
-                                        <span>Transcribiendo y midiendo pausas con <strong>Groq Whisper v3 Turbo</strong>...</span>
+                                        <span>Transcribiendo y midiendo pausas con <strong>Whisper AI Turbo</strong>...</span>
                                     </div>
                                 )}
 
