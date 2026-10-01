@@ -662,12 +662,7 @@ export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise
     signal
   } = params;
 
-  studioLogger.addLog('STEP', 'Paso 5/5: Iniciando Generador de Escenas con IA...', {
-    model,
-    estilo: targetStyleName,
-    modo: narrativeMode,
-    totalPalabrasPacing: pacingWords
-  });
+  studioLogger.addLog('STEP', 'Paso 5/5', `Iniciando Generador de Escenas con IA — Modelo: ${model} | Estilo: ${targetStyleName} | Modo: ${narrativeMode} | Pacing: ${pacingWords} pal/escena`);
 
   const minWords = Math.max(4, pacingWords - 3);
   const maxWords = pacingWords + 5;
@@ -779,7 +774,7 @@ ${scriptText}`;
       throw new Error('La IA respondió pero no incluyó la lista de escenas en el JSON.');
     }
 
-    studioLogger.addLog('SUCCESS', `✓ Paso 5 completado: ${parsed.scenes.length} escenas generadas con causalidad estricta`, {
+    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Paso 5 completado: ${parsed.scenes.length} escenas generadas con causalidad estricta`, {
       primeraEscena: parsed.scenes[0]?.visualPrompt?.slice(0, 100),
       ultimaEscena: parsed.scenes[parsed.scenes.length - 1]?.visualPrompt?.slice(0, 100)
     });
@@ -1484,10 +1479,7 @@ export async function analyzeFullScriptStructureWithAI(params: {
     };
   }
 
-  studioLogger.addLog('STEP', 'Paso 1/5: Iniciando Análisis Profundo del Guion con IA...', {
-    model: model || GEMINI_ANALYSIS_MODEL,
-    caracteres: scriptText.length
-  });
+  studioLogger.addLog('STEP', 'Paso 1/5', `Iniciando Análisis Profundo del Guion con IA — Modelo: ${model || GEMINI_ANALYSIS_MODEL} | ${scriptText.length} chars`);
 
   const system = `${MASTER_PROMPT_1_SCRIPT_ANALYSIS}
 
@@ -1553,15 +1545,14 @@ Construye la representación visual precisa de la historia siguiendo las reglas 
       rawText: raw
     };
 
-    studioLogger.addLog('AI', '✓ Paso 1 (Análisis Profundo) completado exitosamente', {
-      tema: result.premise?.theme,
+    studioLogger.addLog('AI', 'Paso 1/5', `✓ Análisis Profundo completado — Tema: ${result.premise?.theme?.slice(0, 80)}`, {
       resumenVisual: result.visualSummary,
       noInventar: result.doNotInventList?.slice(0, 3)
     });
 
     return result;
   } catch (err: any) {
-    studioLogger.addLog('WARN', 'Aviso en Paso 1: Usando análisis heurístico de respaldo', { error: err?.message });
+    studioLogger.addLog('WARN', 'Paso 1/5', `Fallo en Análisis Profundo, usando heurística de respaldo: ${err?.message}`);
     return {
       premise: {
         theme: scriptText.slice(0, 120),
@@ -1596,9 +1587,7 @@ export async function extractCulturalContextWithAI(params: {
     };
   }
 
-  studioLogger.addLog('STEP', 'Paso 2/5: Extrayendo Contexto Temporal, Geográfico y Cultural...', {
-    model: model || GEMINI_ANALYSIS_MODEL
-  });
+  studioLogger.addLog('STEP', 'Paso 2/5', `Extrayendo Contexto Temporal, Geográfico y Cultural — Modelo: ${model || GEMINI_ANALYSIS_MODEL}`);
 
   const deepContext = deepAnalysis?.visualSummary
     ? `\nMEMORIA VISUAL PREVIA DEL GUION:
@@ -1648,16 +1637,14 @@ Extrae el contexto histórico, geográfico y cultural exacto respetando la auten
       autoDetected: true
     };
 
-    studioLogger.addLog('AI', '✓ Paso 2 (Contexto Cultural) completado', {
-      epoca: result.epoch,
-      cultura: result.culture,
+    studioLogger.addLog('AI', 'Paso 2/5', `✓ Contexto Cultural detectado — Época: ${result.epoch} | Cultura: ${result.culture}`, {
       entorno: result.environment,
       culturalLock: result.culturalLock?.slice(0, 80)
     });
 
     return result;
   } catch (err: any) {
-    studioLogger.addLog('WARN', 'Aviso en Paso 2: Usando contexto contemporáneo de respaldo', { error: err?.message });
+    studioLogger.addLog('WARN', 'Paso 2/5', `Fallo en Contexto Cultural, usando contemporáneo de respaldo: ${err?.message}`);
     return {
       epoch: 'Contemporánea / Actual',
       culture: 'Contemporánea',
@@ -1703,9 +1690,7 @@ export async function detectStyleWithAI(params: {
     };
   }
 
-  studioLogger.addLog('STEP', 'Paso 3/5: Formulando Lenguaje Visual y Estilo Específico...', {
-    model: model || GEMINI_ANALYSIS_MODEL
-  });
+  studioLogger.addLog('STEP', 'Paso 3/5', `Formulando Lenguaje Visual y Estilo Específico — Modelo: ${model || GEMINI_ANALYSIS_MODEL}`);
 
   const contextStr = [
     culturalContext?.epoch ? `Época: ${culturalContext.epoch}` : '',
@@ -1760,15 +1745,14 @@ Diseña el lenguaje visual específico y coherente con el universo del guion:`;
       styleAvoid: parsed.styleAvoid || ''
     };
 
-    studioLogger.addLog('AI', '✓ Paso 3 (Estilo Visual) completado', {
-      nombreEstilo: result.styleName,
+    studioLogger.addLog('AI', 'Paso 3/5', `✓ Estilo Visual creado — "${result.styleName}"`, {
       formula: result.customInstructions?.slice(0, 90),
       styleLock: result.styleLock?.slice(0, 80)
     });
 
     return result;
   } catch (err: any) {
-    studioLogger.addLog('WARN', 'Aviso en Paso 3: Usando estilo fotográfico limpio de respaldo', { error: err?.message });
+    studioLogger.addLog('WARN', 'Paso 3/5', `Fallo en Estilo Visual, usando estilo fotográfico de respaldo: ${err?.message}`);
     return {
       recommendedStyleId: 'custom',
       styleName: 'Fotografía Realista Contemporánea',
@@ -1799,9 +1783,7 @@ export async function detectCharactersWithAI(params: {
 
   if (!scriptText.trim()) return [];
 
-  studioLogger.addLog('STEP', 'Paso 4/5: Identificando Personajes y Generando CHARACTER_LOCK...', {
-    model: model || GEMINI_ANALYSIS_MODEL
-  });
+  studioLogger.addLog('STEP', 'Paso 4/5', `Identificando Personajes y Generando CHARACTER_LOCK — Modelo: ${model || GEMINI_ANALYSIS_MODEL}`);
 
   const contextStr = [
     culturalContext?.epoch ? `Época: ${culturalContext.epoch}` : '',
@@ -1868,14 +1850,14 @@ Extrae los personajes que deben aparecer físicamente y define su CHARACTER_LOCK
         characterLock: c.characterLock || `${c.name || 'Sujeto'}: consistent appearance and contextual attire`
       }));
 
-      studioLogger.addLog('AI', `✓ Paso 4 (Personajes) completado: ${mapped.length} personaje(s) identificado(s)`, {
+      studioLogger.addLog('AI', 'Paso 4/5', `✓ CHARACTER_LOCK completado: ${mapped.length} personaje(s) identificado(s)`, {
         personajes: mapped.map((m: any) => `${m.name} (${m.role}) - ${m.clothingAnchor.slice(0, 45)}`)
       });
 
       return mapped;
     }
   } catch (err: any) {
-    studioLogger.addLog('WARN', 'Aviso en Paso 4: Sin personajes explícitos detectados o fallo de IA', { error: err?.message });
+    studioLogger.addLog('WARN', 'Paso 4/5', `Sin personajes explícitos detectados o fallo de IA: ${err?.message}`);
   }
 
   // Fallback neutral contextual: NO forzar ropa de cuero medieval
@@ -1941,7 +1923,7 @@ Responde ÚNICAMENTE en formato JSON:
       lightingPreference: parsed.lightingPreference || 'natural_contextual',
       reason: parsed.reason || 'Cinematografía adaptada al tema del guion.'
     };
-    studioLogger.addLog('AI', 'Encuadre e iluminación configurados', res);
+    studioLogger.addLog('AI', 'Cinematografía', `✓ Encuadre: ${res.cameraPreference} | Iluminación: ${res.lightingPreference}`, { reason: res.reason });
     return res;
   } catch (err: any) {
     return { cameraPreference: 'variado_dinamico', lightingPreference: 'natural_contextual', reason: 'Cinematografía contextual balanceada.' };
