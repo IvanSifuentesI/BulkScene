@@ -280,7 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {(userEmail === 'ivansifuentes1998@gmail.com' || userEmail === 'admin@bulkscene.ai') && (
+            {(userEmail === 'admin@bulkscene.ai' || localStorage.getItem('bulkscene_admin_authenticated') === 'true') && (
               <Link
                 to="/admin"
                 className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono hover:bg-red-500/20 transition-colors"

@@ -39,9 +39,8 @@ export const AdminDashboard: React.FC = () => {
   // Estado de autenticación del panel admin
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      const email = localStorage.getItem('bulkscene_user_email');
       const isAdminSession = localStorage.getItem('bulkscene_admin_authenticated');
-      return email === 'ivansifuentes1998@gmail.com' || isAdminSession === 'true';
+      return isAdminSession === 'true';
     } catch {
       return false;
     }
@@ -78,8 +77,8 @@ export const AdminDashboard: React.FC = () => {
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Clave de acceso administrativa
-    if (adminPin === 'admin2026' || adminPin === 'bulkscene@2026' || adminPin === '1998') {
+    // Única contraseña autorizada de administrador
+    if (adminPin === 'Ivan@9947') {
       setIsAuthenticated(true);
       localStorage.setItem('bulkscene_admin_authenticated', 'true');
       setPinError('');

@@ -341,7 +341,7 @@ export const MainApplication: React.FC = () => {
             </button>
 
             {/* Acceso discreto para el Administrador */}
-            {(userEmail === 'ivansifuentes1998@gmail.com' || userEmail === 'admin@bulkscene.ai') && (
+            {(userEmail === 'admin@bulkscene.ai' || localStorage.getItem('bulkscene_admin_authenticated') === 'true') && (
               <Link
                 to="/admin"
                 className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-mono font-bold transition-all"

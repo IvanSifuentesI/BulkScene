@@ -44,8 +44,8 @@ export const Login: React.FC = () => {
 
       // Si no existe en la base de datos de miembros autorizados de Skool
       if (!userData) {
-        // Excepción creador/admin
-        if (emailLower === 'ivansifuentes1998@gmail.com' || emailLower === 'admin@bulkscene.ai') {
+        // Excepción administrativa
+        if (emailLower === 'admin@bulkscene.ai') {
           localStorage.setItem('bulkscene_auth_session', 'active');
           localStorage.setItem('bulkscene_user_email', emailLower);
           navigate('/app');
@@ -76,12 +76,6 @@ export const Login: React.FC = () => {
       navigate('/app');
     } catch (err: any) {
       console.warn('[LOGIN NOTICE]:', err);
-      if (emailLower === 'ivansifuentes1998@gmail.com') {
-        localStorage.setItem('bulkscene_auth_session', 'active');
-        localStorage.setItem('bulkscene_user_email', emailLower);
-        navigate('/app');
-        return;
-      }
       setViewState('no_suscrito');
     } finally {
       setLoading(false);
