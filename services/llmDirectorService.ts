@@ -1074,38 +1074,50 @@ export async function detectStyleWithAI(params: {
   nvidiaNimKey?: string;
   groqKey?: string;
   signal?: AbortSignal;
-}): Promise<{ recommendedStyleId: string; styleName: string; reason: string }> {
+}): Promise<{ recommendedStyleId: string; styleName: string; reason: string; customInstructions: string }> {
   const { scriptText, styles, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim() || styles.length === 0) {
     return {
       recommendedStyleId: styles[0]?.id || 'cinematic-35mm',
       styleName: styles[0]?.name || 'Cinematográfico 35mm',
-      reason: 'Estilo predeterminado por defecto'
+      reason: 'Estilo predeterminado por defecto',
+      customInstructions: styles[0]?.promptModifier || ''
     };
   }
 
-  const stylesListStr = styles.map((s, idx) => `${idx + 1}. ID: "${s.id}" | Nombre: "${s.name}" | Categoría: "${s.category}" | Detalle: "${s.description}"`).join('\n');
+  const stylesListStr = styles.map((s, idx) =>
+    `${idx + 1}. ID: "${s.id}" | Nombre: "${s.name}" | Categoría: "${s.category}" | Detalle: "${s.description}"`
+  ).join('\n');
 
-  const system = `Eres un Director de Arte y Fotografía Cinematográfica galardonado.
-Tu tarea es analizar el guion proporcionado y seleccionar el MEJOR estilo visual de la lista disponible para maximizar el impacto visual y la retención del espectador.
+  const system = `Eres el Director de Arte y Fotografía Cinematográfica más reconocido del mundo, con experiencia en Hollywood, Bollywood y cine europeo.
+
+Tu misión es leer el guion COMPLETO, comprender a fondo:
+- El género y tono emocional (drama, acción, romance, terror, documental, motivacional, etc.)
+- La atmósfera que el creador quiere transmitir al espectador
+- Los personajes, sus emociones y el arco narrativo
+- La época, el mundo y los escenarios descritos
+- El ritmo de la historia (rápido/lento, tenso/relajado)
+
+Con ese análisis PROFUNDO del guion, seleccionar el mejor estilo visual de la lista Y además crear instrucciones técnicas de fotografía cinematográfica personalizadas que complementen y eleven la narrativa.
 
 Responde ÚNICAMENTE en formato JSON válido:
 {
   "recommendedStyleId": "id-exacto-del-estilo",
   "styleName": "Nombre del estilo",
-  "reason": "Explicación breve de 1 o 2 oraciones del por qué este estilo eleva la narrativa."
+  "reason": "Análisis de 2-3 oraciones: por qué este estilo específico potencia la narrativa de ESTE guion.",
+  "customInstructions": "Instrucciones técnicas de fotografía en inglés para el generador de imágenes, de 30-60 palabras, muy específicas para este guion: tipo de lente, profundidad de campo, temperatura de color, grano de película, iluminación, composición, etc."
 }`;
 
   const user = `LISTA DE ESTILOS DISPONIBLES:
 ${stylesListStr}
 
-GUION A ANALIZAR:
+GUION COMPLETO A ANALIZAR:
 """
-${scriptText.slice(0, 2500)}
+${scriptText}
 """
 
-Elige el estilo más adecuado:`;
+Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
 
   try {
     const raw = await callLLMWithFallbacks({
@@ -1123,29 +1135,22 @@ Elige el estilo más adecuado:`;
     return {
       recommendedStyleId: matched.id,
       styleName: matched.name,
-      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.'
+      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.',
+      customInstructions: parsed.customInstructions || matched.promptModifier || ''
     };
   } catch (err) {
     console.warn('[detectStyleWithAI] Fallback local para estilo visual:', err);
-    const lower = scriptText.toLowerCase();
-    let selected = styles[0];
-    if (lower.includes('anime') || lower.includes('manga') || lower.includes('japón') || lower.includes('samurái')) {
-      selected = styles.find(s => s.id.includes('anime')) || styles[0];
-    } else if (lower.includes('cyber') || lower.includes('futuro') || lower.includes('robot') || lower.includes('ia') || lower.includes('holograma')) {
-      selected = styles.find(s => s.id.includes('cyber') || s.id.includes('sci-fi')) || styles[0];
-    } else if (lower.includes('medieval') || lower.includes('rey') || lower.includes('espada') || lower.includes('castillo')) {
-      selected = styles.find(s => s.id.includes('dark-fantasy') || s.id.includes('fantasy')) || styles[0];
-    }
     return {
-      recommendedStyleId: selected.id,
-      styleName: selected.name,
-      reason: 'Selección algorítmica basada en las palabras clave del guion.'
+      recommendedStyleId: styles[0].id,
+      styleName: styles[0].name,
+      reason: 'Selección por defecto (fallo en análisis IA).',
+      customInstructions: styles[0].promptModifier || ''
     };
   }
 }
 
 /**
- * Extrae automáticamente el contexto temporal, cultural y ambiental del guion con el LLM activo.
+ * Extrae automáticamente el contexto temporal, cultural y ambiental del guion con análisis PROFUNDO.
  */
 export async function extractCulturalContextWithAI(params: {
   scriptText: string;
@@ -1165,17 +1170,31 @@ export async function extractCulturalContextWithAI(params: {
     };
   }
 
-  const system = `Eres un Historiador y Director de Producción Cinematográfica.
-Analiza el guion del usuario y extrae con precisión quirúrgica el marco temporal, cultural y ambiental.
+  const system = `Eres un Historiador Cultural y Director de Producción Cinematográfica con décadas de experiencia en producciones de época.
+
+Tu tarea es leer el guion COMPLETO y extraer con máxima precisión:
+1. La ÉPOCA histórica o futurista (año exacto si se menciona, década, siglo, o período narrativo)
+2. La CULTURA y civilización dominante (sociedad, valores, costumbres, clase social)
+3. El ENTORNO físico y atmosférico donde ocurre la historia (locaciones, clima, arquitectura, objetos)
+
+NO uses palabras genéricas. Sé específico y concreto basándote en las pistas que el guion entrega.
+Por ejemplo: si el guion habla de "legiones" y "muros de Alesia", deduces "52 a.C., Galia romana".
+Si menciona "monitores cuánticos" y "apagón masivo", deduces "futuro cercano 2070-2090, metrópolis tecnológica".
+
 Responde ÚNICAMENTE en formato JSON:
 {
-  "epoch": "Época histórica o futurista (ej: Siglo XIX Victoriano, Roma 44 a.C., Año 2088 Cyberpunk, Década de 1970)",
-  "culture": "Cultura y ambientación (ej: Tradición Japonesa Feudal, Imperio Romano, Cultura Urbana Neoyorquina, Cyberpunk Distópico)",
-  "environment": "Entorno físico y atmósfera (ej: Laboratorio cuántico subterráneo, Selva amazónica en tormenta, Callejones lluviosos con neón)",
+  "epoch": "Época histórica precisa (ej: Siglo I d.C. Imperio Romano, Año 2088 Era Post-Colapso, Década de 1920 Jazz Age)",
+  "culture": "Cultura y ambientación específica (ej: Aristocracia romana militar, Corporaciones cyberpunk distópicas, Comunidades nativas amazónicas)",
+  "environment": "Entorno físico y atmosférico detallado (ej: Coliseo romano al atardecer con multitudes, Megaurbe neon bajo lluvia perpetua, Selva tropical con templos mayas)",
   "autoDetected": true
 }`;
 
-  const user = `GUION:\n"""\n${scriptText.slice(0, 3000)}\n"""\nExtrae el marco temporal, cultural y ambiental:`;
+  const user = `GUION COMPLETO:
+"""
+${scriptText}
+"""
+
+Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con máxima precisión:`;
 
   try {
     const raw = await callLLMWithFallbacks({
@@ -1207,7 +1226,7 @@ Responde ÚNICAMENTE en formato JSON:
 }
 
 /**
- * Detecta personajes, protagonistas y secundarios, ropa invariante y ciclo vital con el LLM activo.
+ * Detecta personajes, protagonistas y secundarios, ropa invariante y ciclo vital con análisis PROFUNDO.
  */
 export async function detectCharactersWithAI(params: {
   scriptText: string;
@@ -1221,33 +1240,41 @@ export async function detectCharactersWithAI(params: {
 
   if (!scriptText.trim()) return [];
 
-  const system = `Eres un Director de Casting y Continuidad Visual de Cine.
-Identifica los personajes clave que aparecen en el guion.
-Para cada personaje determina:
-1. "name": Nombre del personaje (o apodo si no tiene nombre propio, ej: "El Detective", "El Científico").
-2. "role": "PROTAGONIST" para el personaje central, "SECONDARY" para los demás.
-3. "alive": true si sobrevive o false si muere/desaparece en el relato.
-4. "exitScene": número de escena aproximado donde muere o sale del relato (o null si permanece toda la historia).
-5. "anchorDescription": Descripción biométrica invariable concisa en inglés (ej: "35-year-old tall athletic man with short black hair and sharp jawline").
-6. "clothingAnchor": Vestimenta invariable concisa en inglés (ej: "dark worn leather jacket over charcoal t-shirt and rugged cargo pants").
-7. "defaultSeed": Número entero positivo único entre 100000 y 999999.
+  const system = `Eres el Director de Casting y Supervisor de Continuidad Visual de las producciones más grandes de Hollywood.
+
+Tu misión es leer el guion COMPLETO y:
+1. Identificar TODOS los personajes que tienen presencia significativa en la narrativa
+2. Para cada personaje, construir una ficha biométrica INVARIABLE e INMUTABLE para que el generador de imágenes los reproduzca de manera idéntica en cada escena
+3. Determinar si el personaje muere, desaparece o sobrevive al final del relato
+
+Reglas importantes:
+- El protagonista es el personaje central de la historia
+- Si el guion es motivacional o filosófico sin personajes explícitos, crea un "Narrador Anónimo" con rasgos genéricos cinematográficos
+- Las descripciones biométricas y de ropa deben estar en INGLÉS y ser muy precisas y detalladas
+- Incluye edad aproximada, rasgos físicos dominantes, color de ojos, cabello, complexión
+- La ropa debe ser la que predomina en la mayor parte del relato
 
 Responde ÚNICAMENTE en formato JSON:
 {
   "characters": [
     {
-      "name": "Marcus",
+      "name": "Nombre del personaje",
       "role": "PROTAGONIST",
       "alive": true,
       "exitScene": null,
-      "anchorDescription": "38-year-old rugged cybernetic detective with intense grey eyes and scarred cheek",
-      "clothingAnchor": "weathered trench coat with glowing collar and tactical boots",
+      "anchorDescription": "Descripción biométrica detallada en inglés (edad, altura, rasgos faciales, cabello, ojos, piel)",
+      "clothingAnchor": "Vestimenta predominante en inglés (prendas, colores, materiales, accesorios)",
       "defaultSeed": 482910
     }
   ]
 }`;
 
-  const user = `GUION:\n"""\n${scriptText.slice(0, 3000)}\n"""\nDetecta los personajes con sus rasgos invariables:`;
+  const user = `GUION COMPLETO:
+"""
+${scriptText}
+"""
+
+Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos invariables:`;
 
   try {
     const raw = await callLLMWithFallbacks({
@@ -1289,3 +1316,76 @@ Responde ÚNICAMENTE en formato JSON:
     }
   ];
 }
+
+/**
+ * Detecta automáticamente el encuadre cinematográfico e iluminación ideal para el guion con IA.
+ */
+export async function detectCinematographyWithAI(params: {
+  scriptText: string;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<{ cameraPreference: string; lightingPreference: string; reason: string }> {
+  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim()) {
+    return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
+  }
+
+  const system = `Eres el Director de Fotografía (DP) más premiado del mundo, con Óscar honorífico en cinematografía.
+
+Lee el guion COMPLETO y determina:
+1. El ENCUADRE más efectivo para este contenido específico
+2. La ILUMINACIÓN más apropiada para la atmósfera emocional del guion
+
+Opciones disponibles para encuadre (cameraPreference):
+- "variado_dinamico": Mezcla de planos generales, medios y primeros planos. Para historias con múltiples locaciones y acción variada.
+- "primeros_planos": Enfoque en rostros, emociones y miradas. Para historias íntimas, psicológicas o emocionales.
+- "gran_plano_general": Paisajes monumentales y escenarios épicos. Para epopeyas, naturaleza, guerra, fantasía épica.
+- "camara_en_mano": Sensación documental cruda y real. Para reportajes, mockumentary, acción urbana, realismo social.
+
+Opciones disponibles para iluminación (lightingPreference):
+- "volumetrica_cinematica": Rayos de luz, niebla y volumen. Para drama épico, ciencia ficción, fantasía oscura.
+- "hora_dorada": Luz cálida al amanecer o atardecer (Kodachrome). Para romance, nostalgia, drama emocional positivo.
+- "claroscuro_dramatico": Alto contraste, sombras tensas (Rembrandt). Para thriller, noir, suspenso, drama psicológico.
+- "neon_cyberpunk": Azul y magenta, neón bicolor. Para ciencia ficción urbana, cyberpunk, futuro distópico.
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "cameraPreference": "valor-exacto-de-la-lista",
+  "lightingPreference": "valor-exacto-de-la-lista",
+  "reason": "Explicación de 1-2 oraciones de por qué estas elecciones potencian este guion específico."
+}`;
+
+  const user = `GUION COMPLETO:
+"""
+${scriptText}
+"""
+
+Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
+
+  try {
+    const raw = await callLLMWithFallbacks({
+      model,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+    const parsed = extractCleanJson(raw);
+    return {
+      cameraPreference: parsed.cameraPreference || 'variado_dinamico',
+      lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
+      reason: parsed.reason || 'Cinematografía optimizada para el guion.'
+    };
+  } catch (err) {
+    console.warn('[detectCinematographyWithAI] Fallback cinematografía:', err);
+    return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
+  }
+}
+
+
