@@ -34,8 +34,14 @@ import {
   X,
   CheckCheck,
   Globe,
-  Lock
+  Lock,
+  Download,
+  Copy
 } from 'lucide-react';
+import { 
+  generateMasterStudioHtml, 
+  saveMasterStudioHtmlFile 
+} from '../services/htmlProjectExportService';
 import { 
   CharacterPersona, 
   StylePreset, 
@@ -232,11 +238,14 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // 4. Project Folder Destination
   const [folderName, setFolderName] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_folder_name') || 'Descargas / Proyecto ZIP';
+    return localStorage.getItem('bulkscene_selected_folder_name') || 'Descargas / Carpeta de Proyecto';
   });
+  const [activeDirHandle, setActiveDirHandle] = useState<any>(null);
   const [currentProjectName, setCurrentProjectName] = useState<string>(() => {
-    return savedSession?.projectName || projectName;
+    return savedSession?.projectName || projectName || 'BulkScene_Proyecto_01';
   });
+  const [lastGeneratedHtml, setLastGeneratedHtml] = useState<string | null>(null);
+  const [savedHtmlFilename, setSavedHtmlFilename] = useState<string | null>(null);
 
   // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
   const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(() => {
@@ -343,20 +352,25 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // 8. Visual Style & Auto-AI
   // styleMode: 'custom' = el usuario escribe manualmente (textarea vacío al inicio),
-  //            'auto' = la IA detecta y rellena automáticamente
-  const [styleMode, setStyleMode] = useState<'custom' | 'auto'>(() => {
-    return (savedSession?.customStyleInstructions ? 'auto' : 'custom') as 'custom' | 'auto';
-  });
+  //            'auto' = la IA detecta y diseña automáticamente según el guion
+  const [styleMode, setStyleMode] = useState<'custom' | 'auto'>('custom');
   const activeStyle = styles.find((s) => s.id === activeStyleId) || null;
   // En modo custom el textarea empieza vacío; en modo auto carga lo guardado
   const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(() => {
     return savedSession?.customStyleInstructions ?? '';
+  });
+  const [detectedStyleName, setDetectedStyleName] = useState<string>(() => {
+    return (savedSession as any)?.detectedStyleName ?? 'Personalizado';
   });
   const [isDetectingStyle, setIsDetectingStyle] = useState<boolean>(false);
   const [detectedStyleReason, setDetectedStyleReason] = useState<string | null>(() => {
     return savedSession?.detectedStyleReason ?? null;
   });
   const [styleSavedToast, setStyleSavedToast] = useState<boolean>(false);
+
+  // Modal para guardar estilo en banco con nombre personalizado
+  const [isSaveStyleModalOpen, setIsSaveStyleModalOpen] = useState<boolean>(false);
+  const [newStyleNameInput, setNewStyleNameInput] = useState<string>('');
 
   // 9. Character Vault & Biometric Consistency — Toggle simple: activo = personaje consistente, inactivo = sin personaje
   const activeChar = characters.find((c) => c.id === activeCharacterId);
@@ -433,6 +447,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       culturalContext,
       culturalContextInput,
       customStyleInstructions,
+      detectedStyleName,
       detectedStyleReason,
       consistencyMode,
       detectedCharacters,
@@ -460,6 +475,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     culturalContext,
     culturalContextInput,
     customStyleInstructions,
+    detectedStyleName,
     detectedStyleReason,
     consistencyMode,
     detectedCharacters,
@@ -536,11 +552,12 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       if ('showDirectoryPicker' in window) {
         const dirHandle = await (window as any).showDirectoryPicker();
         if (dirHandle && dirHandle.name) {
+          setActiveDirHandle(dirHandle);
           setFolderName(`Carpeta: ${dirHandle.name}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${dirHandle.name}`);
         }
       } else {
-        alert('Tu navegador descargará automáticamente los resultados y escenas en un archivo ZIP organizado.');
+        alert('Tu navegador guardará automáticamente los resultados y el documento HTML en tu carpeta de descargas.');
       }
     } catch (e) {
       // User cancelled picker, ignore
@@ -637,7 +654,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
   };
 
-  // AI Auto-Detect Visual Style (análisis COMPLETO del guion)
+  // AI Auto-Detect Visual Style (análisis COMPLETO del guion y contexto)
   const handleAutoDetectStyle = async () => {
     if (!requireSubscription('Creación de Estilos con IA', '1. Estudio Master')) {
       return;
@@ -651,21 +668,17 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const result = await detectStyleWithAI({
         scriptText,
+        culturalContext,
         styles,
         model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
         groqKey: resolveGroqKey()
       });
-      onSelectStyle(result.recommendedStyleId);
-      // Usa las instrucciones técnicas personalizadas generadas por la IA (no solo el promptModifier del preset)
-      if (result.customInstructions) {
-        setCustomStyleInstructions(result.customInstructions);
-      } else {
-        const matched = styles.find(s => s.id === result.recommendedStyleId);
-        if (matched) setCustomStyleInstructions(matched.promptModifier || matched.description);
-      }
+      setDetectedStyleName(result.styleName);
+      setCustomStyleInstructions(result.customInstructions);
       setDetectedStyleReason(result.reason);
+      onSelectStyle('custom');
     } catch (err) {
       console.warn('Fallo en detección de estilo:', err);
       setStyleMode('custom');
@@ -674,41 +687,29 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
   };
 
-  // AI Auto-Detect Cinematography (encuadre + iluminación ideal según el guion COMPLETO)
-  const handleAutoDetectCinematography = async () => {
-    if (!requireSubscription('Dirección Cinematográfica con IA', '1. Estudio Master')) return;
-    if (!scriptText.trim()) {
-      alert('Pega o escribe un guion primero para detectar la cinematografía ideal.');
+  // Abrir Modal para Guardar Estilo Creado en el Banco con Nombre Personalizado
+  const handleOpenSaveStyleModal = () => {
+    if (!customStyleInstructions.trim()) {
+      alert('Primero define o genera un estilo con IA antes de guardarlo.');
       return;
     }
-    setIsDetectingCinematography(true);
-    try {
-      const result = await detectCinematographyWithAI({
-        scriptText,
-        model: selectedAnalysisModel,
-        geminiKey: resolveGeminiKey(),
-        nvidiaNimKey: resolveNvidiaKey(),
-        groqKey: resolveGroqKey()
-      });
-      setCameraPreference(result.cameraPreference);
-      setLightingPreference(result.lightingPreference);
-      setCinematographyReason(result.reason);
-    } catch (err) {
-      console.warn('Fallo en detección cinematográfica:', err);
-    } finally {
-      setIsDetectingCinematography(false);
-    }
+    setNewStyleNameInput(
+      detectedStyleName && detectedStyleName !== 'Personalizado'
+        ? detectedStyleName
+        : 'Estilo Cinemático Personalizado'
+    );
+    setIsSaveStyleModalOpen(true);
   };
 
-  // Guardar Estilo Creado en el Banco de Estilos Permanente
-  const handleSaveStyleToVault = () => {
-    const styleModifier = customStyleInstructions.trim() || activeStyle?.promptModifier || 'cinematic 35mm film photography, 8k';
+  const handleConfirmSaveStyleToVault = () => {
+    const finalName = newStyleNameInput.trim() || 'Estilo Cinemático Personalizado';
+    const styleModifier = customStyleInstructions.trim() || 'cinematic 35mm film photography, 8k';
     const newStyle: StylePreset = {
       id: `style-custom-${Date.now()}`,
-      name: activeStyle?.id && activeStyle.id !== 'custom' ? `${activeStyle.name} (Modificado)` : 'Estilo Personalizado Director',
+      name: finalName,
       category: 'Personalizado',
       promptModifier: styleModifier,
-      badgeColor: '#f59e0b',
+      badgeColor: '#06b6d4',
       description: styleModifier.slice(0, 110) + '...'
     };
     if (onAddStyle) {
@@ -720,6 +721,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       } catch {}
     }
     onSelectStyle(newStyle.id);
+    setIsSaveStyleModalOpen(false);
     setStyleSavedToast(true);
     setTimeout(() => setStyleSavedToast(false), 3000);
   };
@@ -765,6 +767,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     try {
       const detected = await detectCharactersWithAI({
         scriptText,
+        culturalContext,
+        visualStyle: { name: detectedStyleName, modifier: customStyleInstructions },
         model: selectedAnalysisModel,
         geminiKey: resolveGeminiKey(),
         nvidiaNimKey: resolveNvidiaKey(),
@@ -822,21 +826,20 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // Core Pipeline Execution
   const executeGeneration = async (mode: 'full_auto' | 'prompts_only') => {
-    if (!requireSubscription(mode === 'full_auto' ? 'MODO AUTOMÁTICO TOTAL' : 'Generación de Prompts con IA', '1. Estudio Master')) {
-      return;
-    }
-    if (!scriptText.trim()) {
-      alert('Por favor pega o escribe el guion antes de iniciar la generación.');
+    if (!requireSubscription(mode === 'full_auto' ? 'MODO AUTOMÁTICO' : 'Generación de Prompts con IA', '1. Estudio Master')) {
       return;
     }
 
     setIsProcessingPipeline(true);
-    setPipelineProgressText(mode === 'full_auto' ? 'Iniciando Pipeline Automático Total...' : 'Generando Prompts de Escenas con IA...');
+    setPipelineProgressText(mode === 'full_auto' ? 'Iniciando Modo Automático con IA...' : 'Generando Prompts de Escenas con IA...');
 
     try {
-      // 1. Si es modo total y hay audio sin transcribir, intentar extraer beats fonéticos con Whisper
-      if (mode === 'full_auto' && audioBlob && !transcription) {
-        setPipelineProgressText('Extrayendo beats fonéticos palabra por palabra con Whisper...');
+      let currentScript = scriptText.trim();
+      let currentTranscription = transcription;
+
+      // 0. Si el usuario cargó audio y aún no tiene transcripción ni guion, transcribir automáticamente
+      if (audioBlob && (!currentTranscription || !currentScript)) {
+        setPipelineProgressText('Transcribiendo audio maestro y midiendo pausas fonéticas...');
         try {
           const activeGroqKey = groqKeys[0] || localStorage.getItem('bulk_groq_api_keys') || '';
           const activeNvidiaKey = nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '';
@@ -852,20 +855,36 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             deepgramKey: activeDeepgramKey,
             onProgress: (status) => setPipelineProgressText(status)
           });
+          currentTranscription = res;
           setTranscription(res);
           if (res.duration) setAudioDuration(res.duration);
+          if (res.text && !currentScript) {
+            currentScript = res.text;
+            setScriptText(res.text);
+          }
         } catch (whisperErr) {
-          console.warn('Aviso Whisper:', whisperErr);
+          console.warn('Aviso Transcripción en Auto:', whisperErr);
         }
       }
 
-      // 2. Si no se ha configurado contexto temporal y es modo full_auto, auto-extraer con IA real
+      if (!currentScript) {
+        alert('Por favor carga un archivo de audio o escribe/pega el guion antes de iniciar la generación.');
+        setIsProcessingPipeline(false);
+        return;
+      }
+
+      // Variable para guardar el contexto activo
       let activeContext = { ...culturalContext };
-      if (mode === 'full_auto' && !activeContext.epoch && !culturalContextInput.trim()) {
-        setPipelineProgressText('Analizando marco temporal y cultural del guion con IA...');
+      let styleNameToUse = detectedStyleName || 'Estilo Cinemático Personalizado';
+      let styleModifierToUse = customStyleInstructions.trim();
+      let activeCharactersList = detectedCharacters;
+
+      if (mode === 'full_auto') {
+        // PASO 1 (Gemini 3.8 Flash): Crear el Contexto Temporal y Cultural
+        setPipelineProgressText('Paso 1/4 (Gemini 3.8 Flash): Analizando Época, Cultura y Entorno del guion...');
         try {
           activeContext = await extractCulturalContextWithAI({
-            scriptText,
+            scriptText: currentScript,
             model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
@@ -877,22 +896,44 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         } catch (cErr) {
           console.warn('Aviso Contexto:', cErr);
         }
-      }
 
-      // 3. Si no hay personajes y es modo full_auto, auto-detectar con IA real
-      let activeProtagonist = activeChar;
-      if (mode === 'full_auto' && !activeProtagonist && detectedCharacters.length === 0) {
-        setPipelineProgressText('Detectando personajes e identidades biométricas con IA...');
+        // PASO 2 (Gemini 3.8 Flash): Crear el Estilo Visual único acorde al guion y contexto
+        setPipelineProgressText('Paso 2/4 (Gemini 3.8 Flash): Diseñando Estilo Visual Cinematográfico único para el guion...');
         try {
-          const detected = await detectCharactersWithAI({
-            scriptText,
+          const styleRes = await detectStyleWithAI({
+            scriptText: currentScript,
+            culturalContext: activeContext,
+            styles,
             model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
             groqKey: resolveGroqKey()
           });
-          setDetectedCharacters(detected);
-          if (detected.length > 0 && onAddCharacter) {
+          styleNameToUse = styleRes.styleName;
+          styleModifierToUse = styleRes.customInstructions;
+          setDetectedStyleName(styleRes.styleName);
+          setCustomStyleInstructions(styleRes.customInstructions);
+          setDetectedStyleReason(styleRes.reason);
+          setStyleMode('auto');
+        } catch (sErr) {
+          console.warn('Aviso Estilo:', sErr);
+        }
+
+        // PASO 3 (Gemini 3.8 Flash): Crear los Personajes con detalle no genérico (Físico + Vestimenta)
+        setPipelineProgressText('Paso 3/4 (Gemini 3.8 Flash): Detectando Personajes, Rasgos Físicos y Vestimenta de Época...');
+        try {
+          const detected = await detectCharactersWithAI({
+            scriptText: currentScript,
+            culturalContext: activeContext,
+            visualStyle: { name: styleNameToUse, modifier: styleModifierToUse },
+            model: selectedAnalysisModel,
+            geminiKey: resolveGeminiKey(),
+            nvidiaNimKey: resolveNvidiaKey(),
+            groqKey: resolveGroqKey()
+          });
+          if (detected && detected.length > 0) {
+            activeCharactersList = detected;
+            setDetectedCharacters(detected);
             const proto = detected[0];
             const newPersona: CharacterPersona = {
               id: `char-auto-${Date.now()}`,
@@ -902,34 +943,35 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               defaultSeed: proto.defaultSeed,
               createdAt: new Date().toISOString()
             };
-            onAddCharacter(newPersona);
+            if (onAddCharacter) onAddCharacter(newPersona);
             onSelectCharacter(newPersona.id);
-            activeProtagonist = newPersona;
           }
         } catch (charErr) {
           console.warn('Aviso Personajes:', charErr);
         }
+      } else {
+        // En modo manual o solo prompts, usar lo configurado actualmente
+        if (!styleModifierToUse) {
+          styleModifierToUse = activeStyle?.promptModifier || 'cinematic 35mm film still, photorealistic, 8k';
+        }
       }
 
-      // 4. Preparar directiva de personaje y encuadre
-      const charDirective = activeProtagonist
-        ? `${activeProtagonist.name}: ${activeProtagonist.anchorDescription}, ${activeProtagonist.clothingAnchor}`
-        : (detectedCharacters.length > 0
-          ? `${detectedCharacters[0].name}: ${detectedCharacters[0].anchorDescription}, ${detectedCharacters[0].clothingAnchor}`
-          : '');
+      // PASO 4 (Gemini 3.5 Flash Lite): Generación de Prompts de todas las escenas
+      setPipelineProgressText('Paso 4/4 (Gemini 3.5 Flash Lite): Generando Prompts Cinemáticos Secuenciales...');
 
-      const styleModifierToUse = customStyleInstructions.trim() || activeStyle?.promptModifier || '';
+      const charDirective = activeCharactersList.length > 0
+        ? activeCharactersList.map(c => 
+            `${c.name} (${c.role}): ${c.anchorDescription}. Vestuario: ${c.clothingAnchor}. Seed #${c.defaultSeed}`
+          ).join('\n')
+        : (activeChar ? `${activeChar.name}: ${activeChar.anchorDescription}, ${activeChar.clothingAnchor}` : '');
 
-      setPipelineProgressText('Segmentando guion y construyendo prompts visuales cinematográficos con IA...');
-
-      // 5. Invocar LLM Director con procesamiento por lotes para guiones extensos
       const analysis = await analyzeScriptWithLLM({
-        scriptText,
+        scriptText: currentScript,
         model: selectedPromptModel,
         groqKey: resolveGroqKey(),
         nvidiaNimKey: nvidiaNimKeys[0] || '',
         geminiKey: resolveGeminiKey(),
-        targetStyleName: activeStyle?.name || 'Cinematográfico 35mm Hiperrealista',
+        targetStyleName: styleNameToUse,
         targetStyleModifier: styleModifierToUse,
         characterAnchor: charDirective,
         narrativeMode,
@@ -944,7 +986,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         throw new Error('El motor de dirección no devolvió escenas válidas.');
       }
 
-      // 5. Asignar tiempos fonéticos a las escenas usando la segmentación de Smart Beats
+      // Asignar tiempos fonéticos
       const finalScenes = analysis.scenes.map((sc, idx) => {
         let dur = restDurationSec;
         let start = idx * restDurationSec;
@@ -955,8 +997,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           dur = beat.duration;
           start = beat.startTime;
           end = beat.endTime;
-        } else if (transcription && transcription.segments && transcription.segments[idx]) {
-          const seg = transcription.segments[idx];
+        } else if (currentTranscription && currentTranscription.segments && currentTranscription.segments[idx]) {
+          const seg = currentTranscription.segments[idx];
           dur = Math.max(1.5, Number((seg.end - seg.start).toFixed(2)));
           start = seg.start;
           end = seg.end;
@@ -970,15 +1012,42 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         };
       });
 
-      setPipelineProgressText('¡Escenas y Prompts generados con éxito!');
+      // PASO 5: Generar y Guardar Archivo HTML Maestro de Verificación
+      setPipelineProgressText('Generando y Guardando Archivo Maestro HTML del Proyecto...');
+      const htmlContent = generateMasterStudioHtml({
+        projectName: currentProjectName,
+        scriptText: currentScript,
+        narrativeMode,
+        culturalContext: activeContext,
+        visualStyle: {
+          name: styleNameToUse,
+          modifier: styleModifierToUse,
+          reason: detectedStyleReason || undefined
+        },
+        characters: activeCharactersList.map(c => ({
+          name: c.name,
+          role: c.role,
+          anchorDescription: c.anchorDescription,
+          clothingAnchor: c.clothingAnchor,
+          defaultSeed: c.defaultSeed
+        })),
+        scenes: finalScenes
+      });
 
-      // 6. Transición automática a la siguiente fase
-      if (autoAdvance) {
-        if (onProceedToImages) {
-          onProceedToImages(finalScenes);
-        } else {
-          onProceedToScenes(finalScenes);
-        }
+      setLastGeneratedHtml(htmlContent);
+
+      const saveRes = await saveMasterStudioHtmlFile({
+        dirHandle: activeDirHandle,
+        projectName: currentProjectName,
+        htmlContent
+      });
+      setSavedHtmlFilename(saveRes.filename);
+
+      setPipelineProgressText(`¡Completado! HTML guardado como ${saveRes.filename}. Pasando a Generar Escenas...`);
+
+      // PASO 6: Transición automática al Generador Masivo
+      if (onProceedToImages) {
+        onProceedToImages(finalScenes);
       } else {
         onProceedToScenes(finalScenes);
       }
@@ -1312,53 +1381,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         </div>
       </div>
 
-      {/* 2. DUAL MASTER INPUT: GUION & AUDIO MAESTRO */}
+      {/* 2. DUAL MASTER INPUT: AUDIO MAESTRO (PRIMERO) & GUION (SEGUNDO) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* GUION TEXTAREA (7 COLS) */}
-        <div className="lg:col-span-7 bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-3 flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-3 border-b border-white/[0.04]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                <FileText className="w-4 h-4" />
-              </div>
-              <h2 className="text-sm font-bold text-white tracking-wide">
-                1. Guion Completo de Locución
-              </h2>
-            </div>
-            <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-              <span>
-                <strong className="text-emerald-400">{wordCount}</strong> palabras
-              </span>
-              <span>•</span>
-              <span>
-                ~<strong className="text-emerald-400">{estimatedSeconds}</strong> seg. estimados
-              </span>
-            </div>
-          </div>
-
-          <textarea
-            rows={10}
-            value={scriptText}
-            onChange={(e) => setScriptText(e.target.value)}
-            placeholder="Pega aquí el guion de tu video (Shorts, Reels, TikTok o documental largo de hasta 2 horas)..."
-            className="w-full p-4 rounded-2xl bg-[#06070a] border border-white/[0.06] text-slate-100 font-mono text-xs focus:outline-none focus:border-emerald-500 leading-relaxed resize-y flex-1"
-          />
-
-          <div className="flex items-center justify-between pt-2 text-[11px] text-slate-500">
-            <span>Consejo: Puedes pegar texto en español o inglés, el Director lo traducirá y adaptará a prompts nativos.</span>
-            {scriptText.trim() && (
-              <button
-                type="button"
-                onClick={() => setScriptText('')}
-                className="text-slate-400 hover:text-red-400 font-medium transition-colors"
-              >
-                Limpiar Guion
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* AUDIO MAESTRO & BEATS FONÉTICOS WHISPER (5 COLS) */}
+        {/* AUDIO MAESTRO & BEATS FONÉTICOS WHISPER (5 COLS - PRIMERO) */}
         <div className="lg:col-span-5 bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.04]">
@@ -1367,7 +1392,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   <Mic className="w-4 h-4" />
                 </div>
                 <h2 className="text-sm font-bold text-white tracking-wide">
-                  2. Audio Maestro & Beats Whisper
+                  1. Audio Maestro & Beats Whisper
                 </h2>
               </div>
               <span className="text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
@@ -1569,6 +1594,50 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <SlidersHorizontal className="w-4 h-4" />
               <span>🔍 Abrir Mockup de Beats & Rangos de Escena</span>
             </button>
+          </div>
+        </div>
+
+        {/* GUION TEXTAREA (7 COLS - SEGUNDO) */}
+        <div className="lg:col-span-7 bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-3 border-b border-white/[0.04]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <FileText className="w-4 h-4" />
+              </div>
+              <h2 className="text-sm font-bold text-white tracking-wide">
+                2. Guion de Locución (Extraído del Audio o Pegado)
+              </h2>
+            </div>
+            <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+              <span>
+                <strong className="text-emerald-400">{wordCount}</strong> palabras
+              </span>
+              <span>•</span>
+              <span>
+                ~<strong className="text-emerald-400">{estimatedSeconds}</strong> seg. estimados
+              </span>
+            </div>
+          </div>
+
+          <textarea
+            rows={10}
+            value={scriptText}
+            onChange={(e) => setScriptText(e.target.value)}
+            placeholder="El guion se extraerá automáticamente al procesar el audio, o puedes pegar aquí tu texto..."
+            className="w-full p-4 rounded-2xl bg-[#06070a] border border-white/[0.06] text-slate-100 font-mono text-xs focus:outline-none focus:border-emerald-500 leading-relaxed resize-y flex-1"
+          />
+
+          <div className="flex items-center justify-between pt-2 text-[11px] text-slate-500">
+            <span>💡 Si cargas el audio, el guion se extrae automáticamente con sincronización fonética.</span>
+            {scriptText.trim() && (
+              <button
+                type="button"
+                onClick={() => setScriptText('')}
+                className="text-slate-400 hover:text-red-400 font-medium transition-colors"
+              >
+                Limpiar Guion
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -2237,9 +2306,13 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   className="w-full bg-[#07090e] border border-cyan-500/30 text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-cyan-400 resize-none font-sans leading-relaxed"
                 />
 
-                {activeStyle && (
-                  <p className="text-[10px] text-amber-400/70 font-mono">
-                    Preset base: {activeStyle.name}
+                {detectedStyleName && detectedStyleName !== 'Personalizado' && (
+                  <p className="text-[10px] text-cyan-400 font-mono flex items-center gap-1.5 pt-0.5">
+                    <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span>Estilo Diseñado con IA:</span>
+                    <strong className="text-white bg-cyan-950/60 px-2 py-0.5 rounded-md border border-cyan-500/30">
+                      {detectedStyleName}
+                    </strong>
                   </p>
                 )}
               </div>
@@ -2247,7 +2320,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
             <button
               type="button"
-              onClick={handleSaveStyleToVault}
+              onClick={handleOpenSaveStyleModal}
               disabled={!customStyleInstructions.trim()}
               className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 shadow-sm cursor-pointer"
               title="Guardar este estilo en el Banco de Estilos permanente"
@@ -2539,12 +2612,12 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <span>Solo Generar Prompts (Modo Manual)</span>
             </button>
 
-            {/* Action 2: MODO AUTOMÁTICO TOTAL (1-CLICK PIPELINE) */}
+            {/* Action 2: MODO AUTOMÁTICO */}
             <button
               type="button"
               onClick={() => executeGeneration('full_auto')}
-              disabled={isProcessingPipeline || !scriptText.trim()}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-black font-black text-xs flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all active:scale-95 disabled:opacity-40"
+              disabled={isProcessingPipeline || (!scriptText.trim() && !audioBlob)}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 hover:from-emerald-400 hover:to-cyan-300 text-black font-black text-xs flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
             >
               {isProcessingPipeline ? (
                 <>
@@ -2554,13 +2627,43 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-black" />
-                  <span>MODO AUTOMÁTICO TOTAL (1-CLICK PIPELINE)</span>
+                  <span>MODO AUTOMÁTICO</span>
                   <ArrowRight className="w-4 h-4 text-black" />
                 </>
               )}
             </button>
           </div>
         </div>
+
+        {/* Saved HTML Project Banner */}
+        {savedHtmlFilename && (
+          <div className="bg-cyan-950/40 border border-cyan-500/40 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-white block truncate">
+                  Archivo HTML Maestro generado: <span className="text-cyan-300 font-mono">{savedHtmlFilename}</span>
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Guardado en tu carpeta de proyecto con todos los prompts, personajes y guion.
+                </span>
+              </div>
+            </div>
+
+            {lastGeneratedHtml && (
+              <button
+                type="button"
+                onClick={() => {
+                  saveMasterStudioHtmlFile(lastGeneratedHtml, savedHtmlFilename, activeDirHandle);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Descargar Copia HTML</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Progress Text Banner */}
         {isProcessingPipeline && (
@@ -2572,6 +2675,74 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           </div>
         )}
       </div>
+
+      {/* MODAL EMERGENTE: GUARDAR ESTILO VISUAL EN BANCO */}
+      {isSaveStyleModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0b0e17] border border-cyan-500/40 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => setIsSaveStyleModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Palette className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Guardar Estilo en Banco</h3>
+                <p className="text-[10px] text-slate-400">Guarda este estilo diseñado para usarlo en futuros proyectos</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                  Nombre del Estilo:
+                </label>
+                <input
+                  type="text"
+                  value={newStyleNameInput}
+                  onChange={(e) => setNewStyleNameInput(e.target.value)}
+                  placeholder="Ej: Fantasía Oscura Épica, Cyberpunk Realista..."
+                  className="w-full bg-[#07090e] border border-cyan-500/30 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-400"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                  Fórmula y Modificador Visual (Generado por IA):
+                </label>
+                <div className="w-full max-h-32 overflow-y-auto bg-[#07090e] border border-white/[0.08] text-slate-300 rounded-xl p-3 text-[11px] font-mono leading-relaxed select-all">
+                  {customStyleInstructions}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => setIsSaveStyleModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-xs font-semibold hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSaveStyleToVault}
+                disabled={!newStyleNameInput.trim()}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 cursor-pointer"
+              >
+                <span>💾 Guardar en Banco</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

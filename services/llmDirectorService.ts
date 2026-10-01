@@ -514,7 +514,13 @@ DIRECTRIZ DE ESTILO VISUAL ABSOLUTA:
 - Estilo artístico ordenado: "${targetStyleName}".
 - Modificador visual clave: "${targetStyleModifier}".
 - REGLA DE ORO DE ESTILO: Cada uno de los prompts para cada escena DEBE estar escrito y concebido desde su primera palabra en el estilo visual seleccionado ("${targetStyleName}").
-- LONGITUD MÁXIMA POR PROMPT: Cada visualPrompt debe tener MENOS DE 380 CARACTERES en inglés. Directo, impactante y conciso para NVIDIA FLUX.
+- CERO PLANTILLAS GENÉRICAS: Está estrictamente prohibido usar fórmulas repetidas o clichés ("photorealistic 8k highly detailed"). Cada toma debe describir una pintura cinematográfica viva, específica e impactante.
+- REGLAS DE COHERENCIA OBLIGATORIA POR ESCENA:
+  1. PERSONAJES: Si la escena involucra personajes, describe su fisonomía exacta y su vestimenta específica definida para el proyecto.
+  2. CONTEXTO TEMPORAL/CULTURAL: La arquitectura, utilería, vehículos y entorno deben pertenecer de manera verosímil a la época.
+  3. MODO DE DIRECCIÓN Y CONTINUIDAD: Respeta la composición de cámara (establecimiento general, plano medio, primer plano, plano detalle dinámico) y la causa-efecto secuencial (la escena N fluye orgánicamente desde la escena N-1).
+  4. ACCIÓN VIVA DEL GUION: Visualiza el verbo y la acción de la frase específica.
+- LONGITUD POR PROMPT: Cada visualPrompt debe tener entre 250 y 650 caracteres en inglés. Rico en detalles visuales, lentes, iluminación y acción.
 - ANTI-CENSURA / CONTENIDO SEGURO: Evita terminología explícita de sangre ("blood"), muerte sangrienta ("slaughter/kill"); sustitúyelo por lenguaje dramático visual ("fallen silhouette", "engulfed by storm", "shadowy defeat") para que NVIDIA jamás active filtros de moderación.
 
 PROTOCOLO DE ACCIÓN DINÁMICA (CRÍTICO):
@@ -1287,56 +1293,55 @@ export async function executeAnalysisWithFallbacks(params: {
  */
 export async function detectStyleWithAI(params: {
   scriptText: string;
-  styles: StylePreset[];
+  culturalContext?: CulturalTemporalContext;
+  styles?: StylePreset[];
   model?: string;
   geminiKey?: string;
   nvidiaNimKey?: string;
   groqKey?: string;
   signal?: AbortSignal;
 }): Promise<{ recommendedStyleId: string; styleName: string; reason: string; customInstructions: string }> {
-  const { scriptText, styles, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+  const { scriptText, culturalContext, styles = [], model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
-  if (!scriptText.trim() || styles.length === 0) {
+  if (!scriptText.trim()) {
     return {
-      recommendedStyleId: styles[0]?.id || 'cinematic-35mm',
-      styleName: styles[0]?.name || 'Cinematográfico 35mm',
-      reason: 'Estilo predeterminado por defecto',
-      customInstructions: styles[0]?.promptModifier || ''
+      recommendedStyleId: 'custom',
+      styleName: 'Cinematográfico 35mm Hiperrealista',
+      reason: 'Estilo predeterminado para el guion.',
+      customInstructions: 'cinematic 35mm film photography, 8k, shallow depth of field, natural lighting, highly detailed'
     };
   }
 
-  const stylesListStr = styles.map((s, idx) =>
-    `${idx + 1}. ID: "${s.id}" | Nombre: "${s.name}" | Categoría: "${s.category}" | Detalle: "${s.description}"`
-  ).join('\n');
+  const contextStr = culturalContext
+    ? `\nCONTEXTO HISTÓRICO Y NARRATIVO DETECTADO DEL GUION:
+- Época: ${culturalContext.epoch || 'Universal'}
+- Cultura/Entorno: ${culturalContext.culture || 'Cinematográfica'} • ${culturalContext.environment || 'Atmosférico'}`
+    : '';
 
-  const system = `Eres el Director de Arte y Fotografía Cinematográfica más reconocido del mundo, con experiencia en Hollywood, Bollywood y cine europeo.
+  const system = `Eres un Director de Arte y Fotografía Cinematográfica galardonado con el Premio Óscar.
+Tu misión es leer el guion COMPLETO y diseñar una fórmula estética visual y cinematográfica ÚNICA, personalizada y específica para esta historia y su época.
 
-Tu misión es leer el guion COMPLETO, comprender a fondo:
-- El género y tono emocional (drama, acción, romance, terror, documental, motivacional, etc.)
-- La atmósfera que el creador quiere transmitir al espectador
-- Los personajes, sus emociones y el arco narrativo
-- La época, el mundo y los escenarios descritos
-- El ritmo de la historia (rápido/lento, tenso/relajado)
-
-Con ese análisis PROFUNDO del guion, seleccionar el mejor estilo visual de la lista Y además crear instrucciones técnicas de fotografía cinematográfica personalizadas que complementen y eleven la narrativa.
+REGLAS ABSOLUTAS:
+1. NO uses plantillas genéricas ni presets preexistentes.
+2. NO digas "con base a...". Diseña una propuesta cinematográfica original e irrepetible que defina:
+   - Óptica y lente (ej: anamorphic lenses, 35mm film stock, 70mm IMAX, telephoto lens con bokeh suave, etc.)
+   - Iluminación y atmósfera (ej: volumetric light shafts, high-contrast chiaroscuro, natural golden hour, cold neon diffusion, niebla y partículas, etc.)
+   - Paleta cromática y etalonaje (color grading) acorde al tono emocional del guion
+   - Textura, grano de película o acabado fotográfico ultra nítido
 
 Responde ÚNICAMENTE en formato JSON válido:
 {
-  "recommendedStyleId": "id-exacto-del-estilo",
-  "styleName": "Nombre del estilo",
-  "reason": "Análisis de 2-3 oraciones: por qué este estilo específico potencia la narrativa de ESTE guion.",
-  "customInstructions": "Instrucciones técnicas de fotografía en inglés para el generador de imágenes, de 30-60 palabras, muy específicas para este guion: tipo de lente, profundidad de campo, temperatura de color, grano de película, iluminación, composición, etc."
+  "styleName": "Nombre evocador y específico del estilo creado (ej: Claroscuro Noir Cuántico 35mm, Épica Antigua de Alesia 70mm, Hiperrealismo Minimalista Ámbar)",
+  "customInstructions": "Fórmula completa de estilo en inglés (45-75 palabras) con la óptica, iluminación, paleta cromática y acabado fotográfico exacto para el generador de imágenes",
+  "reason": "Explicación concisa (1-2 oraciones) de por qué esta estética visual fue diseñada para la narrativa de este guion."
 }`;
 
-  const user = `LISTA DE ESTILOS DISPONIBLES:
-${stylesListStr}
-
-GUION COMPLETO A ANALIZAR:
+  const user = `GUION COMPLETO A ANALIZAR:${contextStr}
 """
 ${scriptText}
 """
 
-Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
+Diseña el estilo visual cinematográfico único para este guion:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
@@ -1349,20 +1354,20 @@ Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
       signal
     });
     const parsed = extractCleanJson(raw);
-    const matched = styles.find(s => s.id === parsed.recommendedStyleId) || styles[0];
+    const generatedInstructions = parsed.customInstructions || parsed.promptModifier || 'cinematic 35mm film still, photorealistic, 8k';
     return {
-      recommendedStyleId: matched.id,
-      styleName: matched.name,
-      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.',
-      customInstructions: parsed.customInstructions || matched.promptModifier || ''
+      recommendedStyleId: 'custom',
+      styleName: parsed.styleName || 'Estilo Cinemático Personalizado',
+      reason: parsed.reason || 'Estilo cinematográfico formulado exclusivamente para la atmósfera de este guion.',
+      customInstructions: generatedInstructions
     };
   } catch (err) {
     console.warn('[detectStyleWithAI] Falló el análisis de estilo:', err);
     return {
-      recommendedStyleId: styles[0].id,
-      styleName: styles[0].name,
-      reason: 'Análisis completado. Estilo aplicado según el preset base.',
-      customInstructions: styles[0].promptModifier || ''
+      recommendedStyleId: 'custom',
+      styleName: 'Cinematográfico 35mm Director',
+      reason: 'Estilo cinematográfico generado según el guion.',
+      customInstructions: 'cinematic 35mm film photography, 8k, shallow depth of field, dramatic atmospheric lighting'
     };
   }
 }
@@ -1442,29 +1447,34 @@ Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con m
  */
 export async function detectCharactersWithAI(params: {
   scriptText: string;
+  culturalContext?: CulturalTemporalContext;
+  visualStyle?: { name?: string; modifier?: string };
   model?: string;
   geminiKey?: string;
   nvidiaNimKey?: string;
   groqKey?: string;
   signal?: AbortSignal;
 }): Promise<ScriptDirectorCharacter[]> {
-  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+  const { scriptText, culturalContext, visualStyle, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim()) return [];
 
-  const system = `Eres el Director de Casting y Supervisor de Continuidad Visual de las producciones más grandes de Hollywood.
+  const contextStr = [
+    culturalContext?.epoch ? `Época: ${culturalContext.epoch}` : '',
+    culturalContext?.culture ? `Cultura: ${culturalContext.culture}` : '',
+    culturalContext?.environment ? `Entorno: ${culturalContext.environment}` : '',
+    visualStyle?.name ? `Estilo Visual: ${visualStyle.name}` : ''
+  ].filter(Boolean).join(' | ');
+
+  const system = `Eres el Director de Casting y Continuidad Visual de grandes superproducciones de Hollywood.
 
 Tu misión es leer el guion COMPLETO y:
-1. Identificar TODOS los personajes que tienen presencia significativa en la narrativa
-2. Para cada personaje, construir una ficha biométrica INVARIABLE e INMUTABLE para que el generador de imágenes los reproduzca de manera idéntica en cada escena
-3. Determinar si el personaje muere, desaparece o sobrevive al final del relato
-
-Reglas importantes:
-- El protagonista es el personaje central de la historia
-- Si el guion es motivacional o filosófico sin personajes explícitos, crea un "Narrador Anónimo" con rasgos genéricos cinematográficos
-- Las descripciones biométricas y de ropa deben estar en INGLÉS y ser muy precisas y detalladas
-- Incluye edad aproximada, rasgos físicos dominantes, color de ojos, cabello, complexión
-- La ropa debe ser la que predomina en la mayor parte del relato
+1. Identificar con precisión TODOS los personajes que tienen presencia en la historia (protagonistas y secundarios relevantes).
+2. Para cada personaje, construir una ficha biométrica y de vestuario INVARIABLE e INMUTABLE.
+3. REGLA ESTRICTA DE DETALLE (PROHIBIDO LO GENÉRICO):
+   - Aspecto Físico (anchorDescription): En inglés. Debes definir edad aproximada exacta, etnia, estructura facial (mandíbula, pómulos), ojos (color y forma), cabello (largo, textura, corte, color), complexión física (altura, contextura atlética/delgada/robusta), y rasgos únicos (cicatrices, barba, miradas).
+   - Vestimenta (clothingAnchor): En inglés. Si el guion no detalla la ropa, TÚ DEBES ESTIMARLA Y DEFINIRLA con prendas concretas acordes a la época y cultura (${contextStr || 'la época de la historia'}), indicando colores precisos, telas, capas, calzado y accesorios (capas de lana roja, armadura de placas, gabardina de cuero envejecido con cuello alto, joyas, botas, etc.).
+   - PROHIBIDO USAR FRASES GENÉRICAS como "cinematic costume matching the setting" o "subject with facial features". Cada personaje debe sonar como un actor real con vestuario de producción.
 
 Responde ÚNICAMENTE en formato JSON:
 {
@@ -1474,19 +1484,22 @@ Responde ÚNICAMENTE en formato JSON:
       "role": "PROTAGONIST",
       "alive": true,
       "exitScene": null,
-      "anchorDescription": "Descripción biométrica detallada en inglés (edad, altura, rasgos faciales, cabello, ojos, piel)",
-      "clothingAnchor": "Vestimenta predominante en inglés (prendas, colores, materiales, accesorios)",
+      "anchorDescription": "Detailed facial and physical biometrics in English: exact age, eye color, hair style and color, facial structure, skin tone, build, distinctive marks",
+      "clothingAnchor": "Detailed wardrobe in English: specific garments, fabrics, colors, period-accurate accessories, footwear",
       "defaultSeed": 482910
     }
   ]
 }`;
 
-  const user = `GUION COMPLETO:
+  const user = `MARCO TEMPORAL Y ESTÉTICO DEL PROYECTO:
+${contextStr || 'Interpretar directamente del guion'}
+
+GUION COMPLETO:
 """
 ${scriptText}
 """
 
-Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos invariables:`;
+Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos y vestimenta detallada e invariable:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
@@ -1505,8 +1518,8 @@ Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biom�
         role: c.role === 'SECONDARY' ? 'SECONDARY' : 'PROTAGONIST',
         alive: c.alive !== false,
         exitScene: c.exitScene ?? null,
-        anchorDescription: c.anchorDescription || 'Photorealistic consistent subject with sharp facial features',
-        clothingAnchor: c.clothingAnchor || 'Cinematic costume matching the setting',
+        anchorDescription: c.anchorDescription || 'Photorealistic 35yo subject with defined sharp facial features, intense gaze, athletic build',
+        clothingAnchor: c.clothingAnchor || 'Detailed cinematic tailored costume with realistic textile textures matching the narrative era',
         defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000)
       }));
     }
@@ -1515,7 +1528,15 @@ Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biom�
   }
 
   const sampleSeed = Math.floor(Math.random() * 900000) + 100000;
-  return [{ name: 'Protagonista', role: 'PROTAGONIST', alive: true, exitScene: null, anchorDescription: 'Photorealistic heroic central character with defined facial structure and cinematic gaze', clothingAnchor: 'Distinctive wardrobe styled for the narrative setting', defaultSeed: sampleSeed }];
+  return [{
+    name: 'Protagonista',
+    role: 'PROTAGONIST',
+    alive: true,
+    exitScene: null,
+    anchorDescription: 'Photorealistic character with sharp facial features, determined cinematic gaze, defined cheekbones and weathered hair',
+    clothingAnchor: 'Period-accurate tailored layered garments with weathered leather and textile textures',
+    defaultSeed: sampleSeed
+  }];
 }
 
 /**

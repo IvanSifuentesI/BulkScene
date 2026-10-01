@@ -173,7 +173,7 @@ export const MainApplication: React.FC = () => {
     }
   });
   const [activeStyleId, setActiveStyleIdRaw] = useState<string | undefined>(() => {
-    return localStorage.getItem('bulkscene_active_style_id') || 'stickman-doodle';
+    return localStorage.getItem('bulkscene_active_style_id') || undefined;
   });
   const setActiveStyleId = (id: string | undefined) => {
     setActiveStyleIdRaw(id);

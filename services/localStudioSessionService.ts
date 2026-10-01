@@ -32,6 +32,7 @@ export interface LocalStudioSessionData {
   culturalContext: CulturalTemporalContext;
   culturalContextInput: string;
   customStyleInstructions: string;
+  detectedStyleName?: string;
   detectedStyleReason: string | null;
   consistencyMode: CharacterConsistencyMode;
   detectedCharacters: ScriptDirectorCharacter[];
