@@ -248,17 +248,18 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [savedHtmlFilename, setSavedHtmlFilename] = useState<string | null>(null);
 
   // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
-  const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(() => {
-    return Boolean(savedSession?.transcription?.words?.length);
-  });
+  const [isBeatsInspectorOpen, setIsBeatsInspectorOpen] = useState<boolean>(false);
   const [hookScenesCount, setHookScenesCount] = useState<number>(() => {
-    return savedSession?.hookScenesCount ?? 4;
+    const val = Number(savedSession?.hookScenesCount);
+    return !isNaN(val) && val > 0 ? val : 4;
   });
   const [hookDurationSec, setHookDurationSec] = useState<number>(() => {
-    return savedSession?.hookDurationSec ?? 1.8;
+    const val = Number(savedSession?.hookDurationSec);
+    return !isNaN(val) && val > 0 ? val : 1.8;
   });
   const [restDurationSec, setRestDurationSec] = useState<number>(() => {
-    return savedSession?.restDurationSec ?? 3.2;
+    const val = Number(savedSession?.restDurationSec);
+    return !isNaN(val) && val > 0 ? val : 3.2;
   });
   const [snapToPunctuation, setSnapToPunctuation] = useState<boolean>(() => {
     return savedSession?.snapToPunctuation ?? true;
@@ -1439,7 +1440,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                           {audioFile?.name || 'audio_maestro.mp3'}
                         </span>
                         <span className="text-[10px] font-mono text-cyan-300">
-                          Duración: {audioDuration.toFixed(1)} segundos
+                          Duración: {Number(audioDuration || 0).toFixed(1)} segundos
                         </span>
                       </div>
                     </div>
@@ -1570,7 +1571,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   <span>Gancho ({hookScenesCount} Escenas)</span>
                 </div>
                 <div className="text-[11px] text-slate-300 font-mono">
-                  <strong>{hookDurationSec.toFixed(1)}s</strong> / escena (~{(hookScenesCount * hookDurationSec).toFixed(1)}s)
+                  <strong>{Number(hookDurationSec || 1.8).toFixed(1)}s</strong> / escena (~{(Number(hookScenesCount || 4) * Number(hookDurationSec || 1.8)).toFixed(1)}s)
                 </div>
               </div>
 
@@ -1580,7 +1581,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   <span>Desarrollo ({Math.max(0, calculatedScenes.length - hookScenesCount)} Esc.)</span>
                 </div>
                 <div className="text-[11px] text-slate-300 font-mono">
-                  <strong>{restDurationSec.toFixed(1)}s</strong> / escena
+                  <strong>{Number(restDurationSec || 3.2).toFixed(1)}s</strong> / escena
                 </div>
               </div>
             </div>
@@ -1730,7 +1731,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-300 font-medium">Duración por escena de gancho:</span>
-                  <strong className="text-emerald-400 font-mono text-sm">{hookDurationSec.toFixed(1)}s</strong>
+                  <strong className="text-emerald-400 font-mono text-sm">{Number(hookDurationSec || 1.8).toFixed(1)}s</strong>
                 </div>
                 <input
                   type="range"
@@ -1749,7 +1750,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               </div>
 
               <div className="text-[11px] text-slate-400 bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04]">
-                💡 <strong>Efecto Retención:</strong> Las primeras {hookScenesCount} escenas sumarán ~{(hookScenesCount * hookDurationSec).toFixed(1)}s, forzando cortes rápidos para evitar que el usuario deslice el dedo.
+                💡 <strong>Efecto Retención:</strong> Las primeras {hookScenesCount} escenas sumarán ~{(Number(hookScenesCount || 4) * Number(hookDurationSec || 1.8)).toFixed(1)}s, forzando cortes rápidos para evitar que el usuario deslice el dedo.
               </div>
             </div>
 
@@ -1773,7 +1774,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-300 font-medium">Duración por escena de desarrollo:</span>
-                  <strong className="text-cyan-400 font-mono text-sm">{restDurationSec.toFixed(1)}s</strong>
+                  <strong className="text-cyan-400 font-mono text-sm">{Number(restDurationSec || 3.2).toFixed(1)}s</strong>
                 </div>
                 <input
                   type="range"
@@ -1943,12 +1944,12 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   ) : transcription ? (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Re-extraer con {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name.split(' ')[0]} ({transcription.words.length} pal.)</span>
+                      <span>Re-extraer con {AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name?.split(' ')[0] || 'Whisper'} ({transcription?.words?.length || 0} pal.)</span>
                     </>
                   ) : (
                     <>
                       <Mic className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Extraer Timestamps ({AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name.split(' ')[0]})</span>
+                      <span>Extraer Timestamps ({AVAILABLE_STT_MODELS.find(m => m.id === selectedSTTModel)?.name?.split(' ')[0] || 'Whisper'})</span>
                     </>
                   )}
                 </button>
@@ -2045,8 +2046,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                           : 'bg-white/[0.03] hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-200 border border-white/[0.05]'
                       }`}
                     >
-                      <span>{w.word}</span>
-                      <span className="text-[9px] opacity-60">[{w.start.toFixed(1)}s]</span>
+                      <span>{w?.word || ''}</span>
+                      <span className="text-[9px] opacity-60">[{Number(w?.start || 0).toFixed(1)}s]</span>
                     </button>
                   );
                 })}
@@ -2095,15 +2096,15 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-300">
                         <Clock className="w-3 h-3 text-cyan-400" />
-                        <span>{sc.duration.toFixed(2)}s</span>
+                        <span>{Number(sc?.duration || 0).toFixed(2)}s</span>
                       </div>
                     </div>
 
                     {/* Time Range Badge */}
                     <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 bg-white/[0.02] px-2.5 py-1 rounded-lg border border-white/[0.03]">
-                      <span>Inicio: <strong className="text-white">{sc.startTime.toFixed(2)}s</strong></span>
+                      <span>Inicio: <strong className="text-white">{Number(sc?.startTime || 0).toFixed(2)}s</strong></span>
                       <span>➔</span>
-                      <span>Fin: <strong className="text-white">{sc.endTime.toFixed(2)}s</strong></span>
+                      <span>Fin: <strong className="text-white">{Number(sc?.endTime || 0).toFixed(2)}s</strong></span>
                       <span>({sc.wordsCount} pal.)</span>
                     </div>
 
@@ -2487,17 +2488,17 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   </div>
                 </div>
                 <div className="text-[10px] font-mono text-slate-400 bg-black/30 p-2.5 rounded-xl space-y-1 border border-white/[0.04]">
-                  <div><span className="text-purple-400">Rasgos: </span>{activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription}</div>
-                  <div><span className="text-purple-400">Ropa: </span>{activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor}</div>
+                  <div><span className="text-purple-400">Rasgos: </span>{activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription || '—'}</div>
+                  <div><span className="text-purple-400">Ropa: </span>{activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor || '—'}</div>
                 </div>
-                {detectedCharacters.length > 1 && (
+                {Array.isArray(detectedCharacters) && detectedCharacters.length > 1 && (
                   <div className="flex flex-wrap gap-1">
                     <span className="text-[10px] text-slate-500 w-full">Secundarios:</span>
-                    {detectedCharacters.slice(1).map((dc, i) => (
+                    {detectedCharacters.slice(1).map((dc, i) => dc ? (
                       <span key={i} className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
-                        {dc.name} ({dc.alive ? '✓' : '✗'})
+                        {dc.name || 'Personaje'} ({dc.alive ? '✓' : '✗'})
                       </span>
-                    ))}
+                    ) : null)}
                   </div>
                 )}
                 <button

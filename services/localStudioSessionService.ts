@@ -180,7 +180,27 @@ export function loadLocalStudioSession(): LocalStudioSessionData | null {
   try {
     const raw = localStorage.getItem(STORAGE_SESSION_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    // Sanitización preventiva contra datos corruptos en el navegador
+    if (parsed.detectedCharacters && !Array.isArray(parsed.detectedCharacters)) {
+      parsed.detectedCharacters = [];
+    }
+    if (parsed.hookScenesCount !== undefined) {
+      parsed.hookScenesCount = Number(parsed.hookScenesCount) || 4;
+    }
+    if (parsed.hookDurationSec !== undefined) {
+      parsed.hookDurationSec = Number(parsed.hookDurationSec) || 1.8;
+    }
+    if (parsed.restDurationSec !== undefined) {
+      parsed.restDurationSec = Number(parsed.restDurationSec) || 3.2;
+    }
+    if (parsed.audioDuration !== undefined) {
+      parsed.audioDuration = Number(parsed.audioDuration) || 0;
+    }
+
+    return parsed;
   } catch (e) {
     console.warn('[LOCAL SESSION] Error leyendo sesión de localStorage:', e);
     return null;

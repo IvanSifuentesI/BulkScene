@@ -990,7 +990,8 @@ export function calculateSmartBeatsSegmentation(
 
     for (let i = currentWordIdx; i < effectiveWords.length; i++) {
       const w = effectiveWords[i];
-      const wordEnd = w.end;
+      if (!w) continue;
+      const wordEnd = typeof w.end === 'number' ? w.end : 0;
       const distance = Math.abs(wordEnd - targetEndTime);
 
       if (distance < minDistance) {
@@ -999,7 +1000,8 @@ export function calculateSmartBeatsSegmentation(
       }
 
       // Puntuación gramatical (para que la escena termine con sentido completo)
-      if (snapToPunctuation && punctuationRegex.test(w.word.trim())) {
+      const wordStr = typeof w.word === 'string' ? w.word.trim() : '';
+      if (snapToPunctuation && wordStr && punctuationRegex.test(wordStr)) {
         const pDistance = Math.abs(wordEnd - targetEndTime);
         if (pDistance <= targetDuration * 0.6 && pDistance < minPunctDistance) {
           minPunctDistance = pDistance;
@@ -1010,12 +1012,14 @@ export function calculateSmartBeatsSegmentation(
       // Silencios acústicos entre palabras contiguas
       if (snapToSilences && i < effectiveWords.length - 1) {
         const nextWord = effectiveWords[i + 1];
-        const gap = nextWord.start - w.end;
-        if (gap >= 0.18) {
-          const sDistance = Math.abs(w.end - targetEndTime);
-          if (sDistance <= targetDuration * 0.5 && sDistance < minSilenceDistance) {
-            minSilenceDistance = sDistance;
-            foundSilenceIdx = i;
+        if (nextWord && typeof nextWord.start === 'number' && typeof w.end === 'number') {
+          const gap = nextWord.start - w.end;
+          if (gap >= 0.18) {
+            const sDistance = Math.abs(w.end - targetEndTime);
+            if (sDistance <= targetDuration * 0.5 && sDistance < minSilenceDistance) {
+              minSilenceDistance = sDistance;
+              foundSilenceIdx = i;
+            }
           }
         }
       }
@@ -1041,14 +1045,15 @@ export function calculateSmartBeatsSegmentation(
 
     const sceneSlice = effectiveWords.slice(currentWordIdx, chosenEndIdx + 1);
     const sceneStart = currentStartTime;
-    let sceneEnd = sceneSlice[sceneSlice.length - 1].end;
+    const lastWord = sceneSlice[sceneSlice.length - 1];
+    let sceneEnd = (lastWord && typeof lastWord.end === 'number') ? lastWord.end : (sceneStart + targetDuration);
 
     if (chosenEndIdx === effectiveWords.length - 1 && effectiveDuration > sceneEnd) {
       sceneEnd = effectiveDuration;
     }
 
     const duration = Math.max(0.4, Number((sceneEnd - sceneStart).toFixed(2)));
-    const text = sceneSlice.map(w => w.word).join(' ').trim();
+    const text = sceneSlice.map(w => w?.word || '').join(' ').trim();
 
     scenes.push({
       sceneNumber: sceneIndex + 1,

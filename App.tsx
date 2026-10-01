@@ -8,6 +8,7 @@ import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import GlobalDynamicErrorModal from './components/GlobalDynamicErrorModal';
 import SubscriptionRequiredModal from './components/SubscriptionRequiredModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import { initGlobalErrorTelemetry } from './services/errorTelemetryService';
 
 const LandingRoute: React.FC = () => {
@@ -54,38 +55,40 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <Routes>
-        {/* 1. Portada Pública SaaS (Landing con oferta Skool a $14 USD) */}
-        <Route path="/" element={<LandingRoute />} />
+      <ErrorBoundary>
+        <Routes>
+          {/* 1. Portada Pública SaaS (Landing con oferta Skool a $14 USD) */}
+          <Route path="/" element={<LandingRoute />} />
 
-        {/* 2. Login para miembros autorizados */}
-        <Route path="/login" element={<Login />} />
+          {/* 2. Login para miembros autorizados */}
+          <Route path="/login" element={<Login />} />
 
-        {/* 3. Activación y verificación para nuevos alumnos de Skool */}
-        <Route path="/registro" element={<Registro />} />
+          {/* 3. Activación y verificación para nuevos alumnos de Skool */}
+          <Route path="/registro" element={<Registro />} />
 
-        {/* 4. Estudio Principal Protegido */}
-        <Route
-          path="/app"
-          element={
-            <ProtectedRoute>
-              <MainApplication />
-            </ProtectedRoute>
-          }
-        />
+          {/* 4. Estudio Principal Protegido */}
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute>
+                <MainApplication />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* 5. Panel Administrativo & Notificaciones de Telegram */}
-        <Route path="/admin" element={<AdminDashboard />} />
+          {/* 5. Panel Administrativo & Notificaciones de Telegram */}
+          <Route path="/admin" element={<AdminDashboard />} />
 
-        {/* 6. Fallback a portada */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* 6. Fallback a portada */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
 
-      {/* Modal Dinámico Interceptor de Errores con Reporte a Telegram */}
-      <GlobalDynamicErrorModal />
+        {/* Modal Dinámico Interceptor de Errores con Reporte a Telegram */}
+        <GlobalDynamicErrorModal />
 
-      {/* Modal Interceptor de Funciones Protegidas por Suscripción */}
-      <SubscriptionRequiredModal />
+        {/* Modal Interceptor de Funciones Protegidas por Suscripción */}
+        <SubscriptionRequiredModal />
+      </ErrorBoundary>
     </Router>
   );
 };

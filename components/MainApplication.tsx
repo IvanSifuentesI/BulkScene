@@ -146,7 +146,11 @@ export const MainApplication: React.FC = () => {
   const [characters, setCharacters] = useState<CharacterPersona[]>(() => {
     try {
       const saved = localStorage.getItem('bulk_characters_vault');
-      return saved ? JSON.parse(saved) : DEFAULT_CHARACTERS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+      return DEFAULT_CHARACTERS;
     } catch {
       return DEFAULT_CHARACTERS;
     }
@@ -167,7 +171,11 @@ export const MainApplication: React.FC = () => {
   const [styles, setStyles] = useState<StylePreset[]>(() => {
     try {
       const saved = localStorage.getItem('bulk_styles_matrix');
-      return saved ? JSON.parse(saved) : DEFAULT_STYLES;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+      return DEFAULT_STYLES;
     } catch {
       return DEFAULT_STYLES;
     }
@@ -185,8 +193,10 @@ export const MainApplication: React.FC = () => {
   };
 
   // Active object references
-  const activeCharacter = characters.find((c) => c.id === activeCharacterId);
-  const activeStyle = styles.find((s) => s.id === activeStyleId);
+  const safeCharacters = Array.isArray(characters) ? characters : DEFAULT_CHARACTERS;
+  const safeStyles = Array.isArray(styles) ? styles : DEFAULT_STYLES;
+  const activeCharacter = safeCharacters.find((c) => c?.id === activeCharacterId);
+  const activeStyle = safeStyles.find((s) => s?.id === activeStyleId);
 
   // Proteger la pestaña de Configuración & APIs si el usuario no cuenta con suscripción
   useEffect(() => {
