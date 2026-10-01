@@ -102,9 +102,9 @@ export const ReportErrorModal: React.FC<ReportErrorModalProps> = ({
             <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-black text-white">¡Reporte Enviado al Administrador!</h3>
+            <h3 className="text-xl font-black text-white">¡Reporte Enviado al Soporte!</h3>
             <p className="text-sm text-slate-300 max-w-sm mx-auto leading-relaxed">
-              El equipo de soporte y el administrador han recibido la notificación inmediata con el ticket{' '}
+              El equipo de soporte ha recibido la notificación inmediata con el ticket{' '}
               <strong className="text-emerald-400 font-mono">#{ticketId}</strong> para corregirlo.
             </p>
             <div className="text-xs text-slate-500 font-mono">Cerrando ventana automáticamente...</div>
@@ -191,7 +191,7 @@ export const ReportErrorModal: React.FC<ReportErrorModalProps> = ({
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Enviando al Admin...</span>
+                    <span>Enviando Reporte...</span>
                   </>
                 ) : (
                   <>

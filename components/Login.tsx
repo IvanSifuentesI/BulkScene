@@ -146,7 +146,7 @@ export const Login: React.FC = () => {
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>INGRESAR CON EMAIL AUTORIZADO</span>
+                    <span>INGRESAR AL ESTUDIO</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -154,9 +154,9 @@ export const Login: React.FC = () => {
             </form>
 
             {/* Skool purchase link if not member yet */}
-            <div className="mt-6 pt-5 border-t border-white/5 space-y-3 text-center">
+            <div className="mt-5 pt-4 border-t border-white/5 space-y-2 text-center">
               <p className="text-xs text-slate-400">
-                ¿Aún no tienes membresía activa en Skool?
+                ¿Aún no eres miembro de la comunidad?
               </p>
               <a
                 href="https://www.skool.com/ia-automatiza-7412"
@@ -164,7 +164,7 @@ export const Login: React.FC = () => {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:underline"
               >
-                <span>Desbloquear acceso por $14 USD/mes aquí</span>
+                <span>Unirse en Skool ($14/mes)</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>

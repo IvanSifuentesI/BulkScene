@@ -98,7 +98,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
       return {
         title: 'Fallo de Conexión o Timeout Neuronal',
         desc: 'El navegador no pudo conectar con el endpoint de IA. Esto ocurre cuando no hay claves API cargadas en Ajustes, si la conexión parpadea o si la API de Groq/NVIDIA no responde.',
-        tip: 'Puedes enviar el reporte al administrador abajo y utilizar el motor local de emergencia para no detenerte.'
+        tip: 'Puedes enviar el reporte al equipo de soporte abajo y utilizar el motor local de emergencia para no detenerte.'
       };
     }
     if (m.includes('401') || m.includes('unauthorized')) {
@@ -145,7 +145,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
             <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-black text-white">¡Reporte Enviado al Administrador!</h3>
+            <h3 className="text-xl font-black text-white">¡Reporte Enviado al Soporte!</h3>
             <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
               El reporte se registró con el ticket <strong className="text-emerald-400 font-mono">#{submittedTicket}</strong> y ha sido despachado a <strong>Telegram</strong> para revisión inmediata.
             </p>
@@ -220,7 +220,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-200 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Nota para el Administrador (Requerido para soporte):</span>
+                  <span>Nota del Reporte (Requerido):</span>
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono">Editable</span>
               </label>
@@ -229,7 +229,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
                 rows={3}
                 value={userNote}
                 onChange={(e) => setUserNote(e.target.value)}
-                placeholder="Describe brevemente qué estabas haciendo para que el administrador lo solucione..."
+                placeholder="Describe brevemente qué estabas haciendo para que podamos solucionarlo..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-[#050609] border border-white/10 text-slate-200 text-xs focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 leading-relaxed resize-none"
               />
             </div>
@@ -288,7 +288,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
                   ) : (
                     <>
                       <Send className="w-3.5 h-3.5" />
-                      <span>Enviar al Admin</span>
+                      <span>Enviar Reporte</span>
                     </>
                   )}
                 </button>

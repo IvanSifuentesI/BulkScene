@@ -59,12 +59,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     navigate('/login');
   };
 
+  const isSubscribed = isSubscriptionActive();
+
   const navItems = [
     {
       id: 'guion' as AppStage,
       label: '1. Estudio Master',
       icon: Clapperboard,
-      badge: 'IA Master',
+      badge: 'IA',
       badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
       activeStyle: 'bg-[#0a231b] border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]',
       indicatorColor: 'bg-emerald-400',
@@ -73,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'personajes' as AppStage,
-      label: '2. Banco de Personajes',
+      label: '2. Personajes',
       icon: Users,
       badge: null,
       badgeClass: '',
@@ -84,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'estilos' as AppStage,
-      label: '3. Banco de Estilos',
+      label: '3. Estilos',
       icon: Palette,
       badge: null,
       badgeClass: '',
@@ -95,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'audio' as AppStage,
-      label: '4. Audio & Voz (Opcional)',
+      label: '4. Audio & Voz',
       icon: Mic,
       badge: null,
       badgeClass: '',
@@ -106,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'escenas' as AppStage,
-      label: '5. Desglose de Escenas',
+      label: '5. Escenas',
       icon: Film,
       badge: totalScenesCount > 0 ? `${totalScenesCount}` : null,
       badgeClass: 'bg-indigo-500/20 text-indigo-300',
@@ -117,7 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'imagenes' as AppStage,
-      label: '6. Generador Masivo',
+      label: '6. Generador',
       icon: Zap,
       badge: totalScenesCount > 0 ? `${completedScenesCount}/${totalScenesCount}` : null,
       badgeClass: 'bg-emerald-500/20 text-emerald-300',
@@ -130,19 +132,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'ajustes' as AppStage,
       label: 'Configuración & APIs',
       icon: Settings,
-      badge: `${nvidiaKeysCount} keys`,
-      badgeClass: 'bg-white/5 text-slate-400',
+      badge: !isSubscribed ? 'Bloqueado' : (nvidiaKeysCount > 0 ? `${nvidiaKeysCount} keys` : null),
+      badgeClass: !isSubscribed ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold' : 'bg-white/5 text-slate-400',
       activeStyle: 'bg-[#131722] border-slate-500/60 text-slate-200',
       indicatorColor: 'bg-slate-300',
-      iconColor: 'text-slate-400',
+      iconColor: !isSubscribed ? 'text-amber-400' : 'text-slate-400',
       iconActiveBg: 'bg-slate-700 text-white',
+      isLocked: !isSubscribed,
     },
   ];
 
   return (
     <aside
       className={`${
-        isCollapsed ? 'w-20' : 'w-72'
+        isCollapsed ? 'w-20' : 'w-64'
       } h-screen bg-[#07080c] border-r border-white/[0.06] flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out z-30 select-none`}
     >
       {/* Brand Header */}
@@ -153,8 +156,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {!isCollapsed ? (
           <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={() => setCurrentStage('guion')}>
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-400 to-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] shrink-0">
-              <Sparkles className="w-5 h-5 text-black" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-400 to-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] shrink-0">
+              <Sparkles className="w-4 h-4 text-black" />
             </div>
             <div className="truncate">
               <h1 className="font-black text-sm tracking-wide text-white leading-tight flex items-center gap-1.5">
@@ -164,17 +167,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 font-mono">
-                Batch Video Engine
+                Studio
               </p>
             </div>
           </div>
         ) : (
           <div 
-            className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-400 to-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
+            className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-400 to-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.3)] cursor-pointer"
             onClick={() => setCurrentStage('guion')}
-            title="BulkScene PRO"
+            title="BulkScene Studio"
           >
-            <Sparkles className="w-5 h-5 text-black" />
+            <Sparkles className="w-4 h-4 text-black" />
           </div>
         )}
 
@@ -187,21 +190,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* HyperRender Status Capsule */}
+      {/* Status Capsule */}
       {!isCollapsed && (
-        <div className="mx-3 mt-3 p-3 rounded-2xl bg-[#0b0e17] border border-white/[0.05] flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2.5">
+        <div className="mx-3 mt-3 px-3 py-2 rounded-xl bg-[#0b0e17] border border-white/[0.04] flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <div>
-              <p className="text-[11px] font-bold text-white leading-none">HyperRender™ v3</p>
-              <p className="text-[9px] font-mono text-slate-400 mt-1">Cluster Activo • 2.4s/img</p>
-            </div>
+            <p className="text-[11px] font-bold text-slate-300">Motor Activo</p>
           </div>
+          <span className="text-[9px] font-mono text-emerald-400 font-bold">2.4s/img</span>
         </div>
       )}
 
       {/* Navigation List */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1.5">
+      <div className="flex-1 overflow-y-auto py-3 px-3 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentStage === item.id;
@@ -209,38 +210,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentStage(item.id)}
-              title={isCollapsed ? item.label : ''}
+              onClick={() => {
+                if (item.id === 'ajustes' && !isSubscribed) {
+                  triggerSubscriptionModal({ featureName: 'Configuración & APIs', stage: 'Barra Lateral' });
+                  return;
+                }
+                setCurrentStage(item.id);
+              }}
+              title={isCollapsed ? (item.id === 'ajustes' && !isSubscribed ? 'Configuración (Bloqueado)' : item.label) : ''}
               className={`w-full flex items-center transition-all duration-200 rounded-xl relative group border ${
                 isCollapsed
                   ? 'justify-center p-3'
-                  : 'gap-3 px-3.5 py-2.5 text-left'
+                  : 'gap-3 px-3 py-2 text-left'
               } ${
                 isActive
                   ? item.activeStyle
                   : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200 border-transparent'
-              }`}
+              } ${item.id === 'ajustes' && !isSubscribed ? 'opacity-80' : ''}`}
             >
               {/* Icon container */}
               <div
-                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-mono text-xs font-bold transition-all ${
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-mono text-xs font-bold transition-all relative ${
                   isActive
                     ? item.iconActiveBg
                     : `bg-white/[0.04] ${item.iconColor} group-hover:bg-white/[0.08]`
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-inherit' : item.iconColor}`} />
+                {item.id === 'ajustes' && !isSubscribed && (
+                  <span className="absolute -top-1 -right-1 p-0.5 bg-amber-500/90 text-black rounded-full shadow-xs">
+                    <Lock className="w-2.5 h-2.5" />
+                  </span>
+                )}
               </div>
 
               {!isCollapsed && (
                 <div className="min-w-0 flex-1 truncate flex items-center justify-between gap-1">
-                  <span
-                    className={`text-xs font-bold truncate ${
-                      isActive ? 'text-white font-extrabold' : 'text-slate-300 group-hover:text-white'
-                    }`}
-                  >
-                    {item.label}
-                  </span>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span
+                      className={`text-xs font-bold truncate ${
+                        isActive ? 'text-white font-extrabold' : 'text-slate-300 group-hover:text-white'
+                      }`}
+                    >
+                      {item.label}
+                    </span>
+                    {item.id === 'ajustes' && !isSubscribed && (
+                      <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                    )}
+                  </div>
                   {item.badge && (
                     <span
                       className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold shrink-0 ${
@@ -266,9 +283,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-white/[0.04] bg-[#07080c] space-y-2">
         {!isCollapsed ? (
           <>
-            <div className="p-2.5 rounded-xl bg-[#0e111a] flex items-center justify-between">
+            <div className="p-2 rounded-xl bg-[#0e111a] flex items-center justify-between">
               <div className="min-w-0">
-                <p className="text-[10px] text-slate-500 font-mono uppercase">Sesión Creador</p>
+                <p className="text-[10px] text-slate-500 font-mono uppercase">Sesión</p>
                 <p className="text-xs font-bold text-slate-300 truncate max-w-[140px]">
                   {userEmail || 'creador@bulkscene.ai'}
                 </p>
@@ -282,11 +299,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {/* Estado de Suscripción Skool */}
+            {/* Estado de Suscripción */}
             {isSubscriptionActive() ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-400 font-mono">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-400 font-mono">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="font-bold">Membresía Skool Activa</span>
+                <span className="font-bold">Membresía Activa</span>
               </div>
             ) : (
               <button
@@ -302,20 +319,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ACTIVAR
                 </span>
               </button>
-            )}
-
-            {(userEmail === 'admin@bulkscene.ai' || localStorage.getItem('bulkscene_admin_authenticated') === 'true') && (
-              <Link
-                to="/admin"
-                className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono hover:bg-red-500/20 transition-colors"
-                title="Panel de Telemetría y Notificaciones Telegram"
-              >
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                  <span>Modo Admin</span>
-                </span>
-                <span className="text-[9px] bg-red-500/20 px-1 py-0.2 rounded font-bold">/admin</span>
-              </Link>
             )}
 
             <div className="flex items-center justify-between text-[10px] text-slate-500 px-1 font-mono">

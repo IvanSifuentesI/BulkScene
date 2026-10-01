@@ -59,80 +59,64 @@ export const SubscriptionRequiredModal: React.FC = () => {
         </button>
 
         {/* Icon & Title */}
-        <div className="text-center space-y-3 mb-6 pt-2">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/10">
-            <Lock className="w-8 h-8 text-amber-400 animate-pulse" />
+        <div className="text-center space-y-2.5 mb-5 pt-1">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/10">
+            <Lock className="w-6 h-6 text-amber-400" />
           </div>
 
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono font-bold tracking-wider uppercase mb-2">
-              <ShieldAlert className="w-3 h-3" />
-              <span>Acceso Exclusivo Comunidad Skool</span>
-            </div>
-            <h2 className="text-2xl font-black text-white tracking-tight">
-              🔒 Suscripción no activa
-            </h2>
-          </div>
+          <h2 className="text-xl font-black text-white tracking-tight">
+            Suscripción Requerida
+          </h2>
 
-          <p className="text-sm text-slate-300 leading-relaxed max-w-md mx-auto">
-            Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.
+          <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
+            Esta función requiere una membresía activa en la Academia de Skool para su uso sin límites.
           </p>
 
           {modalData?.featureName && (
-            <div className="inline-block mt-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-mono text-amber-300">
-              Función solicitada: <span className="font-bold text-white">{modalData.featureName}</span>
+            <div className="inline-block mt-1 px-3 py-1 rounded-xl bg-white/[0.04] border border-white/10 text-xs font-mono text-amber-300">
+              Herramienta: <span className="font-bold text-white">{modalData.featureName}</span>
             </div>
           )}
         </div>
 
-        {/* Feature Highlights Grid */}
-        <div className="space-y-2 mb-6 bg-[#0e121d] rounded-2xl p-4 border border-white/5 text-xs text-slate-300">
-          <p className="text-[11px] font-mono uppercase text-slate-400 font-bold mb-2">
-            Beneficios activos incluidos con tu membresía:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Generación de hasta 1,000 imágenes</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Film className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span>Dirección de escenas con IA</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Mic className="w-4 h-4 text-purple-400 shrink-0" />
-              <span>Timestamps exactos con Whisper</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Maximize2 className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Escalado 4K Ultra-HD nativo</span>
-            </div>
+        {/* Feature Highlights Grid (Clean & Compact) */}
+        <div className="grid grid-cols-2 gap-2 mb-5 p-3 rounded-2xl bg-[#0e121d] border border-white/5 text-[11px] text-slate-300">
+          <div className="flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Hasta 1,000 imágenes</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Film className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Dirección de escenas</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Mic className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span>Timestamps Whisper</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Maximize2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Escalado 4K Ultra-HD</span>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           <a
             href={SKOOL_CHECKOUT_URL}
             target="_blank"
             rel="noreferrer"
-            className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 uppercase tracking-wider"
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.35)] transition-all transform hover:-translate-y-0.5 active:scale-95 uppercase tracking-wider"
           >
-            <span>Desbloquear Acceso en Skool por $14 USD/mes</span>
-            <ExternalLink className="w-4 h-4" />
+            <span>Desbloquear Acceso ($14/mes)</span>
+            <ExternalLink className="w-3.5 h-3.5" />
           </a>
 
           <button
             onClick={handleClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white text-xs font-semibold transition-colors border border-white/5 text-center"
+            className="w-full py-2 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white text-xs font-semibold transition-colors border border-white/5 text-center"
           >
-            Entendido, seguir explorando la interfaz
+            Seguir explorando
           </button>
-        </div>
-
-        {/* Footer Note */}
-        <div className="mt-4 pt-4 border-t border-white/5 text-center text-[11px] text-slate-500">
-          Puedes seguir navegando y explorando todas las herramientas y paneles en modo vista.
         </div>
       </div>
     </div>

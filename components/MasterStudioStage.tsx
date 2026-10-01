@@ -780,19 +780,16 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               <Clapperboard className="w-6 h-6 text-black" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl font-black text-white tracking-tight">
-                  Estudio Master & Dirección Cinematográfica
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                  Estudio Master
                 </h1>
-                <span className="text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-                  Control Central
-                </span>
-                <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
-                  NVIDIA NIM • Gemini • Whisper
+                <span className="text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  v3
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1 max-w-3xl leading-relaxed">
-                Control unificado de guion, audio fonético con marcas de tiempo Whisper, consistencia biométrica de personajes, estilos visuales y generación autónoma de escenas cinematográficas.
+              <p className="text-xs text-slate-400 mt-0.5">
+                Dirección automatizada de guion, ritmo fonético y escenas.
               </p>
             </div>
           </div>

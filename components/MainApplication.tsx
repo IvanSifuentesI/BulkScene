@@ -137,6 +137,14 @@ export const MainApplication: React.FC = () => {
   const activeCharacter = characters.find((c) => c.id === activeCharacterId);
   const activeStyle = styles.find((s) => s.id === activeStyleId);
 
+  // Proteger la pestaña de Configuración & APIs si el usuario no cuenta con suscripción
+  useEffect(() => {
+    if (currentStage === 'ajustes' && !isSubscribed) {
+      setCurrentStage('guion');
+      triggerSubscriptionModal({ featureName: 'Configuración & APIs', stage: 'Configuración' });
+    }
+  }, [currentStage, isSubscribed]);
+
   // Sync Character list to localStorage
   const handleAddCharacter = (newChar: CharacterPersona) => {
     const updated = [newChar, ...characters];
@@ -339,18 +347,16 @@ export const MainApplication: React.FC = () => {
             {isSubscribed ? (
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 font-mono shadow-inner">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="font-bold hidden sm:inline">Membresía Activa</span>
-                <span className="sm:hidden font-bold">PRO</span>
+                <span className="font-bold">Membresía Activa</span>
               </div>
             ) : (
               <button
                 onClick={() => triggerSubscriptionModal({ featureName: 'Desbloqueo de Suite Completa', stage: 'Cabecera' })}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs text-amber-300 font-bold transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] active:scale-95 animate-pulse"
-                title="Suscripción no activa: Haz clic para desbloquear acceso en Skool"
+                title="Suscripción no activa: Desbloquear acceso en Skool"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Suscripción No Activa • Activar</span>
-                <span className="sm:hidden">ACTIVAR</span>
+                <span>Activar ($14)</span>
               </button>
             )}
 
@@ -360,11 +366,11 @@ export const MainApplication: React.FC = () => {
               <span>Modo PC</span>
             </div>
 
-            {/* Botón Reportar Problema al Administrador */}
+            {/* Botón Reportar Problema */}
             <button
               onClick={() => setIsReportModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-semibold transition-all active:scale-95"
-              title="¿Ocurrió un error o problema técnico? Notifica directamente al administrador"
+              title="¿Ocurrió un error o problema técnico? Notifica al soporte técnico"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Reportar Error</span>
@@ -372,15 +378,26 @@ export const MainApplication: React.FC = () => {
 
             {/* Settings Stage Trigger */}
             <button
-              onClick={() => setCurrentStage('ajustes')}
-              className={`p-2.5 rounded-xl transition-all ${
+              onClick={() => {
+                if (!isSubscribed) {
+                  triggerSubscriptionModal({ featureName: 'Configuración & APIs', stage: 'Cabecera' });
+                  return;
+                }
+                setCurrentStage('ajustes');
+              }}
+              className={`p-2.5 rounded-xl transition-all relative ${
                 currentStage === 'ajustes'
                   ? 'bg-slate-700 text-white shadow-lg shadow-slate-500/25 border border-slate-500/50'
                   : 'bg-[#111420] text-gray-400 hover:text-white hover:bg-[#161a28] border border-white/5'
               }`}
-              title="Ajustes & APIs Categorizadas"
+              title={isSubscribed ? "Configuración & APIs" : "Configuración protegida (Requiere suscripción)"}
             >
               <Settings className="w-4 h-4" />
+              {!isSubscribed && (
+                <span className="absolute -top-1 -right-1 p-0.5 bg-amber-500 text-black rounded-full shadow-xs">
+                  <Lock className="w-2.5 h-2.5" />
+                </span>
+              )}
             </button>
           </div>
         </header>
