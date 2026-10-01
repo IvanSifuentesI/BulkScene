@@ -53,8 +53,8 @@ interface SettingsStageProps {
   setNvidiaKeys: (keys: string[]) => void;
   groqKeys: string[];
   setGroqKeys: (keys: string[]) => void;
-  geminiKey: string;
-  setGeminiKey: (key: string) => void;
+  geminiKeys: string[];
+  setGeminiKeys: (keys: string[]) => void;
   falKey: string;
   setFalKey: (key: string) => void;
   characters: CharacterPersona[];
@@ -74,8 +74,8 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   setNvidiaKeys,
   groqKeys,
   setGroqKeys,
-  geminiKey,
-  setGeminiKey,
+  geminiKeys,
+  setGeminiKeys,
   falKey,
   setFalKey,
   characters,
@@ -95,6 +95,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   });
   const [newNvidiaKey, setNewNvidiaKey] = useState('');
   const [newGroqKey, setNewGroqKey] = useState('');
+  const [newGeminiKey, setNewGeminiKey] = useState('');
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
 
@@ -212,12 +213,33 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
     triggerSaveNotification('Clave de Groq eliminada.');
   };
 
-  // Gemini Handler
-  const handleSaveGeminiKey = (value: string) => {
-    setGeminiKey(value);
-    localStorage.setItem('bulk_gemini_api_key', value.trim());
-    triggerSaveNotification('Clave de Gemini guardada.');
+  // Gemini Handlers (pool de claves, igual que NVIDIA y Groq)
+  const handleAddGeminiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newGeminiKey.trim();
+    if (!trimmed) return;
+    if (geminiKeys.includes(trimmed)) {
+      triggerSaveNotification('Esa clave Gemini ya existe en el pool.');
+      return;
+    }
+    const updated = [...geminiKeys, trimmed];
+    setGeminiKeys(updated);
+    localStorage.setItem('bulk_gemini_api_keys', JSON.stringify(updated));
+    // Backward compat: también guardar la primera clave como clave singular
+    localStorage.setItem('bulk_gemini_api_key', updated[0] || '');
+    setNewGeminiKey('');
+    triggerSaveNotification(`Clave Gemini #${updated.length} agregada al pool.`);
   };
+
+  const handleRemoveGeminiKey = (idx: number) => {
+    const updated = geminiKeys.filter((_, i) => i !== idx);
+    setGeminiKeys(updated);
+    localStorage.setItem('bulk_gemini_api_keys', JSON.stringify(updated));
+    localStorage.setItem('bulk_gemini_api_key', updated[0] || '');
+    triggerSaveNotification('Clave Gemini eliminada.');
+  };
+
+
 
   // Fal.ai Handler
   const handleSaveFalKey = (value: string) => {
@@ -630,13 +652,15 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-base flex items-center gap-2">
-                    <span>Categoría Google Gemini</span>
+                    <span>Google Gemini</span>
                     <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full font-bold">
-                      Dirección de Arte & Guion
+                      Motor Principal · Pool Rotatorio
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Gemini 2.5 Flash / Pro (Análisis contextual de personajes, arcos dramáticos y desgloses).
+                    <span className="text-blue-300 font-semibold">gemini-3.8-flash</span> — Análisis profundo (personajes, época, estilo) ·{' '}
+                    <span className="text-blue-300 font-semibold">gemini-3.5-flash-lite</span> — Generación masiva de prompts por escena.
+                    Las claves rotan automáticamente cuando una se agota (429).
                   </p>
                 </div>
               </div>
@@ -652,26 +676,60 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
               </a>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-xs font-semibold text-slate-300 block">
-                Clave API Gemini
+                Pool de Claves Gemini (Rotación Automática — cuota agotada → siguiente clave)
               </label>
-              <div className="flex items-center gap-2">
+
+              {geminiKeys.length === 0 && (
+                <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2">
+                  ⚠ Sin claves Gemini configuradas. Agrega al menos una para usar el motor principal de análisis y generación.
+                </p>
+              )}
+
+              {geminiKeys.map((key, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-[#08090d] p-2.5 rounded-xl border border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-blue-400 px-2">#{idx + 1}</span>
+                  <input
+                    type={showKeys[`gemini-${idx}`] ? 'text' : 'password'}
+                    value={key}
+                    readOnly
+                    className="flex-1 bg-transparent text-xs text-slate-200 font-mono border-none focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleShowKey(`gemini-${idx}`)}
+                    className="p-1.5 text-slate-400 hover:text-white"
+                  >
+                    {showKeys[`gemini-${idx}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveGeminiKey(idx)}
+                    className="p-1.5 text-slate-400 hover:text-red-400"
+                    title="Eliminar clave"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddGeminiKey} className="flex items-center gap-2 pt-2">
                 <input
-                  type={showKeys['gemini'] ? 'text' : 'password'}
-                  value={geminiKey}
-                  onChange={(e) => handleSaveGeminiKey(e.target.value)}
+                  type="password"
+                  value={newGeminiKey}
+                  onChange={(e) => setNewGeminiKey(e.target.value)}
                   placeholder="AIzaSy..."
                   className="flex-1 bg-[#08090d] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono border-none"
                 />
                 <button
-                  type="button"
-                  onClick={() => toggleShowKey('gemini')}
-                  className="px-3.5 py-2.5 rounded-xl bg-[#08090d] hover:bg-slate-800 text-slate-300 text-xs flex items-center justify-center"
+                  type="submit"
+                  className="px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20"
                 >
-                  {showKeys['gemini'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <Plus className="w-4 h-4" />
+                  <span>Agregar</span>
                 </button>
-              </div>
+              </form>
             </div>
           </div>
 

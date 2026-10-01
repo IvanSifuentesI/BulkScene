@@ -110,9 +110,20 @@ export const MainApplication: React.FC = () => {
     }
   });
 
-  const [geminiKey, setGeminiKey] = useState<string>(() => {
-    return localStorage.getItem('bulk_gemini_api_key') || '';
+  const [geminiKeys, setGeminiKeys] = useState<string[]>(() => {
+    // Cargar pool de claves Gemini (nueva forma)
+    const poolRaw = localStorage.getItem('bulk_gemini_api_keys') || '';
+    if (poolRaw) {
+      try {
+        const parsed = JSON.parse(poolRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    // Backward compat: clave singular
+    const single = localStorage.getItem('bulk_gemini_api_key') || '';
+    return single ? [single] : [];
   });
+
 
   const [falKey, setFalKey] = useState<string>(() => {
     return localStorage.getItem('bulk_fal_api_key') || '';
@@ -484,7 +495,7 @@ export const MainApplication: React.FC = () => {
               <MasterStudioStage
                 groqKeys={groqKeys}
                 nvidiaNimKeys={nvidiaKeys}
-                geminiKey={geminiKey}
+                geminiKey={geminiKeys[0] || ''}
                 initialScript={scriptText}
                 initialAudioBlob={masterAudioBlob}
                 initialAudioDuration={audioDuration}
@@ -523,7 +534,7 @@ export const MainApplication: React.FC = () => {
                 activeStyleId={activeStyleId}
                 onSelectStyle={setActiveStyleId}
                 nvidiaKeys={nvidiaKeys}
-                geminiKey={geminiKey}
+                geminiKey={geminiKeys[0] || ''}
                 projectName={projectName}
                 setProjectName={setProjectName}
                 onNavigateToSettings={() => setCurrentStage('ajustes')}
@@ -581,8 +592,8 @@ export const MainApplication: React.FC = () => {
                 setNvidiaKeys={setNvidiaKeys}
                 groqKeys={groqKeys}
                 setGroqKeys={setGroqKeys}
-                geminiKey={geminiKey}
-                setGeminiKey={setGeminiKey}
+                geminiKeys={geminiKeys}
+                setGeminiKeys={setGeminiKeys}
                 falKey={falKey}
                 setFalKey={setFalKey}
                 characters={characters}
@@ -629,3 +640,4 @@ export const MainApplication: React.FC = () => {
 };
 
 export default MainApplication;
+

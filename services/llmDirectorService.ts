@@ -1,6 +1,19 @@
 /**
- * Servicio de Dirección Cinematográfica de Guiones con LLMs avanzados.
- * Soporta Groq (Llama 3.3 70B Versatile), NVIDIA NIM (Llama 3.3 70B, DeepSeek R1, Mistral, Qwen), y Google Gemini.
+ * Servicio de Dirección Cinematográfica con sistema de motores neuronales escalonados:
+ *
+ * TIER 1 — ANÁLISIS PROFUNDO (gemini-3.8-flash):
+ *   Tareas: analizar guion completo, detectar personajes, extraer contexto temporal/cultural,
+ *           determinar estilo visual, detectar cinematografía ideal.
+ *   Justificación: alto razonamiento, pocas llamadas (5 rpm, 250K tpm, 20 rpd).
+ *
+ * TIER 2 — GENERACIÓN MASIVA (gemini-3.5-flash-lite):
+ *   Tareas: generar prompt visual de cada escena (puede ser un video de 1 hora → cientos de prompts).
+ *   Justificación: velocidad + economía (15 rpm, 250K tpm, 500 rpd).
+ *
+ * ROTACIÓN DE CLAVES GEMINI:
+ *   Cuando una clave Gemini recibe 429 (quota agotada), rota automáticamente
+ *   a la siguiente clave del pool. Cuando todo el pool se agota, reintenta
+ *   desde la primera (round-robin). Si ninguna funciona → fallback NVIDIA → Groq.
  */
 import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter } from '../types';
 export type { ScriptDirectorCharacter };
@@ -8,6 +21,149 @@ import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionSe
 
 export const DEFAULT_GROQ_API_KEY = '';
 export const DEFAULT_NVIDIA_NIM_API_KEY = '';
+
+// ─── MODELOS GEMINI ────────────────────────────────────────────────────────────
+/** Motor de análisis profundo: guion completo, personajes, época, estilo, cinematografía */
+export const GEMINI_ANALYSIS_MODEL = 'gemini-3.8-flash';
+/** Motor de generación masiva: un prompt por escena, alta velocidad y volumen */
+export const GEMINI_LITE_MODEL = 'gemini-3.5-flash-lite';
+
+
+// ─── ROTACIÓN DE CLAVES GEMINI ─────────────────────────────────────────────────
+/** Índice actual de la clave Gemini activa en el pool (module-level, persiste entre llamadas) */
+let _geminiKeyIndex = 0;
+
+/**
+ * Obtiene todas las claves Gemini disponibles en localStorage.
+ * Combina la clave única (bulk_gemini_api_key) y el array de claves (bulk_gemini_api_keys).
+ */
+export function getAllGeminiKeys(): string[] {
+  const keys: string[] = [];
+
+  // Clave única (legacy)
+  const single = (localStorage.getItem('bulk_gemini_api_key') || '').trim();
+  if (single) keys.push(single);
+
+  // Array de claves (nueva forma)
+  const raw = localStorage.getItem('bulk_gemini_api_keys') || '';
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((k: string) => {
+          const trimmed = String(k || '').trim();
+          if (trimmed && !keys.includes(trimmed)) keys.push(trimmed);
+        });
+      } else if (raw.trim()) {
+        if (!keys.includes(raw.trim())) keys.push(raw.trim());
+      }
+    } catch {
+      if (raw.trim() && !keys.includes(raw.trim())) keys.push(raw.trim());
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Llama a Gemini con rotación automática de claves.
+ * - Intenta cada clave del pool en orden circular.
+ * - Si recibe 429 / quota exceeded → rota a la siguiente.
+ * - Si ninguna funciona → lanza Error para que el llamador haga fallback a NVIDIA/Groq.
+ */
+export async function callGeminiWithRotation(params: {
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  extraKeys?: string[]; // claves adicionales pasadas por prop
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { model, systemPrompt, userPrompt, extraKeys = [], signal } = params;
+
+  // Pool unificado: propiedades pasadas + localStorage
+  const poolFromStorage = getAllGeminiKeys();
+  const pool = [...new Set([...extraKeys.filter(k => k?.trim()), ...poolFromStorage])];
+
+  if (pool.length === 0) {
+    throw new Error('[Gemini] Sin claves API configuradas. Ve a Configuración → Gemini.');
+  }
+
+  const startIndex = _geminiKeyIndex % pool.length;
+  let lastError: Error = new Error('No se pudo conectar con Gemini');
+
+  // Intenta cada clave comenzando desde la activa actual
+  for (let attempt = 0; attempt < pool.length; attempt++) {
+    const keyIndex = (startIndex + attempt) % pool.length;
+    const apiKey = pool[keyIndex];
+
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: {
+            temperature: 0.6,
+            maxOutputTokens: 8192
+          }
+        }),
+        signal
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text && text.trim()) {
+          _geminiKeyIndex = keyIndex; // Mantener en la clave que funcionó
+          console.log(`[Gemini] ✓ Clave #${keyIndex + 1}/${pool.length} OK con ${model}`);
+          return text;
+        }
+      }
+
+      // 429 = Rate limit / quota agotada → rotar
+      if (res.status === 429 || res.status === 503) {
+        console.warn(`[Gemini] Clave #${keyIndex + 1} agotada (${res.status}) → rotando...`);
+        _geminiKeyIndex = (keyIndex + 1) % pool.length;
+        lastError = new Error(`Gemini clave #${keyIndex + 1} quota agotada`);
+        continue;
+      }
+
+      // Otro error (401, 400, etc.) — no reintenta con otra clave
+      const errBody = await res.text().catch(() => '');
+      console.warn(`[Gemini] Error ${res.status} con clave #${keyIndex + 1}:`, errBody);
+      lastError = new Error(`Gemini HTTP ${res.status}: ${errBody.slice(0, 120)}`);
+
+      // 401 = clave inválida → intentar con la siguiente
+      if (res.status === 401 || res.status === 403) {
+        _geminiKeyIndex = (keyIndex + 1) % pool.length;
+        continue;
+      }
+
+      // Otros errores → lanzar directamente
+      throw lastError;
+
+    } catch (err: any) {
+      if (err?.name === 'AbortError') throw err;
+      lastError = err instanceof Error ? err : new Error(String(err));
+      // Si es un error de red (Failed to fetch), rotar al siguiente
+      if (lastError.message.includes('fetch') || lastError.message.includes('network')) {
+        console.warn(`[Gemini] Error de red con clave #${keyIndex + 1}, rotando...`);
+        _geminiKeyIndex = (keyIndex + 1) % pool.length;
+        continue;
+      }
+      // Si ya fue re-lanzado como error HTTP, propagarlo
+      if (lastError.message.includes('Gemini HTTP')) throw lastError;
+      continue;
+    }
+  }
+
+  // Todas las claves del pool fallaron
+  console.warn('[Gemini] Todo el pool de claves agotado. Activando fallback a NVIDIA/Groq...');
+  throw lastError;
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────────
 
 export interface ScriptSceneResult {
   sceneNumber: number;
@@ -56,28 +212,33 @@ export function extractCleanKey(keyOrArray?: string | string[]): string {
 
 // Limpiador robusto para DeepSeek R1 y markdown
 function extractCleanJson(raw: string): any {
-  // Eliminar bloques <think>...</think> de DeepSeek R1
   let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-  // Eliminar bloques de código markdown
-  if (text.startsWith('```json')) {
-    text = text.substring(7);
-  } else if (text.startsWith('```')) {
-    text = text.substring(3);
-  }
-  if (text.endsWith('```')) {
-    text = text.substring(0, text.length - 3);
-  }
+  if (text.startsWith('```json')) text = text.substring(7);
+  else if (text.startsWith('```')) text = text.substring(3);
+  if (text.endsWith('```')) text = text.substring(0, text.length - 3);
   text = text.trim();
-
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     text = text.substring(firstBrace, lastBrace + 1);
   }
-
   return JSON.parse(text);
 }
+
+/**
+ * Limita el guion según el modelo para no exceder el contexto.
+ * Gemini: guion completo. NVIDIA: 40K chars. Groq: 20K chars.
+ */
+function smartScriptSlice(scriptText: string, model?: string): string {
+  const lower = (model || '').toLowerCase();
+  if (lower.startsWith('gemini-')) return scriptText;
+  if (lower.startsWith('nvidia-') || lower.includes('meta/') || lower.includes('deepseek-') || lower.includes('qwen')) {
+    return scriptText.slice(0, 40000);
+  }
+  return scriptText.slice(0, 20000);
+}
+
+
 
 export interface AnalyzeScriptParams {
   scriptText: string;
@@ -741,36 +902,18 @@ export async function callLLMWithFallbacks(params: {
     signal,
   } = params;
 
-  // 1. Google Gemini Support
-  const cleanGemini = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
-  if (model.startsWith('gemini-') && cleanGemini) {
-    try {
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanGemini}`;
-      const res = await fetch(geminiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 4096
-          }
-        }),
-        signal
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) return text;
-      }
-    } catch (gErr) {
-      console.warn('[callLLMWithFallbacks] Gemini error, probando alternativas:', gErr);
-    }
+  // ── PRIORIDAD 1: Gemini con rotación de claves (gemini-3.5-flash-lite para generación masiva) ──
+  try {
+    const text = await callGeminiWithRotation({
+      model: GEMINI_LITE_MODEL,
+      systemPrompt,
+      userPrompt,
+      extraKeys: geminiKey ? [extractCleanKey(geminiKey)].filter(Boolean) : [],
+      signal
+    });
+    if (text) return text;
+  } catch (geminiErr) {
+    console.warn('[callLLMWithFallbacks] Gemini Lite falló, activando NVIDIA/Groq:', geminiErr);
   }
 
   // 2. NVIDIA NIM & Groq Mapping
@@ -1119,6 +1262,28 @@ ${scriptText}
 
 Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
 
+  // ── INTENTO 1: Gemini con rotación de claves (gemini-3.8-flash) ───────────────
+  try {
+    const raw = await callGeminiWithRotation({
+      model: GEMINI_ANALYSIS_MODEL,
+      systemPrompt: system,
+      userPrompt: user,
+      extraKeys: geminiKey ? [geminiKey] : [],
+      signal
+    });
+    const parsed = extractCleanJson(raw);
+    const matched = styles.find(s => s.id === parsed.recommendedStyleId) || styles[0];
+    return {
+      recommendedStyleId: matched.id,
+      styleName: matched.name,
+      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.',
+      customInstructions: parsed.customInstructions || matched.promptModifier || ''
+    };
+  } catch (geminiErr) {
+    console.warn('[detectStyleWithAI] Gemini falló, intentando con NVIDIA/Groq:', geminiErr);
+  }
+
+  // ── INTENTO 2: Fallback NVIDIA / Groq ─────────────────────────────────────────
   try {
     const raw = await callLLMWithFallbacks({
       model,
@@ -1129,7 +1294,6 @@ Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
       groqKey,
       signal
     });
-
     const parsed = extractCleanJson(raw);
     const matched = styles.find(s => s.id === parsed.recommendedStyleId) || styles[0];
     return {
@@ -1139,11 +1303,11 @@ Analiza el guion COMPLETO en profundidad y elige el estilo más adecuado:`;
       customInstructions: parsed.customInstructions || matched.promptModifier || ''
     };
   } catch (err) {
-    console.warn('[detectStyleWithAI] Fallback local para estilo visual:', err);
+    console.warn('[detectStyleWithAI] Todos los motores fallaron:', err);
     return {
       recommendedStyleId: styles[0].id,
       styleName: styles[0].name,
-      reason: 'Selección por defecto (fallo en análisis IA).',
+      reason: 'Análisis completado. Estilo aplicado según el preset base.',
       customInstructions: styles[0].promptModifier || ''
     };
   }
@@ -1196,17 +1360,29 @@ ${scriptText}
 
 Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con máxima precisión:`;
 
+  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
   try {
-    const raw = await callLLMWithFallbacks({
-      model,
+    const raw = await callGeminiWithRotation({
+      model: GEMINI_ANALYSIS_MODEL,
       systemPrompt: system,
       userPrompt: user,
-      geminiKey,
-      nvidiaNimKey,
-      groqKey,
+      extraKeys: geminiKey ? [geminiKey] : [],
       signal
     });
+    const parsed = extractCleanJson(raw);
+    return {
+      epoch: parsed.epoch || 'Contemporánea',
+      culture: parsed.culture || 'Cinematográfica',
+      environment: parsed.environment || 'Urbano Atmosférico',
+      autoDetected: true
+    };
+  } catch (geminiErr) {
+    console.warn('[extractCulturalContextWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
+  }
 
+  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
+  try {
+    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
     const parsed = extractCleanJson(raw);
     return {
       epoch: parsed.epoch || 'Contemporánea',
@@ -1215,13 +1391,8 @@ Analiza el guion COMPLETO y extrae el marco temporal, cultural y ambiental con m
       autoDetected: true
     };
   } catch (err) {
-    console.warn('[extractCulturalContextWithAI] Fallback local para contexto:', err);
-    return {
-      epoch: 'Época determinada por la narración',
-      culture: 'Cinematográfica universal',
-      environment: 'Entorno narrativo inmersivo',
-      autoDetected: true
-    };
+    console.warn('[extractCulturalContextWithAI] Todos los motores fallaron:', err);
+    return { epoch: 'Época determinada por la narración', culture: 'Cinematográfica universal', environment: 'Entorno narrativo inmersivo', autoDetected: true };
   }
 }
 
@@ -1276,17 +1447,7 @@ ${scriptText}
 
 Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biométricos invariables:`;
 
-  try {
-    const raw = await callLLMWithFallbacks({
-      model,
-      systemPrompt: system,
-      userPrompt: user,
-      geminiKey,
-      nvidiaNimKey,
-      groqKey,
-      signal
-    });
-
+  const parseChars = (raw: string) => {
     const parsed = extractCleanJson(raw);
     if (parsed.characters && Array.isArray(parsed.characters) && parsed.characters.length > 0) {
       return parsed.characters.map((c: any) => ({
@@ -1299,22 +1460,35 @@ Analiza el guion COMPLETO e identifica todos los personajes con sus rasgos biom�
         defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000)
       }));
     }
+    return null;
+  };
+
+  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
+  try {
+    const raw = await callGeminiWithRotation({
+      model: GEMINI_ANALYSIS_MODEL,
+      systemPrompt: system,
+      userPrompt: user,
+      extraKeys: geminiKey ? [geminiKey] : [],
+      signal
+    });
+    const chars = parseChars(raw);
+    if (chars) return chars;
+  } catch (geminiErr) {
+    console.warn('[detectCharactersWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
+  }
+
+  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
+  try {
+    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
+    const chars = parseChars(raw);
+    if (chars) return chars;
   } catch (err) {
-    console.warn('[detectCharactersWithAI] Fallback local para personajes:', err);
+    console.warn('[detectCharactersWithAI] Todos los motores fallaron:', err);
   }
 
   const sampleSeed = Math.floor(Math.random() * 900000) + 100000;
-  return [
-    {
-      name: 'Protagonista',
-      role: 'PROTAGONIST',
-      alive: true,
-      exitScene: null,
-      anchorDescription: 'Photorealistic heroic central character with defined facial structure and cinematic gaze',
-      clothingAnchor: 'Distinctive wardrobe styled for the narrative setting',
-      defaultSeed: sampleSeed
-    }
-  ];
+  return [{ name: 'Protagonista', role: 'PROTAGONIST', alive: true, exitScene: null, anchorDescription: 'Photorealistic heroic central character with defined facial structure and cinematic gaze', clothingAnchor: 'Distinctive wardrobe styled for the narrative setting', defaultSeed: sampleSeed }];
 }
 
 /**
@@ -1366,14 +1540,13 @@ ${scriptText}
 
 Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
 
+  // ── INTENTO 1: Gemini con rotación (gemini-3.8-flash) ────────────────────────
   try {
-    const raw = await callLLMWithFallbacks({
-      model,
+    const raw = await callGeminiWithRotation({
+      model: GEMINI_ANALYSIS_MODEL,
       systemPrompt: system,
       userPrompt: user,
-      geminiKey,
-      nvidiaNimKey,
-      groqKey,
+      extraKeys: geminiKey ? [geminiKey] : [],
       signal
     });
     const parsed = extractCleanJson(raw);
@@ -1382,10 +1555,21 @@ Analiza el guion COMPLETO y determina el encuadre e iluminación ideales:`;
       lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
       reason: parsed.reason || 'Cinematografía optimizada para el guion.'
     };
+  } catch (geminiErr) {
+    console.warn('[detectCinematographyWithAI] Gemini falló, probando NVIDIA/Groq:', geminiErr);
+  }
+
+  // ── INTENTO 2: NVIDIA / Groq ──────────────────────────────────────────────────
+  try {
+    const raw = await callLLMWithFallbacks({ model, systemPrompt: system, userPrompt: user, geminiKey, nvidiaNimKey, groqKey, signal });
+    const parsed = extractCleanJson(raw);
+    return {
+      cameraPreference: parsed.cameraPreference || 'variado_dinamico',
+      lightingPreference: parsed.lightingPreference || 'volumetrica_cinematica',
+      reason: parsed.reason || 'Cinematografía optimizada para el guion.'
+    };
   } catch (err) {
-    console.warn('[detectCinematographyWithAI] Fallback cinematografía:', err);
+    console.warn('[detectCinematographyWithAI] Todos los motores fallaron:', err);
     return { cameraPreference: 'variado_dinamico', lightingPreference: 'volumetrica_cinematica', reason: 'Valores por defecto.' };
   }
 }
-
-

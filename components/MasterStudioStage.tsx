@@ -129,6 +129,38 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   onProceedToImages,
   onNavigateToSettings
 }) => {
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // HELPER CENTRALIZADO: Resuelve claves API con fallback a localStorage
+  // Garantiza que siempre se tenga la clave disponible aunque el prop llegue vacío
+  // ────────────────────────────────────────────────────────────────────────────
+  const resolveGroqKey = (): string => {
+    // Prop array → primer elemento limpio → localStorage → vacío
+    const fromProp = Array.isArray(groqKeys) && groqKeys.length > 0 ? groqKeys[0] : '';
+    if (fromProp && fromProp.trim()) return fromProp.trim();
+    const fromStorage = localStorage.getItem('bulk_groq_api_keys') || '';
+    if (fromStorage.startsWith('[')) {
+      try { const parsed = JSON.parse(fromStorage); return Array.isArray(parsed) ? (parsed[0] || '').trim() : fromStorage.trim(); } catch { return fromStorage.trim(); }
+    }
+    return fromStorage.trim();
+  };
+
+  const resolveNvidiaKey = (): string => {
+    const fromProp = Array.isArray(nvidiaNimKeys) && nvidiaNimKeys.length > 0 ? nvidiaNimKeys[0] : '';
+    if (fromProp && fromProp.trim()) return fromProp.trim();
+    const fromStorage = localStorage.getItem('bulk_nvidia_api_keys') || '';
+    if (fromStorage.startsWith('[')) {
+      try { const parsed = JSON.parse(fromStorage); return Array.isArray(parsed) ? (parsed[0] || '').trim() : fromStorage.trim(); } catch { return fromStorage.trim(); }
+    }
+    return fromStorage.trim();
+  };
+
+  const resolveGeminiKey = (): string => {
+    if (geminiKey && geminiKey.trim()) return geminiKey.trim();
+    return (localStorage.getItem('bulk_gemini_api_key') || '').trim();
+  };
+
+
   // Carga inicial de sesión guardada localmente (Zero Supabase)
   const savedSession = useMemo(() => loadLocalStudioSession(), []);
 
@@ -589,9 +621,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         scriptText,
         styles,
         model: selectedModel,
-        geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-        nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-        groqKey: groqKeys[0] || ''
+        geminiKey: resolveGeminiKey(),
+        nvidiaNimKey: resolveNvidiaKey(),
+        groqKey: resolveGroqKey()
       });
       onSelectStyle(result.recommendedStyleId);
       // Usa las instrucciones técnicas personalizadas generadas por la IA (no solo el promptModifier del preset)
@@ -622,9 +654,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       const result = await detectCinematographyWithAI({
         scriptText,
         model: selectedModel,
-        geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-        nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-        groqKey: groqKeys[0] || ''
+        geminiKey: resolveGeminiKey(),
+        nvidiaNimKey: resolveNvidiaKey(),
+        groqKey: resolveGroqKey()
       });
       setCameraPreference(result.cameraPreference);
       setLightingPreference(result.lightingPreference);
@@ -674,9 +706,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       const extracted = await extractCulturalContextWithAI({
         scriptText,
         model: selectedModel,
-        geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-        nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-        groqKey: groqKeys[0] || ''
+        geminiKey: resolveGeminiKey(),
+        nvidiaNimKey: resolveNvidiaKey(),
+        groqKey: resolveGroqKey()
       });
       setCulturalContext(extracted);
       const textSummary = [extracted.epoch, extracted.culture, extracted.environment].filter(Boolean).join(' • ');
@@ -702,9 +734,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       const detected = await detectCharactersWithAI({
         scriptText,
         model: selectedModel,
-        geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-        nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-        groqKey: groqKeys[0] || ''
+        geminiKey: resolveGeminiKey(),
+        nvidiaNimKey: resolveNvidiaKey(),
+        groqKey: resolveGroqKey()
       });
       setDetectedCharacters(detected);
 
@@ -803,9 +835,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           activeContext = await extractCulturalContextWithAI({
             scriptText,
             model: selectedModel,
-            geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-            nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-            groqKey: groqKeys[0] || ''
+            geminiKey: resolveGeminiKey(),
+            nvidiaNimKey: resolveNvidiaKey(),
+            groqKey: resolveGroqKey()
           });
           setCulturalContext(activeContext);
           const textSummary = [activeContext.epoch, activeContext.culture, activeContext.environment].filter(Boolean).join(' • ');
@@ -823,9 +855,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           const detected = await detectCharactersWithAI({
             scriptText,
             model: selectedModel,
-            geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
-            nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
-            groqKey: groqKeys[0] || ''
+            geminiKey: resolveGeminiKey(),
+            nvidiaNimKey: resolveNvidiaKey(),
+            groqKey: resolveGroqKey()
           });
           setDetectedCharacters(detected);
           if (detected.length > 0 && onAddCharacter) {
@@ -862,9 +894,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       const analysis = await analyzeScriptWithLLM({
         scriptText,
         model: selectedModel,
-        groqKey: groqKeys[0] || '',
+        groqKey: resolveGroqKey(),
         nvidiaNimKey: nvidiaNimKeys[0] || '',
-        geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
+        geminiKey: resolveGeminiKey(),
         targetStyleName: activeStyle?.name || 'Cinematográfico 35mm Hiperrealista',
         targetStyleModifier: styleModifierToUse,
         characterAnchor: charDirective,
@@ -2343,3 +2375,4 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 };
 
 export default MasterStudioStage;
+
