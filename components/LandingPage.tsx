@@ -26,8 +26,7 @@ import {
   Copy,
   CheckCheck,
   Star,
-  Quote,
-  Clock
+  Quote
 } from 'lucide-react';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
 
@@ -40,11 +39,11 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [activeWorkflowStep, setActiveWorkflowStep] = useState<number>(0);
   const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState<{ minutes: number; seconds: number }>({ minutes: 15, seconds: 0 });
 
   useEffect(() => {
     getPricingConfig().then(setPricing);
   }, []);
+
 
   const toggleFaq = (index: number) => {
     setActiveFaq(activeFaq === index ? null : index);
