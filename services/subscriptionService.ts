@@ -335,7 +335,7 @@ export function getProSubscriptionInfo(): ProSubscriptionInfo {
       hoursRemaining,
       urgency: 'yellow',
       label: `${daysRemaining} días restantes`,
-      isExpiringSoon: true,
+      isExpiringSoon: false,
       skoolUrl: SKOOL_CHECKOUT_URL
     };
   }

@@ -361,28 +361,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 </div>
 
-                {/* Recordatorio de renovación directo a Skool */}
-                <a
-                  href={proInfo.skoolUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`text-[9px] font-bold py-1 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1 ${
-                    proInfo.urgency === 'red'
-                      ? 'bg-rose-500 text-white hover:bg-rose-600 shadow-sm animate-pulse'
-                      : proInfo.urgency === 'yellow'
-                      ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40'
-                      : 'text-slate-400 hover:text-emerald-300 hover:bg-emerald-500/10'
-                  }`}
-                  title="Renovar suscripción en Skool para mantener acceso ilimitado"
-                >
-                  <span>
-                    {proInfo.urgency === 'red'
-                      ? '⚠️ Renovar Urgente en Skool'
-                      : proInfo.urgency === 'yellow'
-                      ? '⚡ Renovar en Skool'
-                      : 'Membresía Skool →'}
-                  </span>
-                </a>
+                {/* Recordatorio de renovación directo a Skool: ÚNICAMENTE cuando está rojo */}
+                {proInfo.urgency === 'red' && (
+                  <a
+                    href={proInfo.skoolUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[9px] font-bold py-1 px-2 rounded-lg text-center transition-all flex items-center justify-center gap-1 bg-rose-500 text-white hover:bg-rose-600 shadow-sm animate-pulse"
+                    title="Renovar suscripción en Skool para mantener acceso ilimitado"
+                  >
+                    <span>⚠️ Renovar en Skool</span>
+                  </a>
+                )}
               </div>
             ) : (
               <button
@@ -411,30 +401,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <div className="flex flex-col items-center gap-2">
             {proInfo.isPro ? (
-              <a
-                href={proInfo.skoolUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${
-                  proInfo.urgency === 'red'
-                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse'
-                    : proInfo.urgency === 'yellow'
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                }`}
-                title={`Usuario PRO: ${proInfo.label}. Clic para gestionar en Skool.`}
-              >
-                <span className="text-[9px] font-black uppercase font-sans">PRO</span>
-                <span
-                  className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-                    proInfo.urgency === 'red'
-                      ? 'bg-rose-400'
-                      : proInfo.urgency === 'yellow'
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
+              proInfo.urgency === 'red' ? (
+                <a
+                  href={proInfo.skoolUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-xl border flex flex-col items-center justify-center transition-all bg-rose-500/15 border-rose-500/40 text-rose-300 animate-pulse"
+                  title={`Usuario PRO: ${proInfo.label}. Clic para renovar en Skool.`}
+                >
+                  <span className="text-[9px] font-black uppercase font-sans">PRO</span>
+                  <span className="w-1.5 h-1.5 rounded-full mt-0.5 bg-rose-400" />
+                </a>
+              ) : (
+                <div
+                  className={`p-2 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                    proInfo.urgency === 'yellow'
+                      ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                      : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                   }`}
-                />
-              </a>
+                  title={`Usuario PRO: ${proInfo.label}`}
+                >
+                  <span className="text-[9px] font-black uppercase font-sans">PRO</span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
+                      proInfo.urgency === 'yellow'
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
+                    }`}
+                  />
+                </div>
+              )
             ) : (
               <button
                 onClick={() => triggerSubscriptionModal({ featureName: 'Desbloqueo de Suite Completa', stage: 'Sidebar' })}

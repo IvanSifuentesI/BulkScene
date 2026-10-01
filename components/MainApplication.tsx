@@ -391,17 +391,13 @@ export const MainApplication: React.FC = () => {
                   <span className="font-bold text-[11px] hidden sm:inline">{proInfo.label}</span>
                 </div>
 
-                {/* Reminder button to renew if expiring soon (yellow/red) */}
-                {proInfo.isExpiringSoon && (
+                {/* Botón de renovación directo a Skool: ÚNICAMENTE cuando está rojo */}
+                {proInfo.urgency === 'red' && (
                   <a
                     href={SKOOL_CHECKOUT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm ${
-                      proInfo.urgency === 'red'
-                        ? 'bg-rose-500 hover:bg-rose-600 text-white animate-pulse'
-                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40'
-                    }`}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm bg-rose-500 hover:bg-rose-600 text-white animate-pulse"
                     title="Renovar suscripción en Skool para mantener acceso ilimitado"
                   >
                     <span>Renovar</span>
