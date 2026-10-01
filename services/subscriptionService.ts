@@ -21,14 +21,16 @@ const STORAGE_EXPIRATION_DATE_KEY = 'bulkscene_expiration_date';
 export const SKOOL_CHECKOUT_URL = 'https://www.skool.com/ia-automatiza-7412';
 
 export interface MarketingLeadRecord {
+  id?: string;
   email: string;
   tipo_lead: 'nuevo_prospecto' | 'suscripcion_expirada' | 'cuenta_inactiva';
   estado_suscripcion: 'sin_suscripcion' | 'expirado' | 'inactivo';
   fecha_expiracion_anterior?: string | null;
   origen?: string;
   intentos_acceso?: number;
+  primer_intento?: string;
   ultimo_intento?: string;
-  creado_en?: string;
+  created_at?: string;
 }
 
 /**
@@ -42,7 +44,7 @@ export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise
 
   const nowIso = new Date().toISOString();
 
-  // 1. Guardar en respaldo local para el panel admin
+  // 1. Guardar en respaldo local para el panel admin (caché offline)
   try {
     const raw = localStorage.getItem('bulkscene_local_leads_backup');
     const backupList: MarketingLeadRecord[] = raw ? JSON.parse(raw) : [];
@@ -65,8 +67,9 @@ export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise
         estado_suscripcion: lead.estado_suscripcion,
         fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
         intentos_acceso: 1,
+        primer_intento: nowIso,
         ultimo_intento: nowIso,
-        creado_en: nowIso,
+        created_at: nowIso,
         origen: lead.origen || 'bulkscene_login'
       });
     }
@@ -83,9 +86,13 @@ export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise
       .eq('email', emailLower)
       .maybeSingle();
 
+    if (searchError) {
+      console.warn('[LEADS MARKETING] Aviso al buscar en Supabase:', searchError.message);
+    }
+
     if (existing) {
       const nextCount = (existing.intentos_acceso || 1) + 1;
-      await supabase
+      const { error: updErr } = await supabase
         .from('leads_marketing')
         .update({
           tipo_lead: lead.tipo_lead,
@@ -96,8 +103,14 @@ export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise
           origen: lead.origen || 'bulkscene_login'
         })
         .eq('email', emailLower);
+
+      if (updErr) {
+        console.error('[LEADS MARKETING] Error al actualizar lead en Supabase:', updErr.message || updErr);
+      } else {
+        console.log(`[LEADS MARKETING] ✅ Lead ${emailLower} actualizado en Supabase (intento #${nextCount})`);
+      }
     } else {
-      await supabase
+      const { error: insErr } = await supabase
         .from('leads_marketing')
         .insert({
           email: emailLower,
@@ -105,33 +118,82 @@ export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise
           estado_suscripcion: lead.estado_suscripcion,
           fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
           intentos_acceso: 1,
+          primer_intento: nowIso,
           ultimo_intento: nowIso,
-          creado_en: nowIso,
           origen: lead.origen || 'bulkscene_login'
         });
+
+      if (insErr) {
+        console.error('[LEADS MARKETING] Error al insertar lead en Supabase:', insErr.message || insErr);
+      } else {
+        console.log(`[LEADS MARKETING] ✅ Lead ${emailLower} guardado exitosamente en Supabase`);
+      }
     }
   } catch (err: any) {
-    // Si la tabla aún no se ha creado en Supabase con el script SQL, queda en el respaldo local
-    console.warn('[LEADS MARKETING] Nota: pendiente ejecutar script SQL en Supabase para tabla leads_marketing:', err?.message || err);
+    console.error('[LEADS MARKETING] Excepción al registrar en Supabase:', err);
   }
 }
 
 /**
- * Consulta la lista de leads de marketing desde Supabase o desde el almacenamiento local
+ * Sincroniza leads locales pendientes a Supabase si no fueron enviados previamente.
+ */
+export async function syncPendingLocalLeadsToSupabase(): Promise<void> {
+  try {
+    const raw = localStorage.getItem('bulkscene_local_leads_backup');
+    if (!raw) return;
+    const backupList: MarketingLeadRecord[] = JSON.parse(raw);
+    for (const lead of backupList) {
+      if (lead.email && lead.email !== 'admin@bulkscene.ai') {
+        const { data: existing } = await supabase
+          .from('leads_marketing')
+          .select('id')
+          .eq('email', lead.email.toLowerCase().trim())
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from('leads_marketing').insert({
+            email: lead.email.toLowerCase().trim(),
+            tipo_lead: lead.tipo_lead || 'nuevo_prospecto',
+            estado_suscripcion: lead.estado_suscripcion || 'sin_suscripcion',
+            fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
+            intentos_acceso: lead.intentos_acceso || 1,
+            primer_intento: lead.primer_intento || lead.ultimo_intento || new Date().toISOString(),
+            ultimo_intento: lead.ultimo_intento || new Date().toISOString(),
+            origen: lead.origen || 'bulkscene_sync'
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[LEADS SYNC] Error sincronizando leads locales:', e);
+  }
+}
+
+/**
+ * Consulta la lista de leads de marketing directamente desde Supabase.
+ * Devuelve siempre la data real de Supabase si la consulta tiene éxito.
  */
 export async function fetchMarketingLeads(): Promise<MarketingLeadRecord[]> {
   try {
+    // Intentar sincronizar antes de consultar para garantizar que ningún lead quede atrás
+    await syncPendingLocalLeadsToSupabase();
+
     const { data, error } = await supabase
       .from('leads_marketing')
       .select('*')
       .order('ultimo_intento', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       return data;
     }
-  } catch (e) {}
+    if (error) {
+      console.warn('[LEADS MARKETING] Supabase query notice:', error.message);
+    }
+  } catch (e) {
+    console.warn('[LEADS MARKETING] Fallback por error de conexión:', e);
+  }
 
-  // Fallback al almacenamiento local
+  // Fallback al almacenamiento local SOLO si falló la conexión con Supabase
   try {
     const raw = localStorage.getItem('bulkscene_local_leads_backup');
     return raw ? JSON.parse(raw) : [];

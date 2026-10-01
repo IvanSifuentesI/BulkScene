@@ -53,6 +53,14 @@ FOR SELECT
 TO anon, authenticated
 USING (true);
 
+-- Eliminación permitida para administración y depuración
+DROP POLICY IF EXISTS "Permitir eliminacion anonima y autenticada de leads" ON public.leads_marketing;
+CREATE POLICY "Permitir eliminacion anonima y autenticada de leads"
+ON public.leads_marketing
+FOR DELETE
+TO anon, authenticated
+USING (true);
+
 -- =========================================================================
 -- LISTO: Ejecuta este script en Supabase > SQL Editor y dale a RUN.
 -- Automáticamente la aplicación registrará cada nuevo correo y cada usuario

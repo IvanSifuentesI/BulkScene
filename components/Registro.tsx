@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
-import { validateUserSubscription } from '../services/subscriptionService';
+import { validateUserSubscription, registrarLeadMarketing } from '../services/subscriptionService';
 
 export const Registro: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -42,7 +42,7 @@ export const Registro: React.FC = () => {
 
     try {
       // 1. Verificar si ya está en usuarios_autorizados
-      const { data: existing, error: queryError } = await supabase
+      const { data: existing } = await supabase
         .from('usuarios_autorizados')
         .select('id, activo, fecha_expiracion')
         .eq('email', emailLower)
@@ -56,25 +56,15 @@ export const Registro: React.FC = () => {
         return;
       }
 
-      // 2. Registrar solicitud de acceso
-      const expDate = new Date();
-      expDate.setDate(expDate.getDate() + 30); // 30 días de suscripción inicial
+      // 2. Registrar inmediatamente en leads_marketing de Supabase
+      await registrarLeadMarketing({
+        email: emailLower,
+        tipo_lead: 'nuevo_prospecto',
+        estado_suscripcion: 'sin_suscripcion',
+        origen: 'formulario_registro'
+      });
 
-      const { error: insertError } = await supabase
-        .from('usuarios_autorizados')
-        .insert({
-          email: emailLower,
-          activo: true,
-          fecha_expiracion: expDate.toISOString(),
-          creado_en: new Date().toISOString()
-        });
-
-      if (insertError) {
-        console.warn('[REGISTRO] Supabase insert warning:', insertError);
-        // Si no tiene permisos de inserción directa, creamos sesión local de cortesía
-      }
-
-      // Autenticar y validar estado
+      // 3. Validar estado (establece sesión bloqueada si no es suscriptor)
       await validateUserSubscription(emailLower);
 
       localStorage.setItem('bulkscene_auth_session', 'active');
