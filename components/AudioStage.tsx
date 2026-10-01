@@ -24,6 +24,7 @@ import {
   transcribeAudioWithGroq, 
   TranscriptionResult 
 } from '../services/audioTranscriptionService';
+import { requireSubscription } from '../services/subscriptionService';
 
 interface AudioStageProps {
   scriptText: string;
@@ -85,6 +86,9 @@ export const AudioStage: React.FC<AudioStageProps> = ({
 
   // Generar locución de todos los chunks secuencialmente
   const handleGenerateAllChunks = async () => {
+    if (!requireSubscription('Generación de Voz TTS', '4. Audio & Voz')) {
+      return;
+    }
     if (chunks.length === 0 || isGeneratingChunks) return;
     setIsGeneratingChunks(true);
 
@@ -173,6 +177,9 @@ export const AudioStage: React.FC<AudioStageProps> = ({
     // Transcribir con Groq Whisper
     const groqKey = groqKeys[0] || '';
     if (groqKey) {
+      if (!requireSubscription('Transcripción Whisper de Audio', '4. Audio & Voz')) {
+        return;
+      }
       setIsTranscribing(true);
       try {
         const whisperRes = await transcribeAudioWithGroq(file, groqKey);

@@ -39,6 +39,7 @@ import {
   TelemetryErrorReport, 
   formatErrorForClipboard 
 } from '../services/errorTelemetryService';
+import { requireSubscription } from '../services/subscriptionService';
 
 interface BulkSceneGeneratorProps {
   slots: SceneSlot[];
@@ -224,6 +225,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
 
   // Single Slot Generation Worker
   const renderSingleSlot = async (slotId: string, signal?: AbortSignal): Promise<void> => {
+    if (!requireSubscription('Generación de Escena Individual', '6. Generador Masivo')) {
+      return;
+    }
     const targetSlot = slots.find((s) => s.id === slotId);
     if (!targetSlot) return;
 
@@ -365,6 +369,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
 
   // Batch Generation Orchestrator with Concurrency
   const handleStartBatch = async () => {
+    if (!requireSubscription('Generación Masiva de Imágenes', '6. Generador Masivo')) {
+      return;
+    }
     if (isBatchRunning) return;
     setIsBatchRunning(true);
     setIsPaused(false);
@@ -451,6 +458,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
   };
 
   const handleRegenerateFailed = async () => {
+    if (!requireSubscription('Regeneración de Escenas Fallidas', '6. Generador Masivo')) {
+      return;
+    }
     const failedOnes = slots.filter((s) => s.status === 'failed');
     if (failedOnes.length === 0 || isBatchRunning) return;
 
@@ -507,6 +517,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
 
   // Batch Upscale 2K / 4K
   const handleBatchUpscale = async (factor: 2 | 4) => {
+    if (!requireSubscription('Escalado Masivo 4K Ultra-HD', '6. Generador Masivo')) {
+      return;
+    }
     if (isBulkUpscaling || completedSlots === 0) return;
     try {
       setIsBulkUpscaling(true);

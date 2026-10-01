@@ -101,6 +101,8 @@ export function getAvailableVoices(): Promise<VoiceOption[]> {
   });
 }
 
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
+
 /**
  * Sintetiza un fragmento de texto a audio usando Web Speech API y lo captura en un Blob de audio.
  */
@@ -110,6 +112,12 @@ export async function synthesizeChunk(
   rate: number = 1.05, 
   pitch: number = 1.0
 ): Promise<{ blob: Blob; duration: number }> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Generación de Voz TTS' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       reject(new Error('Sintetizador de voz no compatible con este navegador.'));

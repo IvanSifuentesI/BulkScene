@@ -5,6 +5,7 @@
  */
 
 import { DEFAULT_GROQ_API_KEY } from './llmDirectorService';
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
 
 export interface WordTimestamp {
   word: string;
@@ -399,6 +400,12 @@ export async function transcribeAudioWithGroq(
   whisperModel: 'whisper-large-v3-turbo' | 'whisper-large-v3' = 'whisper-large-v3-turbo',
   signal?: AbortSignal
 ): Promise<TranscriptionResult> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Transcripción de Audio Whisper' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   const cleanKey = getCleanGroqKey(groqApiKey);
   if (!cleanKey) {
     throw new Error('Groq API Key no configurada para transcripción de audio.');
@@ -780,6 +787,12 @@ export async function transcribeAudioUniversal({
   signal?: AbortSignal;
   onProgress?: (status: string) => void;
 }): Promise<TranscriptionResult> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Transcripción de Audio Universal' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   const modelOption = AVAILABLE_STT_MODELS.find(m => m.id === modelId) || AVAILABLE_STT_MODELS[0];
   const provider = modelOption.provider;
 

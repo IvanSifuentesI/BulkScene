@@ -10,15 +10,12 @@ import {
   Lock,
   ExternalLink
 } from 'lucide-react';
-import { supabase } from '../config/supabaseClient';
-import MensajeAcceso from './MensajeAcceso';
+import { validateUserSubscription } from '../services/subscriptionService';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [viewState, setViewState] = useState<'login' | 'no_suscrito' | 'expired' | 'cuenta_desactivada'>('login');
-  const [expirationDate, setExpirationDate] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -26,7 +23,6 @@ export const Login: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setExpirationDate(null);
 
     const emailLower = email.toLowerCase().trim();
     if (!emailLower) {
@@ -35,62 +31,26 @@ export const Login: React.FC = () => {
     }
 
     try {
-      // 1. Consultar estado en Supabase
-      const { data: userData, error: queryError } = await supabase
-        .from('usuarios_autorizados')
-        .select('fecha_expiracion, activo')
-        .eq('email', emailLower)
-        .maybeSingle();
+      // 1. Validar suscripción en Supabase (o registrar lead si no existe)
+      const result = await validateUserSubscription(emailLower);
 
-      // Si no existe en la base de datos de miembros autorizados de Skool
-      if (!userData) {
-        // Excepción administrativa
-        if (emailLower === 'admin@bulkscene.ai') {
-          localStorage.setItem('bulkscene_auth_session', 'active');
-          localStorage.setItem('bulkscene_user_email', emailLower);
-          navigate('/app');
-          return;
-        }
-
-        setViewState('no_suscrito');
-        setLoading(false);
-        return;
-      }
-
-      if (!userData.activo) {
-        setViewState('cuenta_desactivada');
-        setLoading(false);
-        return;
-      }
-
-      if (userData.fecha_expiracion && new Date(userData.fecha_expiracion) < new Date()) {
-        setExpirationDate(userData.fecha_expiracion);
-        setViewState('expired');
-        setLoading(false);
-        return;
-      }
-
-      // Sesión exitosa para alumno autorizado
+      // 2. Establecer sesión autenticada para permitir entrada a la interfaz completa
       localStorage.setItem('bulkscene_auth_session', 'active');
       localStorage.setItem('bulkscene_user_email', emailLower);
+
+      // 3. Redirigir siempre al Estudio para que todos puedan explorar la app
       navigate('/app');
     } catch (err: any) {
       console.warn('[LOGIN NOTICE]:', err);
-      setViewState('no_suscrito');
+      // Fallback: permitir entrada en modo explorador
+      localStorage.setItem('bulkscene_auth_session', 'active');
+      localStorage.setItem('bulkscene_user_email', emailLower);
+      localStorage.setItem('bulkscene_subscription_active', 'false');
+      navigate('/app');
     } finally {
       setLoading(false);
     }
   };
-
-  if (viewState === 'no_suscrito') {
-    return <MensajeAcceso tipo="no_suscrito" onBack={() => setViewState('login')} />;
-  }
-  if (viewState === 'expired') {
-    return <MensajeAcceso tipo="expirado" onBack={() => setViewState('login')} expirationDate={expirationDate} />;
-  }
-  if (viewState === 'cuenta_desactivada') {
-    return <MensajeAcceso tipo="cuenta_desactivada" onBack={() => setViewState('login')} />;
-  }
 
   return (
     <div className="min-h-screen bg-[#06080d] text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-black">

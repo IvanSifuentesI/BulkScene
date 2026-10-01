@@ -19,7 +19,8 @@ import {
   Rocket,
   FolderOpen,
   Users,
-  Zap
+  Zap,
+  Lock
 } from 'lucide-react';
 import { 
   SceneSlot, 
@@ -40,6 +41,11 @@ import CharacterVault from './CharacterVault';
 import StyleMatrix from './StyleMatrix';
 import SettingsStage from './SettingsStage';
 import ReportErrorModal from './ReportErrorModal';
+import { 
+  isSubscriptionActive, 
+  triggerSubscriptionModal, 
+  refreshCurrentSubscription 
+} from '../services/subscriptionService';
 
 // Initial API Keys (loaded dynamically from localStorage / user settings)
 const INITIAL_NVIDIA_KEYS: string[] = [];
@@ -52,10 +58,17 @@ export const MainApplication: React.FC = () => {
   const [userEmail, setUserEmail] = useState<string>('creador@bulkscene.ai');
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportTechnicalContext, setReportTechnicalContext] = useState<any>(null);
+  const [isSubscribed, setIsSubscribed] = useState<boolean>(() => isSubscriptionActive());
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('bulkscene_user_email');
-    if (savedEmail) setUserEmail(savedEmail);
+    if (savedEmail) {
+      setUserEmail(savedEmail);
+      // Validar en segundo plano para asegurar consistencia con Supabase
+      refreshCurrentSubscription().then((active) => {
+        setIsSubscribed(active);
+      });
+    }
   }, []);
 
   // API Keys by Category (Persistent in localStorage)
@@ -322,10 +335,29 @@ export const MainApplication: React.FC = () => {
 
           {/* Right Header Status Bar */}
           <div className="flex items-center gap-2.5">
+            {/* Subscription Status Badge */}
+            {isSubscribed ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-400 font-mono shadow-inner">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-bold hidden sm:inline">Membresía Activa</span>
+                <span className="sm:hidden font-bold">PRO</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => triggerSubscriptionModal({ featureName: 'Desbloqueo de Suite Completa', stage: 'Cabecera' })}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs text-amber-300 font-bold transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] active:scale-95 animate-pulse"
+                title="Suscripción no activa: Haz clic para desbloquear acceso en Skool"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Suscripción No Activa • Activar</span>
+                <span className="sm:hidden">ACTIVAR</span>
+              </button>
+            )}
+
             {/* PC Optimized Badge */}
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-mono shadow-inner">
-              <Monitor className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Modo PC Optimizado</span>
+            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-slate-400 font-mono shadow-inner">
+              <Monitor className="w-3.5 h-3.5 text-slate-400" />
+              <span>Modo PC</span>
             </div>
 
             {/* Botón Reportar Problema al Administrador */}

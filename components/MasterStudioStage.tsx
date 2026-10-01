@@ -62,6 +62,7 @@ import {
 } from '../services/audioTranscriptionService';
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { requireSubscription } from '../services/subscriptionService';
 
 interface MasterStudioStageProps {
   // APIs
@@ -357,6 +358,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // Universal Phonetic Beats Extraction (Groq, NVIDIA NIM, AssemblyAI, Deepgram)
   const handleExtractWhisperBeats = async () => {
+    if (!requireSubscription('Extracción de Beats Fonéticos (Whisper)', '1. Estudio Master')) {
+      return;
+    }
     if (!audioBlob) {
       alert('Primero carga un archivo de audio para extraer los beats fonéticos.');
       return;
@@ -409,6 +413,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // AI Auto-Detect Visual Style
   const handleAutoDetectStyle = async () => {
+    if (!requireSubscription('Creación de Estilos con IA', '1. Estudio Master')) {
+      return;
+    }
     if (!scriptText.trim()) {
       alert('Pega o escribe un guion primero para analizar el estilo.');
       return;
@@ -462,6 +469,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // AI Auto-Extract Cultural & Temporal Context
   const handleAutoExtractContext = async () => {
+    if (!requireSubscription('Análisis de Contexto Cultural con IA', '1. Estudio Master')) {
+      return;
+    }
     if (!scriptText.trim()) {
       alert('Pega o escribe un guion primero para extraer el contexto.');
       return;
@@ -487,6 +497,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // AI Auto-Detect Characters
   const handleAutoDetectCharacters = async () => {
+    if (!requireSubscription('Detección de Personajes con IA', '1. Estudio Master')) {
+      return;
+    }
     if (!scriptText.trim()) {
       alert('Pega o escribe un guion primero para detectar personajes.');
       return;
@@ -552,6 +565,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
 
   // Core Pipeline Execution
   const executeGeneration = async (mode: 'full_auto' | 'prompts_only') => {
+    if (!requireSubscription(mode === 'full_auto' ? 'MODO AUTOMÁTICO TOTAL' : 'Generación de Prompts con IA', '1. Estudio Master')) {
+      return;
+    }
     if (!scriptText.trim()) {
       alert('Por favor pega o escribe el guion antes de iniciar la generación.');
       return;

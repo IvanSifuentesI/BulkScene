@@ -17,6 +17,7 @@ import { CharacterPersona, StylePreset, ScriptSceneResult } from '../types';
 import { analyzeScriptWithLLM, createLocalFallbackScenes } from '../services/llmDirectorService';
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { requireSubscription } from '../services/subscriptionService';
 
 interface ScriptStageProps {
   groqKeys: string[];
@@ -70,6 +71,9 @@ Un holograma parpadeante proyecta una cuenta regresiva que llega a cero, y la me
 
   // Ejecutar el Director de Guion con LLM
   const handleRunDirector = async () => {
+    if (!requireSubscription('Dirección de Guion con IA', 'Director de Guion')) {
+      return;
+    }
     if (!scriptText.trim() || isDirecting) return;
     setIsDirecting(true);
 

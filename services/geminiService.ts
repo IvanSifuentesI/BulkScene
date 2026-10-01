@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Scene, AutoPacingConfig } from '../types';
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
 
 export class QuotaError extends Error {
   constructor(message: string) {
@@ -274,6 +275,12 @@ export const generatePromptsForParagraphsBatch = async (
     styleInstructions: string,
     referenceImages?: { mimeType: string; data: string }[]
 ): Promise<{ resultsByParagraph: { script_segment: string, visual_prompt: string }[][]; originalIndices: number[] }> => {
+    // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+    if (!isSubscriptionActive()) {
+        triggerSubscriptionModal({ featureName: 'Generación con Google Gemini' });
+        throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+    }
+
     // IMPORTANT: Clean Key here
     const cleanKey = cleanApiKey(apiKey);
     if (!cleanKey) throw new Error("API Key inválida (vacía después de limpieza).");
@@ -592,6 +599,12 @@ export const generateImageForScene = async (
     aspectRatioStr: string,
     signal?: AbortSignal
 ): Promise<string> => {
+    // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+    if (!isSubscriptionActive()) {
+        triggerSubscriptionModal({ featureName: 'Generación de Imagen con Google Gemini' });
+        throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+    }
+
     const cleanKey = cleanApiKey(apiKey);
     if (!cleanKey) throw new Error("API Key de Gemini inválida (vacía después de limpieza).");
 

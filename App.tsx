@@ -7,6 +7,7 @@ import MainApplication from './components/MainApplication';
 import LandingPage from './components/LandingPage';
 import AdminDashboard from './components/AdminDashboard';
 import GlobalDynamicErrorModal from './components/GlobalDynamicErrorModal';
+import SubscriptionRequiredModal from './components/SubscriptionRequiredModal';
 import { initGlobalErrorTelemetry } from './services/errorTelemetryService';
 
 const LandingRoute: React.FC = () => {
@@ -82,6 +83,9 @@ const App: React.FC = () => {
 
       {/* Modal Dinámico Interceptor de Errores con Reporte a Telegram */}
       <GlobalDynamicErrorModal />
+
+      {/* Modal Interceptor de Funciones Protegidas por Suscripción */}
+      <SubscriptionRequiredModal />
     </Router>
   );
 };

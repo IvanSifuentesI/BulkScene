@@ -1,4 +1,5 @@
 import { AspectRatioType } from '../types';
+import { isSubscriptionActive, triggerSubscriptionModal } from '../services/subscriptionService';
 
 /**
  * Motor de Super-Resolución y Escalado 2K/4K en el Navegador.
@@ -54,6 +55,12 @@ export async function upscaleImage(
   targetFactor: 2 | 4 = 2,
   aspectRatio: AspectRatioType = '9:16'
 ): Promise<UpscaleResult> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Escalado 4K Ultra-HD' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';

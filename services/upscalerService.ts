@@ -49,11 +49,19 @@ function applyUnsharpMask(
   }
 }
 
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
+
 export async function upscaleImage(
   dataUrl: string,
   targetFactor: 2 | 4 = 4,
   aspectRatio: AspectRatioType = '9:16'
 ): Promise<UpscaleResult> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Escalado 4K Ultra-HD' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';

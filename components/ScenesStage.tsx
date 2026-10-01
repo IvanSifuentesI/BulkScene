@@ -22,6 +22,7 @@ import {
 import { triggerGlobalErrorModal } from '../services/adminReportingService';
 import { TranscriptionResult } from '../services/audioTranscriptionService';
 import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
+import { requireSubscription } from '../services/subscriptionService';
 
 interface ScenesStageProps {
   scriptText: string;
@@ -63,6 +64,9 @@ export const ScenesStage: React.FC<ScenesStageProps> = ({
 
   // Ejecutar el Director de Cine IA
   const handleRunDirector = async () => {
+    if (!requireSubscription('Desglose y Dirección de Escenas con IA', '5. Desglose de Escenas')) {
+      return;
+    }
     if (!scriptText.trim() || isDirecting) return;
     setIsDirecting(true);
 

@@ -4,6 +4,7 @@
  */
 import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter } from '../types';
 export type { ScriptDirectorCharacter };
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
 
 export const DEFAULT_GROQ_API_KEY = '';
 export const DEFAULT_NVIDIA_NIM_API_KEY = '';
@@ -686,6 +687,12 @@ export async function callLLMWithFallbacks(params: {
   geminiKey?: string;
   signal?: AbortSignal;
 }): Promise<string> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Motor de Inteligencia Artificial (LLM)' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   const {
     model = 'nvidia-llama-70b',
     systemPrompt,

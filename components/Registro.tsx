@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
+import { validateUserSubscription } from '../services/subscriptionService';
 
 export const Registro: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -73,18 +74,21 @@ export const Registro: React.FC = () => {
         // Si no tiene permisos de inserción directa, creamos sesión local de cortesía
       }
 
-      // Autenticar de inmediato
+      // Autenticar y validar estado
+      await validateUserSubscription(emailLower);
+
       localStorage.setItem('bulkscene_auth_session', 'active');
       localStorage.setItem('bulkscene_user_email', emailLower);
-      setSuccessMessage('¡Acceso concedido exitosamente! Ingresando al Estudio...');
+      setSuccessMessage('¡Ingreso completado! Abriendo el Estudio...');
       setTimeout(() => {
-        navigate('/');
-      }, 1200);
+        navigate('/app');
+      }, 1000);
     } catch (err: any) {
       console.warn('[REGISTRO] Fallback local:', err);
       localStorage.setItem('bulkscene_auth_session', 'active');
       localStorage.setItem('bulkscene_user_email', emailLower);
-      navigate('/');
+      localStorage.setItem('bulkscene_subscription_active', 'false');
+      navigate('/app');
     } finally {
       setLoading(false);
     }

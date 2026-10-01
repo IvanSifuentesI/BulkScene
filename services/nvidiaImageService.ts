@@ -108,6 +108,8 @@ export interface NvidiaImageResponse {
   modelUsed: string;
 }
 
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
+
 export async function generateNvidiaImage(
   apiKeys: string | string[],
   prompt: string,
@@ -115,6 +117,12 @@ export async function generateNvidiaImage(
   seed?: number,
   signal?: AbortSignal
 ): Promise<NvidiaImageResponse> {
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Generación de Imágenes con NVIDIA NIM' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   const keysPool = Array.isArray(apiKeys)
     ? apiKeys.map(k => k.trim()).filter(Boolean)
     : [apiKeys.trim()].filter(Boolean);

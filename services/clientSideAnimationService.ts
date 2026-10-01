@@ -376,6 +376,8 @@ export const blobUrlToBase64 = async (blobUrl: string): Promise<string> => {
     }
 };
 
+import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
+
 export const generateVideoFromImage = async (
   imageUrl: string, 
   durationSeconds: number, 
@@ -383,7 +385,12 @@ export const generateVideoFromImage = async (
   movement: CameraMovement,
   onProgress?: (percent: number) => void
 ): Promise<{ videoUrl: string; duration: number }> => {
-  
+  // Validación de seguridad de backend/servicio: rechazar llamadas no autorizadas
+  if (!isSubscriptionActive()) {
+    triggerSubscriptionModal({ featureName: 'Animación de Video' });
+    throw new Error('Suscripción no activa. Necesitas tener una suscripción activa dentro de la Academia de Skool para utilizar esta función.');
+  }
+
   return new Promise(async (resolve, reject) => {
      const img = new Image();
      img.crossOrigin = "anonymous";

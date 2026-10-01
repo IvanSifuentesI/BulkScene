@@ -13,9 +13,11 @@ import {
   ChevronRight, 
   LogOut, 
   Cpu,
-  ShieldCheck 
+  ShieldCheck,
+  Lock 
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { isSubscriptionActive, triggerSubscriptionModal } from '../services/subscriptionService';
 
 export type AppStage = 
   | 'guion' 
@@ -279,6 +281,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Estado de Suscripción Skool */}
+            {isSubscriptionActive() ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[10px] text-emerald-400 font-mono">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="font-bold">Membresía Skool Activa</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => triggerSubscriptionModal({ featureName: 'Desbloqueo de Suite Completa', stage: 'Sidebar' })}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-[10px] text-amber-300 font-semibold transition-all group"
+                title="Haz clic para activar tu suscripción en Skool"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>Sin suscripción</span>
+                </span>
+                <span className="text-[9px] bg-amber-400 text-black px-1.5 py-0.5 rounded font-black group-hover:scale-105 transition-transform">
+                  ACTIVAR
+                </span>
+              </button>
+            )}
 
             {(userEmail === 'admin@bulkscene.ai' || localStorage.getItem('bulkscene_admin_authenticated') === 'true') && (
               <Link
