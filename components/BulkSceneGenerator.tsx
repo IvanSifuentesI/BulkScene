@@ -567,9 +567,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
             <Sparkles className="w-5 h-5 text-emerald-400" />
             <span>GENERADOR MASIVO DE ESCENAS</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Convierte guiones y prompts en lotes de imágenes cinematográficas con consistencia total.
-          </p>
+          
         </div>
 
         {/* Status badges */}
@@ -1047,9 +1045,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           </div>
           <div>
             <h3 className="font-black text-base text-white mb-1">Aún no hay escenas preparadas en la matriz</h3>
-            <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-              Puedes redactar tu guion en el <strong>Paso 1</strong>, transcribirlo en el <strong>Paso 2</strong>, dirigirlo en el <strong>Paso 3</strong>, o cargar 5 escenas de demostración ahora mismo para probar los motores NVIDIA.
-            </p>
+            
           </div>
           <button
             type="button"

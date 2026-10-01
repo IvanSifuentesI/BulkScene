@@ -202,7 +202,7 @@ const GlobalMovementControl = memo<{
                     </div>
                     <div>
                         <h4 className="text-sm font-bold text-slate-200">Director de Cámara Global</h4>
-                        <p className="text-[10px] text-slate-400">Automatiza los movimientos de todas tus escenas</p>
+                        
                     </div>
                 </div>
                 
@@ -283,7 +283,7 @@ const GlobalMovementControl = memo<{
                             onClick={() => onGenerateVideosAuto(scriptIndex)}
                             disabled={isGenerating}
                             className="flex-shrink-0 px-6 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:from-slate-600 disabled:to-slate-600 text-white font-bold rounded-xl shadow-lg shadow-violet-900/30 transition-all flex items-center justify-center gap-2 w-full md:w-auto min-w-[140px]"
-                            title="Genera videos y automáticamente verifica y repara errores hasta que quede perfecto"
+                            
                         >
                             <SparklesIcon className="w-4 h-4 animate-pulse"/> Auto-Perfeccionar
                         </button>
@@ -1157,7 +1157,7 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({
                 <div className="flex flex-col items-center justify-center h-full text-center">
                     <MagicIcon className="w-12 h-12 text-violet-400 animate-pulse mb-4" />
                     <p className="text-slate-300 font-semibold">Creando tu proyecto...</p>
-                    <p className="text-slate-400">Esto tomará solo un momento.</p>
+                    
                 </div>
             );
         }
@@ -1176,7 +1176,7 @@ const ScriptDisplay: React.FC<ScriptDisplayProps> = ({
                 <div className="flex flex-col items-center justify-center h-full text-center">
                     <MagicIcon className="w-12 h-12 text-slate-500 mb-4" />
                     <p className="text-slate-300 font-semibold">Tus proyectos aparecerán aquí</p>
-                    <p className="text-slate-400">Usa la lista de prompts o la entrada JSON para empezar.</p>
+                    
                 </div>
             );
         }

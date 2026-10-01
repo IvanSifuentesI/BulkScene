@@ -44,36 +44,6 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
   useEffect(() => {
     getPricingConfig().then(setPricing);
-
-    // Evergreen 15-Minute Countdown Timer (Persiste en localStorage)
-    const STORAGE_KEY = 'bulkscene_discount_deadline';
-    let deadline = localStorage.getItem(STORAGE_KEY);
-    
-    if (!deadline || isNaN(Number(deadline)) || Number(deadline) <= Date.now()) {
-      const newDeadline = Date.now() + 15 * 60 * 1000;
-      localStorage.setItem(STORAGE_KEY, newDeadline.toString());
-      deadline = newDeadline.toString();
-    }
-
-    const updateCountdown = () => {
-      const remainingMs = Number(deadline) - Date.now();
-      if (remainingMs <= 0) {
-        // Ciclar con periodo de gracia de 3 minutos para mantener la máxima urgencia
-        const recycled = Date.now() + 3 * 60 * 1000;
-        localStorage.setItem(STORAGE_KEY, recycled.toString());
-        deadline = recycled.toString();
-        setTimeLeft({ minutes: 3, seconds: 0 });
-      } else {
-        const totalSec = Math.floor(remainingMs / 1000);
-        const m = Math.floor(totalSec / 60);
-        const s = totalSec % 60;
-        setTimeLeft({ minutes: m, seconds: s });
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
   }, []);
 
   const toggleFaq = (index: number) => {
@@ -136,17 +106,17 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
     {
       step: 'Paso 1',
       title: 'Pegar Guion o Idea',
-      desc: 'El Director con IA analiza el texto completo, detecta la narrativa y desglosa automáticamente cada escena con encuadres, tiempos de locución y descripciones visuales.'
+      desc: 'Analiza tu guion y desglosa escenas automáticamente.'
     },
     {
       step: 'Paso 2',
       title: 'Fijar Personaje & Estilo',
-      desc: 'Bloquea el rostro, edad y vestimenta con semilla matemática única (Seed Locking) y elige entre 10+ estilos cinematográficos para mantener coherencia en todo el video.'
+      desc: 'Bloquea el rostro y aplica estilos consistentes.'
     },
     {
       step: 'Paso 3',
       title: 'Generación Masiva & ZIP',
-      desc: 'El motor genera imágenes ilimitadas en minutos. Descarga un solo archivo ZIP ordenado (#001-#N) listo para arrastrar directamente a CapCut o Premiere.'
+      desc: 'Genera imágenes y descarga un ZIP listo para editar.'
     }
   ];
 
@@ -181,27 +151,27 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
   const faqs = [
     {
       q: '¿Realmente la generación de imágenes es ilimitada y sin pagar APIs?',
-      a: '¡Sí, 100%! La mayor ventaja de BulkScene Studio es que todo el procesamiento fotográfico e ilustrativo está totalmente integrado en la plataforma. No necesitas comprar tokens, no necesitas crear cuentas técnicas de APIs ni tendrás cobros sorpresas por cada imagen que generes.'
+      a: 'Sí, todo integrado. Sin pagos extras.'
     },
     {
       q: '¿Cómo accedo a la herramienta una vez que me uno en Skool?',
-      a: 'Tan pronto completas tu inscripción en nuestra comunidad oficial de Skool, simplemente vienes a esta página, vas a "Iniciar Sesión" o "Activar Cuenta" e ingresas el mismo correo electrónico con el que te registraste en Skool. El sistema te habilitará acceso total e inmediato.'
+      a: 'Inicia sesión con tu correo de Skool.'
     },
     {
       q: '¿Qué pasa si en el futuro el precio de la membresía en Skool sube?',
-      a: 'Nuestra plataforma se sincroniza automáticamente con el precio oficial de Skool. Sin embargo, mientras mantengas tu suscripción activa, tu precio mensual queda completamente congelado y garantizado de por vida al valor con el que ingresaste hoy.'
+      a: 'Tu precio queda congelado de por vida.'
     },
     {
       q: '¿Puedo mantener la cara y ropa de mis personajes constante en todas las escenas?',
-      a: 'Sí. El motor incluye el "Modo Anclaje Facial y Consistencia Biométrica". Solo defines a tu protagonista una vez (facciones, peinado, ropa y semilla fija) y el sistema lo fusiona matemáticamente en cada una de las escenas para que jamás cambie de rostro.'
+      a: 'Sí. El modo de consistencia mantiene el rostro.'
     },
     {
       q: '¿Necesito una computadora potente o tarjeta gráfica cara para usarlo?',
-      a: 'No. Todo el procesamiento neuronal corre 100% en la nube a través de nuestros clústeres de alta velocidad. Puedes usar BulkScene Studio desde cualquier laptop, PC modesta o navegador web con total fluidez.'
+      a: 'No. Todo el procesamiento corre en la nube.'
     },
     {
       q: '¿Puedo cancelar mi suscripción en cualquier momento?',
-      a: 'Totalmente. No hay contratos ni periodos forzosos de permanencia. Puedes pausar o cancelar tu suscripción con 1 solo clic desde tu panel de usuario en Skool cuando tú lo decidas.'
+      a: 'Sí. Puedes cancelar en cualquier momento.'
     }
   ];
 
@@ -211,7 +181,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Bulk Batch Engine',
       badge: 'Escenas Consecutivas',
       icon: <Layers className="w-5 h-5 text-emerald-400" />,
-      desc: 'Pega guiones enteros de 10, 50 o cientos de tomas. El sistema procesa cada escena en orden estricto y las descarga empaquetadas en un único archivo ZIP numerado (#001 a #100) listo para arrastrar a tu editor.',
+      desc: 'Genera lotes de imágenes en un ZIP numerado.',
       features: ['Nomenclatura cronológica invariable', 'Reintento individual por slot sin perder posición', 'Exportación en 1 clic']
     },
     {
@@ -219,7 +189,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Character Seed Locker',
       badge: 'Cero Cambios de Fisonomía',
       icon: <Lock className="w-5 h-5 text-purple-400" />,
-      desc: 'Bloquea los rasgos biométricos, edad, contextura y vestimenta de tu protagonista. La semilla algorítmica permanece constante en todas las tomas para que tu historia mantenga continuidad absoluta.',
+      desc: 'Mantiene el mismo rostro y ropa en todas tus escenas.',
       features: ['Anclaje de rostro y vestimenta fija', 'Semilla fija invariable', 'Compatibilidad con múltiples avatares']
     },
     {
@@ -227,7 +197,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Smart Script Director',
       badge: 'Ángulos Cinematográficos',
       icon: <Film className="w-5 h-5 text-cyan-400" />,
-      desc: 'Pega tu idea o texto en bruto. El director inteligente desglosa el guion en escenas dramáticas de alta retención, calculando encuadres (primer plano, ángulo picado, plano holandés, tomas aéreas).',
+      desc: 'Calcula encuadres y estilos a partir de tu texto.',
       features: ['Segmentación según ritmo de palabras', 'Cálculo dinámico de encuadres y lentes', 'Optimización automática de prompts']
     },
     {
@@ -235,7 +205,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Master Style Presets',
       badge: 'Estética Viral Instantánea',
       icon: <Sparkles className="w-5 h-5 text-amber-400" />,
-      desc: 'Aplica universos visuales enteros con un solo clic: Cinemático 35mm Hiperrealista, Animación 3D Pixar, Anime Cyberpunk, Cómic Oscuro Noir, Fotografía Editorial 70s y Realismo Documental.',
+      desc: 'Aplica universos visuales con un solo clic.',
       features: ['Paletas de iluminación volumétrica', 'Ciencia de color cinematográfica', 'Presets probados para alta retención']
     },
     {
@@ -243,7 +213,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'In-Browser 4K Upscaler',
       badge: '2160 × 3840 px',
       icon: <Maximize2 className="w-5 h-5 text-teal-400" />,
-      desc: 'Escala cualquier escena a ultra alta resolución mediante interpolación convolutiva multi-etapa y realce de micro-texturas. Cero pixelación en pantallas Retina y monitores de alta densidad.',
+      desc: 'Escala cualquier escena a 4K sin perder calidad.',
       features: ['Resolución nativa 2160 × 3840', 'Filtro Unsharp Masking de micro-detalle', 'Optimizado para video vertical 9:16']
     },
     {
@@ -251,7 +221,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Timeline Alignment Engine',
       badge: 'CapCut • Premiere • DaVinci',
       icon: <FolderArchive className="w-5 h-5 text-blue-400" />,
-      desc: 'Cada imagen generada se sincroniza al milisegundo con la narración de tu guion. Solo tienes que arrastrar la carpeta descargada a tu línea de tiempo y el video quedará montado casi al instante.',
+      desc: 'Sincroniza imágenes con locución automáticamente.',
       features: ['Emparejamiento de locución con imagen', 'Alineación de cortes por segundo', 'Ahorro del 85% de tiempo de edición']
     },
     {
@@ -259,46 +229,13 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
       subtitle: 'Custom Workspace',
       badge: 'Flujos Reutilizables',
       icon: <Sliders className="w-5 h-5 text-pink-400" />,
-      desc: 'Guarda tus personajes más exitosos, fórmulas de prompts ganadoras y combinaciones de estilos en tu bóveda personal para clonar videos virales una y otra vez con máxima velocidad.',
+      desc: 'Guarda personajes y estilos en tu bóveda personal.',
       features: ['Biblioteca de personajes guardados', 'Historial de prompts con restauración en 1 clic', 'Configuración de aspecto (9:16, 16:9, 1:1)']
     }
   ];
 
   return (
     <div className="min-h-screen bg-[#06080d] text-slate-100 font-sans selection:bg-emerald-500 selection:text-black">
-      {/* 1. TOP URGENCY 15-MINUTE DISCOUNT COUNTDOWN (Mobile & PC Optimized) */}
-      <aside aria-label="Descuento limitado de 15 minutos" className="sticky top-0 z-50 bg-[#070a12]/95 border-b border-emerald-500/30 py-2 sm:py-2.5 px-3 sm:px-6 shadow-[0_4px_30px_rgba(0,0,0,0.85)] backdrop-blur-md">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-center sm:text-left">
-          {/* Urgency message */}
-          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
-            <span className="inline-flex items-center gap-1.5 bg-red-500/20 text-red-400 border border-red-500/30 px-2.5 py-0.5 rounded-full uppercase tracking-wider text-[10px] font-black animate-pulse">
-              <Flame className="w-3.5 h-3.5 fill-red-400 text-red-400" />
-              OFERTA RELÁMPAGO 15 MIN
-            </span>
-            <span className="text-xs sm:text-sm font-bold text-slate-200">
-              Descuento especial de lanzamiento (<strong>$14 USD/mes</strong>) expira en:
-            </span>
-            {/* Countdown Digits */}
-            <div className="inline-flex items-center gap-1 font-mono font-black text-sm bg-black/80 px-2.5 py-0.5 rounded-lg border border-emerald-500/40 text-emerald-400 shadow-inner">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{String(timeLeft.minutes).padStart(2, '0')}</span>
-              <span className="animate-pulse">:</span>
-              <span>{String(timeLeft.seconds).padStart(2, '0')}</span>
-            </div>
-          </div>
-
-          {/* Quick CTA button */}
-          <a
-            href={pricing.skoolUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="w-full sm:w-auto px-4 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-400 hover:from-emerald-300 hover:to-teal-200 text-black font-black text-xs inline-flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all hover:scale-105 uppercase tracking-wider active:scale-95"
-          >
-            <span>Obtener Acceso ($14)</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      </aside>
 
       {/* 2. MAIN HEADER / NAVIGATION */}
       <header className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between border-b border-white/[0.06]">
@@ -381,7 +318,7 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
 
         {/* Subheadline (Resolución de Dolor & Mecanismo) */}
         <p className="text-sm sm:text-lg lg:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-          Produce escenas cinematográficas con <strong>consistencia facial</strong> de tus personajes, estilos visuales de alta retención y descarga ordenada lista para CapCut o Premiere. <strong className="text-slate-200">Sin pagos de tokens ni facturas de APIs.</strong>
+          Crea videos consistentes y listos para edición. <strong className="text-slate-200">Sin pagos de tokens ni facturas de APIs.</strong>
         </p>
 
         {/* Rediseño Premium del Precio Especial de Lanzamiento (Hero Card) */}
@@ -450,8 +387,6 @@ export const LandingPage: React.FC<LandingPageProps> = () => {
             </Link>
           </div>
         </div>
-
-        {/* Proof Metrics Strip */}
         <div className="pt-2 grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 max-w-4xl mx-auto text-center">
           <div className="p-3 sm:p-4 rounded-2xl bg-[#0e111a]/80 border border-white/5 shadow-inner">
             <div className="flex items-center justify-center gap-1.5 text-xl sm:text-2xl font-black text-white font-mono">

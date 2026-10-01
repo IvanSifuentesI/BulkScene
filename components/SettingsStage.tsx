@@ -407,9 +407,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       10 Modelos Disponibles
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Selecciona libremente el motor que analizará y segmentará tus historias (NVIDIA NIM, Google Gemini o Groq).
-                  </p>
+                  
                 </div>
               </div>
             </div>
@@ -437,9 +435,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       </div>
                       {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
-                      {m.description}
-                    </p>
+                    
                     <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
                       <span className="text-amber-400 font-semibold">{m.badge}</span>
                       <span>•</span>
@@ -464,9 +460,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                     Groq • NVIDIA • AssemblyAI • Deepgram Nova-3
                   </span>
                 </h4>
-                <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                  Configura tus APIs de voz a texto y elige tu motor predeterminado con timestamps exactos palabra por palabra.
-                </p>
+                
               </div>
             </div>
             <button
@@ -493,9 +487,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       Unificada & Multi-Clave
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    FLUX.1 Schnell, FLUX.1 Dev, FLUX.2 Klein, Kontext, SD 3.5 Large, Qwen Image y DeepSeek R1 32B Uncensored.
-                  </p>
+                  
                 </div>
               </div>
 
@@ -575,9 +567,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       Transcripción & Subtítulos
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Whisper Large V3 Turbo (Audio a Texto a 200x velocidad de reproducción).
-                  </p>
+                  
                 </div>
               </div>
 
@@ -657,11 +647,6 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       Motor Principal · Pool Rotatorio
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    <span className="text-blue-300 font-semibold">gemini-3.8-flash</span> — Análisis profundo (personajes, época, estilo) ·{' '}
-                    <span className="text-blue-300 font-semibold">gemini-3.5-flash-lite</span> — Generación masiva de prompts por escena.
-                    Las claves rotan automáticamente cuando una se agota (429).
-                  </p>
                 </div>
               </div>
 
@@ -747,9 +732,6 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       Modelos Comunitarios
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Soporte para endpoints de Fal.ai si cuentas con créditos gratuitos comunitarios.
-                  </p>
                 </div>
               </div>
 
@@ -806,9 +788,6 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       Groq • NVIDIA • AssemblyAI • Deepgram
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Configura tus 4 proveedores de transcripción para extraer timestamps milimétricos palabra por palabra en guiones y videos virales.
-                  </p>
                 </div>
               </div>
             </div>
@@ -839,9 +818,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
                       </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
-                        {m.description}
-                      </p>
+                      
                       <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
                         <span className="text-cyan-400 font-semibold">{m.badge}</span>
                         <span>•</span>
@@ -868,9 +845,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       {groqKeys.length} Claves en Pool
                     </span>
                   </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Procesamiento en LPU de Groq a 216x tiempo real con timestamps de alta precisión.
-                  </p>
+                  
                 </div>
               </div>
               <a
@@ -945,9 +920,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       {nvidiaKeys.length} Claves en Pool
                     </span>
                   </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    ASR de alta fidelidad: openai/whisper-large-v3 y parakeet-1.1b-rnnt-multilingual-asr (25 idiomas).
-                  </p>
+                  
                 </div>
               </div>
               <a
@@ -1022,9 +995,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       ✓ Pre-configurada & Lista
                     </span>
                   </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Puntuación gramatical nativa de alta resolución con capacidad de procesar archivos pesados de hasta 5 GB.
-                  </p>
+                  
                 </div>
               </div>
               <a
@@ -1078,9 +1049,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       ✓ Pre-configurada & Lista
                     </span>
                   </h4>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    El modelo más avanzado de Deepgram: menor tasa de error en español/inglés y latencia imperceptible.
-                  </p>
+                  
                 </div>
               </div>
               <a
@@ -1161,9 +1130,6 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       En Vivo sin Redespliegue
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Modifica el precio aquí y se actualizará automáticamente en la Landing Page pública y en el formulario de activación de alumnos.
-                  </p>
                 </div>
               </div>
 
@@ -1253,9 +1219,6 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                       {errorReports.length} Eventos Capturados
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Detección automática de censura NVIDIA (422), errores de API Key (401), cuotas (429) y caídas de cluster.
-                  </p>
                 </div>
               </div>
 

@@ -1928,12 +1928,6 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              {narrativeMode === 'documental_secuencial' && 'Secuencia lógica continua de causa-efecto cronológica entre planos consecutivos.'}
-              {narrativeMode === 'motivacional_conceptual' && 'Metáforas visuales de alto impacto emocional no estrictamente lineales.'}
-              {narrativeMode === 'storytelling_cinematico' && 'Estructura clásica de 3 actos con gancho inicial, tensión y resolución dramática.'}
-              {narrativeMode === 'educativo_viral' && 'Cortes rápidos y cambios de escala cada 2s para retención máxima en Shorts/TikTok.'}
-            </p>
           </div>
 
           {/* CARD 2: ESTILO VISUAL */}
@@ -2030,11 +2024,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   placeholder="La IA completará aquí el estilo detectado del guion..."
                   className="w-full bg-[#07090e] border border-cyan-500/30 text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-cyan-400 resize-none font-sans leading-relaxed"
                 />
-                {detectedStyleReason && (
-                  <p className="text-[10px] text-cyan-400 bg-cyan-500/10 px-3 py-1.5 rounded-xl border border-cyan-500/20 leading-relaxed">
-                    💡 {detectedStyleReason}
-                  </p>
-                )}
+
                 {activeStyle && (
                   <p className="text-[10px] text-amber-400/70 font-mono">
                     Preset base: {activeStyle.name}
