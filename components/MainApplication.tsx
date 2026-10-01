@@ -31,6 +31,7 @@ import {
 import { DEFAULT_STYLES, DEFAULT_CHARACTERS } from '../config/stylePresets';
 import { TranscriptionResult } from '../services/audioTranscriptionService';
 import Sidebar, { AppStage } from './Sidebar';
+import MasterStudioStage from './MasterStudioStage';
 import ScriptStage from './ScriptStage';
 import AudioStage from './AudioStage';
 import ScenesStage from './ScenesStage';
@@ -248,7 +249,7 @@ export const MainApplication: React.FC = () => {
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>1. Director</span>
+              <span>1. Estudio Master</span>
             </button>
 
             <button
@@ -397,18 +398,27 @@ export const MainApplication: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           <div className="max-w-[1850px] 2xl:max-w-full mx-auto w-full pb-16 px-1 sm:px-2">
             {currentStage === 'guion' && (
-              <ScriptStage
+              <MasterStudioStage
                 groqKeys={groqKeys}
                 nvidiaNimKeys={nvidiaKeys}
+                geminiKey={geminiKey}
                 initialScript={scriptText}
+                initialAudioBlob={masterAudioBlob}
+                initialAudioDuration={audioDuration}
+                initialTranscription={transcriptionResult}
                 characters={characters}
                 activeCharacterId={activeCharacterId}
                 onSelectCharacter={setActiveCharacterId}
+                onAddCharacter={handleAddCharacter}
                 styles={styles}
                 activeStyleId={activeStyleId}
                 onSelectStyle={setActiveStyleId}
+                projectName={projectName}
+                setProjectName={setProjectName}
                 onProceedToScenes={handleProceedFromScenes}
                 onProceedToAudio={handleProceedFromScript}
+                onProceedToImages={handleProceedFromScenes}
+                onNavigateToSettings={() => setCurrentStage('ajustes')}
               />
             )}
 

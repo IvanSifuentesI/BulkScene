@@ -60,9 +60,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     {
       id: 'guion' as AppStage,
-      label: '1. Director de Guion',
+      label: '1. Estudio Master',
       icon: Clapperboard,
-      badge: 'IA',
+      badge: 'IA Master',
       badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
       activeStyle: 'bg-[#0a231b] border-emerald-500/60 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.15)]',
       indicatorColor: 'bg-emerald-400',

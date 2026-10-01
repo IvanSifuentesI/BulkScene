@@ -25,6 +25,7 @@ import {
 import { CharacterPersona, StylePreset } from '../types';
 import { CharacterVault } from './CharacterVault';
 import { StyleMatrix } from './StyleMatrix';
+import { AVAILABLE_SCRIPT_MODELS } from '../config/stylePresets';
 import { 
   getPricingConfig, 
   updateRemotePrice, 
@@ -80,10 +81,19 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   onDeleteStyle,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'apis' | 'characters' | 'styles' | 'telemetria'>('apis');
+  const [selectedScriptModel, setSelectedScriptModel] = useState<string>(() => {
+    return localStorage.getItem('bulkscene_selected_director_model') || 'nvidia-llama-70b';
+  });
   const [newNvidiaKey, setNewNvidiaKey] = useState('');
   const [newGroqKey, setNewGroqKey] = useState('');
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saveNotification, setSaveNotification] = useState<string | null>(null);
+
+  const handleSelectScriptModel = (modelId: string) => {
+    setSelectedScriptModel(modelId);
+    localStorage.setItem('bulkscene_selected_director_model', modelId);
+    triggerSaveNotification(`Modelo LLM establecido en: ${modelId}`);
+  };
 
   // Pricing State
   const [pricingConfig, setPricingConfig] = useState<PricingConfig>(DEFAULT_PRICING_CONFIG);
@@ -310,6 +320,64 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
       {/* Sub-tab 1: Categorized APIs */}
       {activeSubTab === 'apis' && (
         <div className="space-y-6">
+          {/* SELECCIÓN DE MODELO LLM DIRECTOR PREDETERMINADO */}
+          <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] border border-cyan-500/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    <span>Modelo de IA Predeterminado para Guiones & Dirección</span>
+                    <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full font-bold">
+                      10 Modelos Disponibles
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Selecciona libremente el motor que analizará y segmentará tus historias (NVIDIA NIM, Google Gemini o Groq).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {AVAILABLE_SCRIPT_MODELS.map((m) => {
+                const isSelected = selectedScriptModel === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleSelectScriptModel(m.id)}
+                    className={`p-3.5 rounded-2xl text-left border transition-all ${
+                      isSelected
+                        ? 'bg-cyan-950/40 border-cyan-500/60 text-white shadow-md'
+                        : 'bg-[#08090d] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white">{m.name}</span>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-cyan-300 border border-white/10">
+                          {m.provider}
+                        </span>
+                      </div>
+                      {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+                      {m.description}
+                    </p>
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500">
+                      <span className="text-amber-400 font-semibold">{m.badge}</span>
+                      <span>•</span>
+                      <span>Velocidad: {m.speed}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* CATEGORY 1: NVIDIA */}
           <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/[0.04]">

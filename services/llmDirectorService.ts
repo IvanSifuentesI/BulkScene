@@ -1,7 +1,8 @@
 /**
  * Servicio de Dirección Cinematográfica de Guiones con LLMs avanzados.
- * Soporta Groq (Llama 3.3 70B Versatile) y NVIDIA NIM (DeepSeek R1 Qwen 32B Uncensored, Llama 3.3 70B).
+ * Soporta Groq (Llama 3.3 70B Versatile), NVIDIA NIM (Llama 3.3 70B, DeepSeek R1, Mistral, Qwen), y Google Gemini.
  */
+import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter } from '../types';
 
 export const DEFAULT_GROQ_API_KEY = '';
 export const DEFAULT_NVIDIA_NIM_API_KEY = '';
@@ -58,12 +59,16 @@ function extractCleanJson(raw: string): any {
 
 export async function analyzeScriptWithLLM(params: {
   scriptText: string;
-  model?: 'groq-llama-70b' | 'nvidia-deepseek-r1-32b' | 'nvidia-llama-70b' | string;
+  model?: string;
   groqKey?: string;
   nvidiaNimKey?: string;
+  geminiKey?: string;
   targetStyleName?: string;
   targetStyleModifier?: string;
   characterAnchor?: string;
+  narrativeMode?: 'documental_secuencial' | 'motivacional_conceptual' | 'storytelling_cinematico' | 'educativo_viral';
+  culturalContext?: { epoch?: string; culture?: string; environment?: string };
+  characterConsistencyMode?: 'deteccion_rapida' | 'referencia_imagen' | 'nombre_en_prompt' | 'detectar_muertes_salidas';
   pacingWords?: number;
   hookMinSeconds?: number;
   hookMaxSeconds?: number;
@@ -71,20 +76,54 @@ export async function analyzeScriptWithLLM(params: {
 }): Promise<DirectorAnalysisResponse> {
   const {
     scriptText,
-    model = 'groq-llama-70b',
+    model = 'nvidia-llama-70b',
     groqKey = DEFAULT_GROQ_API_KEY,
     nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
+    geminiKey = '',
     targetStyleName = 'Cinematográfico 35mm Hiperrealista',
     targetStyleModifier = 'cinematic 35mm film photography, Kodak Portra 400 color science, natural atmospheric lighting, 8k',
     characterAnchor = '',
+    narrativeMode = 'documental_secuencial',
+    culturalContext,
+    characterConsistencyMode = 'nombre_en_prompt',
     pacingWords = 8,
   } = params;
 
   const minWords = Math.max(4, pacingWords - 3);
   const maxWords = pacingWords + 5;
 
+  // Modos de Dirección Narrativa
+  const narrativeDirectives: Record<string, string> = {
+    documental_secuencial: 'MODO NARRATIVO: Documental Secuencial. Las escenas deben ser estrictamente consecutivas y conectadas por una relación de causa-efecto cronológica clara (la escena 2 nace directamente del final de la escena 1).',
+    motivacional_conceptual: 'MODO NARRATIVO: Motivacional / Conceptual. Cada escena debe ser una metáfora visual épica e impactante con gran carga emocional, no necesariamente ligada cronológicamente a la anterior, ideal para discursos de alta energía y ganchos de retención.',
+    storytelling_cinematico: 'MODO NARRATIVO: Storytelling Cinemático. Estructura clásica de 3 actos con gancho inicial, tensión creciente y clímax dramático.',
+    educativo_viral: 'MODO NARRATIVO: Educativo / Viral Faceless. Cortes muy rápidos, encuadres dinámicos y cambios de ángulo cada 1.8 a 2.5 segundos para retención máxima en Shorts/TikTok.'
+  };
+
+  // Directriz de Contexto Cultural y Temporal
+  let culturalDirective = '';
+  if (culturalContext && (culturalContext.epoch || culturalContext.culture || culturalContext.environment)) {
+    culturalDirective = `\nCONTEXTO TEMPORAL Y CULTURAL OBLIGATORIO:
+- Época: ${culturalContext.epoch || 'No especificada (interpretar del texto)'}
+- Cultura/Ambientación: ${culturalContext.culture || 'Universal'}
+- Entorno Visual: ${culturalContext.environment || 'Cinematográfico'}
+Todos los elementos de vestuario, arquitectura, utilería y atmósfera deben reflejar estrictamente este marco temporal y cultural en cada prompt visual.`;
+  }
+
+  // Directriz de Consistencia de Personajes
+  let consistencyDirective = '';
+  if (characterConsistencyMode === 'nombre_en_prompt') {
+    consistencyDirective = '\nREGLA DE CONSISTENCIA: Si un personaje está presente en una escena, inyecta su nombre y rasgos físicos inmutables al inicio del prompt visual.';
+  } else if (characterConsistencyMode === 'detectar_muertes_salidas') {
+    consistencyDirective = '\nREGLA DE CONTINUIDAD VITAL: Si un personaje muere o abandona la historia en una escena, NO lo vuelvas a incluir en los prompts visuales de escenas posteriores.';
+  }
+
   const systemPrompt = `Eres el Director Supremo de Cine y Guiones para producciones de video viral de alta retención (YouTube Shorts, Reels, TikTok).
 Tu misión es transformar el guion del usuario en una estructura narrativa cinematográfica precisa y secuencial para generar imágenes escena por escena.
+
+${narrativeDirectives[narrativeMode] || narrativeDirectives.documental_secuencial}
+${culturalDirective}
+${consistencyDirective}
 
 DIRECTRIZ DE ESTILO VISUAL ABSOLUTA:
 - Estilo artístico ordenado: "${targetStyleName}".
@@ -95,7 +134,6 @@ DIRECTRIZ DE ESTILO VISUAL ABSOLUTA:
 
 PROTOCOLO DE ACCIÓN DINÁMICA (CRÍTICO):
 - VISUALIZA EL VERBO: Si el texto dice correr, nadar o gritar, el sujeto debe estar en movimiento activo enérgico, jamás en una pose estática mirando a cámara.
-- CADENA DE CONTINUIDAD CAUSA-EFECTO: La escena N+1 debe ser la consecuencia directa de la escena N.
 ${characterAnchor ? `- PERSONAJE PROTAGÓNICO FIJADO: "${characterAnchor}". Mantén sus rasgos constantes.` : ''}
 
 SEGMENTACIÓN Y CERO PÉRDIDA DE DATOS:
@@ -130,22 +168,77 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
   ]
 }`;
 
+  // 1. Si es modelo de Google Gemini
+  const isGemini = model.startsWith('gemini-');
+  const cleanGeminiKey = (geminiKey || localStorage.getItem('bulk_gemini_api_key') || '').trim();
+
+  if (isGemini && cleanGeminiKey) {
+    try {
+      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanGeminiKey}`;
+      const res = await fetch(geminiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: `${systemPrompt}\n\nAnaliza y segmenta cinematográficamente este guion:\n\n${scriptText}` }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 8192,
+            responseMimeType: 'application/json'
+          }
+        }),
+        signal: params.signal
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (raw) {
+          const parsed = extractCleanJson(raw);
+          if (parsed.scenes && Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+            return parsed as DirectorAnalysisResponse;
+          }
+        }
+      }
+    } catch (gErr) {
+      console.warn('[LLM DIRECTOR] Gemini API error, probando alternativas:', gErr);
+    }
+  }
+
+  // 2. Mapeo de Modelos para NVIDIA NIM y Groq
   let endpoint = '';
   let authHeader = '';
   let payloadModel = '';
 
-  if (model === 'groq-llama-70b') {
-    // Probar proxy local Vite primero, o directo
+  const nvidiaModelMapping: Record<string, string> = {
+    'nvidia-llama-70b': 'meta/llama-3.3-70b-instruct',
+    'nvidia-deepseek-r1': 'deepseek-ai/deepseek-r1',
+    'nvidia-deepseek-r1-32b': 'deepseek-ai/deepseek-r1',
+    'nvidia-mistral-nemo': 'mistralai/mistral-nemo-12b-instruct',
+    'nvidia-qwen-72b': 'qwen/qwen2.5-72b-instruct',
+    'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
+  };
+
+  const cleanNvidiaKey = (nvidiaNimKey || localStorage.getItem('bulk_nvidia_api_keys') || DEFAULT_NVIDIA_NIM_API_KEY).trim();
+  const cleanGroqKey = (groqKey || localStorage.getItem('bulk_groq_api_keys') || DEFAULT_GROQ_API_KEY).trim();
+
+  const isNvidiaModel = model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-');
+
+  if (isNvidiaModel) {
+    endpoint = '/api/nvidia-nim/v1/chat/completions';
+    authHeader = `Bearer ${cleanNvidiaKey}`;
+    payloadModel = nvidiaModelMapping[model] || 'meta/llama-3.3-70b-instruct';
+  } else if (model.startsWith('groq-')) {
     endpoint = '/api/groq/openai/v1/chat/completions';
-    authHeader = `Bearer ${groqKey.trim() || DEFAULT_GROQ_API_KEY}`;
-    payloadModel = 'llama-3.3-70b-versatile';
-  } else if (model === 'nvidia-deepseek-r1-32b') {
-    endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${nvidiaNimKey.trim() || DEFAULT_NVIDIA_NIM_API_KEY}`;
-    payloadModel = 'nicoboss/DeepSeek-R1-Distill-Qwen-32B-Uncensored';
+    authHeader = `Bearer ${cleanGroqKey}`;
+    payloadModel = model === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
   } else {
+    // Default a NVIDIA Llama 70B
     endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${nvidiaNimKey.trim() || DEFAULT_NVIDIA_NIM_API_KEY}`;
+    authHeader = `Bearer ${cleanNvidiaKey}`;
     payloadModel = 'meta/llama-3.3-70b-instruct';
   }
 
@@ -155,7 +248,6 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
   };
 
   const candidateEndpoints = [endpoint, directEndpoints[endpoint] || endpoint];
-
   let lastError: any = null;
 
   for (const ep of candidateEndpoints) {
@@ -202,7 +294,15 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
     }
   }
 
-  throw lastError || new Error('No se pudo comunicar con los servicios de LLM (Groq / NVIDIA).');
+  // Si todas las conexiones remotas fallan o no hay keys, activar el motor local algorítmico sin bloquear
+  console.info('[LLM DIRECTOR] Activando motor local de respaldo algorítmico.');
+  return createLocalFallbackScenes({
+    scriptText,
+    targetStyleName,
+    targetStyleModifier,
+    characterAnchor,
+    pacingWords
+  });
 }
 
 /**
@@ -357,32 +457,81 @@ export async function callLLMWithFallbacks(params: {
   userPrompt: string;
   groqKey?: string;
   nvidiaNimKey?: string;
+  geminiKey?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   const {
-    model = 'groq-llama-70b',
+    model = 'nvidia-llama-70b',
     systemPrompt,
     userPrompt,
     groqKey = DEFAULT_GROQ_API_KEY,
     nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
+    geminiKey = '',
     signal,
   } = params;
+
+  // 1. Google Gemini Support
+  const cleanGemini = (geminiKey || localStorage.getItem('bulk_gemini_api_key') || '').trim();
+  if (model.startsWith('gemini-') && cleanGemini) {
+    try {
+      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanGemini}`;
+      const res = await fetch(geminiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 4096
+          }
+        }),
+        signal
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      }
+    } catch (gErr) {
+      console.warn('[callLLMWithFallbacks] Gemini error, probando alternativas:', gErr);
+    }
+  }
+
+  // 2. NVIDIA NIM & Groq Mapping
+  const nvidiaModelMapping: Record<string, string> = {
+    'nvidia-llama-70b': 'meta/llama-3.3-70b-instruct',
+    'nvidia-deepseek-r1': 'deepseek-ai/deepseek-r1',
+    'nvidia-deepseek-r1-32b': 'deepseek-ai/deepseek-r1',
+    'nvidia-mistral-nemo': 'mistralai/mistral-nemo-12b-instruct',
+    'nvidia-qwen-72b': 'qwen/qwen2.5-72b-instruct',
+    'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
+  };
+
+  const cleanNvidiaKey = (nvidiaNimKey || localStorage.getItem('bulk_nvidia_api_keys') || DEFAULT_NVIDIA_NIM_API_KEY).trim();
+  const cleanGroqKey = (groqKey || localStorage.getItem('bulk_groq_api_keys') || DEFAULT_GROQ_API_KEY).trim();
 
   let endpoint = '';
   let authHeader = '';
   let payloadModel = '';
 
-  if (model.includes('groq') || model === 'groq-llama-70b') {
-    endpoint = '/api/groq/openai/v1/chat/completions';
-    authHeader = `Bearer ${(groqKey || DEFAULT_GROQ_API_KEY).trim()}`;
-    payloadModel = 'llama-3.3-70b-versatile';
-  } else if (model.includes('deepseek')) {
+  const isNvidiaModel = model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-');
+
+  if (isNvidiaModel) {
     endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${(nvidiaNimKey || DEFAULT_NVIDIA_NIM_API_KEY).trim()}`;
-    payloadModel = 'nicoboss/DeepSeek-R1-Distill-Qwen-32B-Uncensored';
+    authHeader = `Bearer ${cleanNvidiaKey}`;
+    payloadModel = nvidiaModelMapping[model] || 'meta/llama-3.3-70b-instruct';
+  } else if (model.startsWith('groq-')) {
+    endpoint = '/api/groq/openai/v1/chat/completions';
+    authHeader = `Bearer ${cleanGroqKey}`;
+    payloadModel = model === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
   } else {
     endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${(nvidiaNimKey || DEFAULT_NVIDIA_NIM_API_KEY).trim()}`;
+    authHeader = `Bearer ${cleanNvidiaKey}`;
     payloadModel = 'meta/llama-3.3-70b-instruct';
   }
 
@@ -432,7 +581,7 @@ export async function callLLMWithFallbacks(params: {
     }
   }
 
-  throw lastError || new Error('No se pudo comunicar con los servicios de LLM (Groq / NVIDIA).');
+  throw lastError || new Error('No se pudo comunicar con los servicios de LLM (NVIDIA / Gemini / Groq).');
 }
 
 export interface MasterPromptAnalysis {
@@ -581,3 +730,229 @@ Redacta el guion definitivo respetando la extensión.`;
   }
 }
 
+/**
+ * Detecta automáticamente el mejor estilo visual a partir del guion analizado con el LLM activo.
+ */
+export async function detectStyleWithAI(params: {
+  scriptText: string;
+  styles: StylePreset[];
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<{ recommendedStyleId: string; styleName: string; reason: string }> {
+  const { scriptText, styles, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim() || styles.length === 0) {
+    return {
+      recommendedStyleId: styles[0]?.id || 'cinematic-35mm',
+      styleName: styles[0]?.name || 'Cinematográfico 35mm',
+      reason: 'Estilo predeterminado por defecto'
+    };
+  }
+
+  const stylesListStr = styles.map((s, idx) => `${idx + 1}. ID: "${s.id}" | Nombre: "${s.name}" | Categoría: "${s.category}" | Detalle: "${s.description}"`).join('\n');
+
+  const system = `Eres un Director de Arte y Fotografía Cinematográfica galardonado.
+Tu tarea es analizar el guion proporcionado y seleccionar el MEJOR estilo visual de la lista disponible para maximizar el impacto visual y la retención del espectador.
+
+Responde ÚNICAMENTE en formato JSON válido:
+{
+  "recommendedStyleId": "id-exacto-del-estilo",
+  "styleName": "Nombre del estilo",
+  "reason": "Explicación breve de 1 o 2 oraciones del por qué este estilo eleva la narrativa."
+}`;
+
+  const user = `LISTA DE ESTILOS DISPONIBLES:
+${stylesListStr}
+
+GUION A ANALIZAR:
+"""
+${scriptText.slice(0, 2500)}
+"""
+
+Elige el estilo más adecuado:`;
+
+  try {
+    const raw = await callLLMWithFallbacks({
+      model,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(raw);
+    const matched = styles.find(s => s.id === parsed.recommendedStyleId) || styles[0];
+    return {
+      recommendedStyleId: matched.id,
+      styleName: matched.name,
+      reason: parsed.reason || 'Estilo optimizado para la atmósfera del guion.'
+    };
+  } catch (err) {
+    console.warn('[detectStyleWithAI] Fallback local para estilo visual:', err);
+    const lower = scriptText.toLowerCase();
+    let selected = styles[0];
+    if (lower.includes('anime') || lower.includes('manga') || lower.includes('japón') || lower.includes('samurái')) {
+      selected = styles.find(s => s.id.includes('anime')) || styles[0];
+    } else if (lower.includes('cyber') || lower.includes('futuro') || lower.includes('robot') || lower.includes('ia') || lower.includes('holograma')) {
+      selected = styles.find(s => s.id.includes('cyber') || s.id.includes('sci-fi')) || styles[0];
+    } else if (lower.includes('medieval') || lower.includes('rey') || lower.includes('espada') || lower.includes('castillo')) {
+      selected = styles.find(s => s.id.includes('dark-fantasy') || s.id.includes('fantasy')) || styles[0];
+    }
+    return {
+      recommendedStyleId: selected.id,
+      styleName: selected.name,
+      reason: 'Selección algorítmica basada en las palabras clave del guion.'
+    };
+  }
+}
+
+/**
+ * Extrae automáticamente el contexto temporal, cultural y ambiental del guion con el LLM activo.
+ */
+export async function extractCulturalContextWithAI(params: {
+  scriptText: string;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<CulturalTemporalContext> {
+  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim()) {
+    return {
+      epoch: 'Contemporánea / Actual',
+      culture: 'Universal / Cinematográfica',
+      environment: 'Urbano / Realista'
+    };
+  }
+
+  const system = `Eres un Historiador y Director de Producción Cinematográfica.
+Analiza el guion del usuario y extrae con precisión quirúrgica el marco temporal, cultural y ambiental.
+Responde ÚNICAMENTE en formato JSON:
+{
+  "epoch": "Época histórica o futurista (ej: Siglo XIX Victoriano, Roma 44 a.C., Año 2088 Cyberpunk, Década de 1970)",
+  "culture": "Cultura y ambientación (ej: Tradición Japonesa Feudal, Imperio Romano, Cultura Urbana Neoyorquina, Cyberpunk Distópico)",
+  "environment": "Entorno físico y atmósfera (ej: Laboratorio cuántico subterráneo, Selva amazónica en tormenta, Callejones lluviosos con neón)",
+  "autoDetected": true
+}`;
+
+  const user = `GUION:\n"""\n${scriptText.slice(0, 3000)}\n"""\nExtrae el marco temporal, cultural y ambiental:`;
+
+  try {
+    const raw = await callLLMWithFallbacks({
+      model,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(raw);
+    return {
+      epoch: parsed.epoch || 'Contemporánea',
+      culture: parsed.culture || 'Cinematográfica',
+      environment: parsed.environment || 'Urbano Atmosférico',
+      autoDetected: true
+    };
+  } catch (err) {
+    console.warn('[extractCulturalContextWithAI] Fallback local para contexto:', err);
+    return {
+      epoch: 'Época determinada por la narración',
+      culture: 'Cinematográfica universal',
+      environment: 'Entorno narrativo inmersivo',
+      autoDetected: true
+    };
+  }
+}
+
+/**
+ * Detecta personajes, protagonistas y secundarios, ropa invariante y ciclo vital con el LLM activo.
+ */
+export async function detectCharactersWithAI(params: {
+  scriptText: string;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<ScriptDirectorCharacter[]> {
+  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  if (!scriptText.trim()) return [];
+
+  const system = `Eres un Director de Casting y Continuidad Visual de Cine.
+Identifica los personajes clave que aparecen en el guion.
+Para cada personaje determina:
+1. "name": Nombre del personaje (o apodo si no tiene nombre propio, ej: "El Detective", "El Científico").
+2. "role": "PROTAGONIST" para el personaje central, "SECONDARY" para los demás.
+3. "alive": true si sobrevive o false si muere/desaparece en el relato.
+4. "exitScene": número de escena aproximado donde muere o sale del relato (o null si permanece toda la historia).
+5. "anchorDescription": Descripción biométrica invariable concisa en inglés (ej: "35-year-old tall athletic man with short black hair and sharp jawline").
+6. "clothingAnchor": Vestimenta invariable concisa en inglés (ej: "dark worn leather jacket over charcoal t-shirt and rugged cargo pants").
+7. "defaultSeed": Número entero positivo único entre 100000 y 999999.
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "characters": [
+    {
+      "name": "Marcus",
+      "role": "PROTAGONIST",
+      "alive": true,
+      "exitScene": null,
+      "anchorDescription": "38-year-old rugged cybernetic detective with intense grey eyes and scarred cheek",
+      "clothingAnchor": "weathered trench coat with glowing collar and tactical boots",
+      "defaultSeed": 482910
+    }
+  ]
+}`;
+
+  const user = `GUION:\n"""\n${scriptText.slice(0, 3000)}\n"""\nDetecta los personajes con sus rasgos invariables:`;
+
+  try {
+    const raw = await callLLMWithFallbacks({
+      model,
+      systemPrompt: system,
+      userPrompt: user,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(raw);
+    if (parsed.characters && Array.isArray(parsed.characters) && parsed.characters.length > 0) {
+      return parsed.characters.map((c: any) => ({
+        name: c.name || 'Protagonista',
+        role: c.role === 'SECONDARY' ? 'SECONDARY' : 'PROTAGONIST',
+        alive: c.alive !== false,
+        exitScene: c.exitScene ?? null,
+        anchorDescription: c.anchorDescription || 'Photorealistic consistent subject with sharp facial features',
+        clothingAnchor: c.clothingAnchor || 'Cinematic costume matching the setting',
+        defaultSeed: typeof c.defaultSeed === 'number' ? c.defaultSeed : (Math.floor(Math.random() * 900000) + 100000)
+      }));
+    }
+  } catch (err) {
+    console.warn('[detectCharactersWithAI] Fallback local para personajes:', err);
+  }
+
+  const sampleSeed = Math.floor(Math.random() * 900000) + 100000;
+  return [
+    {
+      name: 'Protagonista',
+      role: 'PROTAGONIST',
+      alive: true,
+      exitScene: null,
+      anchorDescription: 'Photorealistic heroic central character with defined facial structure and cinematic gaze',
+      clothingAnchor: 'Distinctive wardrobe styled for the narrative setting',
+      defaultSeed: sampleSeed
+    }
+  ];
+}

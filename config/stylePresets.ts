@@ -93,33 +93,100 @@ export const AVAILABLE_IMAGE_MODELS: AIModelOption[] = [
 ];
 
 export const AVAILABLE_SCRIPT_MODELS = [
-  {
-    id: 'groq-llama-70b',
-    name: 'Groq Llama 3.3 70B Versatile',
-    provider: 'Groq',
-    badge: '⚡ Ultra Veloz (~1000 tok/s)',
-    description: 'El modelo más veloz para segmentación de guiones cinematográficos y auto-pacing sin esperas.'
-  },
-  {
-    id: 'nvidia-deepseek-r1-32b',
-    name: 'DeepSeek R1 Qwen 32B Uncensored',
-    provider: 'NVIDIA NIM',
-    badge: '🔓 Razonamiento Sin Censura',
-    description: 'Cadena de pensamiento profunda sin filtros morales restrictivos. Ideal para historias oscuras y acción.'
-  },
+  // 1. Modelos NVIDIA NIM
   {
     id: 'nvidia-llama-70b',
     name: 'NVIDIA Llama 3.3 70B Instruct',
     provider: 'NVIDIA NIM',
-    badge: '🎬 Director de Cine',
-    description: 'Gran capacidad de comprensión de metáforas, encuadre visual y continuidad narrativa.'
+    endpointModel: 'meta/llama-3.3-70b-instruct',
+    badge: '👑 Recomendado / Cine 8K',
+    speed: '~1.5s',
+    description: 'Máxima comprensión de metáforas, cinematografía, encuadres fotográficos y continuidad de guion.'
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Google Gemini 2.5 Flash',
-    provider: 'Google GenAI',
-    badge: 'Multimodal / Clásico',
-    description: 'Modelo clásico de Gemini para estructuración de guiones.'
+    id: 'nvidia-deepseek-r1',
+    name: 'NVIDIA DeepSeek R1',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'deepseek-ai/deepseek-r1',
+    badge: '🧠 Razonamiento Profundo',
+    speed: '~2.8s',
+    description: 'Cadena de pensamiento exhaustiva para desgloses narrativos complejos y giros de guión.'
+  },
+  {
+    id: 'nvidia-mistral-nemo',
+    name: 'NVIDIA Mistral NeMo 12B',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'mistralai/mistral-nemo-12b-instruct',
+    badge: '⚡ Rápido y Conciso',
+    speed: '~0.9s',
+    description: 'Modelo ágil optimizado para generar prompts directos y efectivos sin saturación de texto.'
+  },
+  {
+    id: 'nvidia-qwen-72b',
+    name: 'NVIDIA Qwen 2.5 72B Instruct',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'qwen/qwen2.5-72b-instruct',
+    badge: '🌏 Detalle Cultural & Épocas',
+    speed: '~1.6s',
+    description: 'Especialista en referencias históricas, culturales, vestimenta de época y personajes.'
+  },
+  {
+    id: 'nvidia-nemotron-70b',
+    name: 'NVIDIA Llama 3.1 Nemotron 70B',
+    provider: 'NVIDIA NIM',
+    endpointModel: 'nvidia/llama-3.1-nemotron-70b-instruct',
+    badge: '🔬 Alta Precisión',
+    speed: '~2.0s',
+    description: 'Afinado por NVIDIA para máxima coherencia en instrucciones complejas multi-escena.'
+  },
+
+  // 2. Modelos Google Gemini
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Google Gemini 2.0 Flash',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-2.0-flash',
+    badge: '🚀 Nueva Generación 2.0',
+    speed: '~0.8s',
+    description: 'La arquitectura más reciente de Google: ultra veloz, multimodal y con cuota gratuita muy generosa.'
+  },
+  {
+    id: 'gemini-1.5-pro',
+    name: 'Google Gemini 1.5 Pro',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-1.5-pro',
+    badge: '📚 Contexto Masivo (2M)',
+    speed: '~2.2s',
+    description: 'Capaz de analizar guiones de horas enteras o libros completos sin perder el más mínimo detalle narrativo.'
+  },
+  {
+    id: 'gemini-1.5-flash',
+    name: 'Google Gemini 1.5 Flash',
+    provider: 'Google Gemini',
+    endpointModel: 'gemini-1.5-flash',
+    badge: '⚡ Balanceado',
+    speed: '~1.0s',
+    description: 'Excelente compromiso entre velocidad de respuesta y calidad de desglose cinematográfico.'
+  },
+
+  // 3. Modelos Groq
+  {
+    id: 'groq-llama-70b',
+    name: 'Groq Llama 3.3 70B Versatile',
+    provider: 'Groq',
+    endpointModel: 'llama-3.3-70b-versatile',
+    badge: '⚡ Ultra Veloz (~1000 tok/s)',
+    speed: '~0.5s',
+    description: 'Inferencia ultra veloz en silicio LPU para segmentaciones casi instantáneas.'
+  },
+  {
+    id: 'groq-mixtral-8x7b',
+    name: 'Groq Mixtral 8x7B 32K',
+    provider: 'Groq',
+    endpointModel: 'mixtral-8x7b-32768',
+    badge: '🔀 Mezcla de Expertos',
+    speed: '~0.7s',
+    description: 'Arquitectura MoE veloz para descomponer párrafos y generar prompts directos.'
   }
 ];
 

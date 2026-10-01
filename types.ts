@@ -204,3 +204,34 @@ export interface ScriptDirectorAnalysis {
   characters: ScriptDirectorCharacter[];
   scenes: ScriptSceneResult[];
 }
+
+export type DirectionNarrativeMode = 
+  | 'documental_secuencial' 
+  | 'motivacional_conceptual' 
+  | 'storytelling_cinematico' 
+  | 'educativo_viral';
+
+export interface CulturalTemporalContext {
+  epoch: string;
+  culture: string;
+  environment: string;
+  autoDetected?: boolean;
+}
+
+export type CharacterConsistencyMode = 
+  | 'deteccion_rapida' 
+  | 'referencia_imagen' 
+  | 'nombre_en_prompt' 
+  | 'detectar_muertes_salidas';
+
+export type LLMProvider = 'nvidia' | 'gemini' | 'groq';
+
+export interface LLMModelOption {
+  id: string;
+  name: string;
+  provider: LLMProvider;
+  contextWindow: string;
+  description: string;
+  recommendedFor: string;
+  speed: 'Ultra-rápido' | 'Equilibrado' | 'Profundo';
+}
