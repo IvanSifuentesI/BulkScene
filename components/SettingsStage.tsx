@@ -38,6 +38,7 @@ import {
   formatErrorForClipboard, 
   TelemetryErrorReport 
 } from '../services/errorTelemetryService';
+import { copyAllErrorsForAntigravityAndPurge } from '../services/adminReportingService';
 
 interface SettingsStageProps {
   nvidiaKeys: string[];
@@ -220,16 +221,15 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
 
   // Telemetry Actions
   const handleCopyAllErrors = () => {
-    if (errorReports.length === 0) {
+    const res = copyAllErrorsForAntigravityAndPurge();
+    if (res.count === 0) {
       triggerSaveNotification('No hay errores registrados.');
       return;
     }
-    const fullLog = `=== TELEMETRÍA GLOBAL BULKSCENE STUDIO (${errorReports.length} reportes) ===\n\n` +
-      errorReports.map((r, i) => `[REPORTE #${i + 1} - ${r.id}]\n${formatErrorForClipboard(r)}`).join('\n\n' + '='.repeat(60) + '\n\n');
-    navigator.clipboard.writeText(fullLog);
+    setErrorReports([]);
     setCopiedBatchToast(true);
     setTimeout(() => setCopiedBatchToast(false), 3000);
-    triggerSaveNotification('Historial de errores copiado al portapapeles.');
+    triggerSaveNotification(`¡${res.count} errores copiados para Antigravity y registro purgado!`);
   };
 
   const handleClearErrors = () => {
@@ -798,7 +798,7 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
                   title="Copiar todos los errores con diagnóstico completo para pegarlos en el chat de Antigravity"
                 >
                   <Copy className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{copiedBatchToast ? '¡Copiado!' : 'Copiar Todo para Antigravity'}</span>
+                  <span>{copiedBatchToast ? '¡Copiado y purgado!' : 'Copiar Todo para Antigravity y Limpiar'}</span>
                 </button>
 
                 <button

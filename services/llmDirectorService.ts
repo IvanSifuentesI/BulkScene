@@ -32,6 +32,26 @@ export interface DirectorAnalysisResponse {
   scenes: ScriptSceneResult[];
 }
 
+// Limpiador robusto para extraer keys de strings simples, arrays o JSON strings de localStorage
+export function extractCleanKey(keyOrArray?: string | string[]): string {
+  if (Array.isArray(keyOrArray) && keyOrArray.length > 0) {
+    return String(keyOrArray[0] || '').trim();
+  }
+  if (typeof keyOrArray === 'string') {
+    const trimmed = keyOrArray.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return String(parsed[0] || '').trim();
+        }
+      } catch {}
+    }
+    return trimmed;
+  }
+  return '';
+}
+
 // Limpiador robusto para DeepSeek R1 y markdown
 function extractCleanJson(raw: string): any {
   // Eliminar bloques <think>...</think> de DeepSeek R1
@@ -170,7 +190,7 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
 
   // 1. Si es modelo de Google Gemini
   const isGemini = model.startsWith('gemini-');
-  const cleanGeminiKey = (geminiKey || localStorage.getItem('bulk_gemini_api_key') || '').trim();
+  const cleanGeminiKey = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
 
   if (isGemini && cleanGeminiKey) {
     try {
@@ -222,8 +242,8 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
     'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
   };
 
-  const cleanNvidiaKey = (nvidiaNimKey || localStorage.getItem('bulk_nvidia_api_keys') || DEFAULT_NVIDIA_NIM_API_KEY).trim();
-  const cleanGroqKey = (groqKey || localStorage.getItem('bulk_groq_api_keys') || DEFAULT_GROQ_API_KEY).trim();
+  const cleanNvidiaKey = extractCleanKey(nvidiaNimKey) || extractCleanKey(localStorage.getItem('bulk_nvidia_api_keys') || '') || DEFAULT_NVIDIA_NIM_API_KEY;
+  const cleanGroqKey = extractCleanKey(groqKey) || extractCleanKey(localStorage.getItem('bulk_groq_api_keys') || '') || DEFAULT_GROQ_API_KEY;
 
   const isNvidiaModel = model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-');
 
@@ -471,7 +491,7 @@ export async function callLLMWithFallbacks(params: {
   } = params;
 
   // 1. Google Gemini Support
-  const cleanGemini = (geminiKey || localStorage.getItem('bulk_gemini_api_key') || '').trim();
+  const cleanGemini = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
   if (model.startsWith('gemini-') && cleanGemini) {
     try {
       const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanGemini}`;
@@ -512,8 +532,8 @@ export async function callLLMWithFallbacks(params: {
     'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
   };
 
-  const cleanNvidiaKey = (nvidiaNimKey || localStorage.getItem('bulk_nvidia_api_keys') || DEFAULT_NVIDIA_NIM_API_KEY).trim();
-  const cleanGroqKey = (groqKey || localStorage.getItem('bulk_groq_api_keys') || DEFAULT_GROQ_API_KEY).trim();
+  const cleanNvidiaKey = extractCleanKey(nvidiaNimKey) || extractCleanKey(localStorage.getItem('bulk_nvidia_api_keys') || '') || DEFAULT_NVIDIA_NIM_API_KEY;
+  const cleanGroqKey = extractCleanKey(groqKey) || extractCleanKey(localStorage.getItem('bulk_groq_api_keys') || '') || DEFAULT_GROQ_API_KEY;
 
   let endpoint = '';
   let authHeader = '';
@@ -578,6 +598,53 @@ export async function callLLMWithFallbacks(params: {
     } catch (err: any) {
       lastError = err;
       console.warn(`Fallo al contactar ${ep}:`, err.message);
+    }
+  }
+
+  // 3. Fallback a Google Gemini si el modelo principal falló
+  if (cleanGemini && !model.startsWith('gemini-')) {
+    try {
+      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cleanGemini}`;
+      const res = await fetch(geminiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.5, maxOutputTokens: 4096 }
+        }),
+        signal
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+      }
+    } catch (gErr) {
+      console.warn('[callLLMWithFallbacks] Fallback Gemini falló:', gErr);
+    }
+  }
+
+  // 4. Fallback a Groq si aún hay error
+  if (cleanGroqKey && !model.startsWith('groq-')) {
+    try {
+      const gRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${cleanGroqKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+          temperature: 0.5,
+          max_tokens: 4096
+        }),
+        signal
+      });
+      if (gRes.ok) {
+        const data = await gRes.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) return text;
+      }
+    } catch (gqErr) {
+      console.warn('[callLLMWithFallbacks] Fallback Groq falló:', gqErr);
     }
   }
 

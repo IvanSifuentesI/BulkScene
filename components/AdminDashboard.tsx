@@ -30,6 +30,7 @@ import {
   deleteUserReport, 
   clearAllUserReports, 
   submitUserErrorReport,
+  copyAllErrorsForAntigravityAndPurge,
   AdminTelegramConfig,
   UserErrorReport
 } from '../services/adminReportingService';
@@ -133,6 +134,16 @@ export const AdminDashboard: React.FC = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const handleCopyAllForAntigravity = () => {
+    const res = copyAllErrorsForAntigravityAndPurge();
+    if (res.count === 0) {
+      alert('No hay errores registrados en este momento para copiar.');
+      return;
+    }
+    loadData();
+    alert(`📋 ¡Se han copiado ${res.count} errores al portapapeles listos para pegar en Antigravity y se han borrado todos los reportes de la memoria!`);
+  };
+
   const pendingCount = userReports.filter(r => r.status === 'pending').length;
   const filteredReports = userReports.filter(r => {
     if (filterStatus === 'pending') return r.status === 'pending';
@@ -212,6 +223,15 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleCopyAllForAntigravity}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-black font-extrabold text-xs shadow-md shadow-cyan-500/20 transition-all active:scale-95"
+            title="Copia todos los errores para pegarlos a Antigravity y vacía la bandeja automáticamente"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copiar para Antigravity y Limpiar</span>
+          </button>
+
           <button
             onClick={handleSimulateReport}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 text-xs font-semibold transition-colors"
@@ -317,6 +337,15 @@ export const AdminDashboard: React.FC = () => {
                     Resueltos ({userReports.length - pendingCount})
                   </button>
                 </div>
+
+                <button
+                  onClick={handleCopyAllForAntigravity}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition-all shadow-sm active:scale-95"
+                  title="Copiar todos los reportes para Antigravity y vaciar la lista"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Copiar para Antigravity y Limpiar</span>
+                </button>
 
                 <button
                   onClick={loadData}

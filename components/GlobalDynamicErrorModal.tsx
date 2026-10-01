@@ -85,7 +85,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
   };
 
   const handleCopyTechDetails = () => {
-    const text = `TICKET ERROR BULKSCENE:\nEtapa: ${errorData.stage}\nError: ${errorData.errorMessage}\nNota: ${userNote}\nDetalles: ${JSON.stringify(errorData.technicalDetails || {})}`;
+    const text = `TICKET: ${submittedTicket || 'ERR-' + Date.now().toString(36).toUpperCase()}\nUsuario: ${userEmail || 'alumno@bulkscene.ai'}\nEtapa: ${errorData.stage}\nMensaje: ${userNote}\nError: ${errorData.errorMessage}\nFecha: ${new Date().toISOString()}`;
     navigator.clipboard.writeText(text);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);

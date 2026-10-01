@@ -264,6 +264,55 @@ export function clearAllUserReports(): void {
   } catch {}
 }
 
+/**
+ * Copia TODOS los reportes (de usuarios y de telemetría automática) en el formato
+ * exacto listo para pegar en Antigravity y PURGA/BORRA todos los errores almacenados.
+ */
+export function copyAllErrorsForAntigravityAndPurge(): { count: number; text: string } {
+  const userReports = getUserErrorReports();
+  
+  let telemetryReports: any[] = [];
+  try {
+    const raw = localStorage.getItem('bulkscene_telemetry_errors_log');
+    if (raw) telemetryReports = JSON.parse(raw);
+  } catch {}
+
+  const totalReports = userReports.length + telemetryReports.length;
+  if (totalReports === 0) {
+    return { count: 0, text: '' };
+  }
+
+  const chunks: string[] = [];
+
+  // 1. Reportes de usuario
+  userReports.forEach((r) => {
+    chunks.push(
+      `TICKET: ${r.id}\nUsuario: ${r.userEmail}\nEtapa: ${r.stage}\nMensaje: ${r.userComment}\nError: ${r.errorMessage || 'N/A'}\nFecha: ${r.timestamp}`
+    );
+  });
+
+  // 2. Errores de telemetría
+  telemetryReports.forEach((t) => {
+    chunks.push(
+      `TICKET: ${t.id}\nUsuario: ${t.userEmail || 'N/A'}\nEtapa: ${t.stage}\nError: ${t.errorCode || ''}: ${t.errorMessage || ''}\nCausa: ${t.possibleCause || 'N/A'}\nFecha: ${t.timestamp}`
+    );
+  });
+
+  const fullText = chunks.join('\n\n');
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    navigator.clipboard.writeText(fullText);
+  }
+
+  // Purga obligatoria de todos los errores tras copiar para Antigravity
+  clearAllUserReports();
+  try {
+    localStorage.removeItem('bulkscene_telemetry_errors_log');
+  } catch {}
+
+  return { count: totalReports, text: fullText };
+}
+
 export interface GlobalErrorModalEventDetail {
   title?: string;
   stage: string;
