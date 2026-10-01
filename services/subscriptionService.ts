@@ -20,6 +20,126 @@ const STORAGE_EXPIRATION_DATE_KEY = 'bulkscene_expiration_date';
 
 export const SKOOL_CHECKOUT_URL = 'https://www.skool.com/ia-automatiza-7412';
 
+export interface MarketingLeadRecord {
+  email: string;
+  tipo_lead: 'nuevo_prospecto' | 'suscripcion_expirada' | 'cuenta_inactiva';
+  estado_suscripcion: 'sin_suscripcion' | 'expirado' | 'inactivo';
+  fecha_expiracion_anterior?: string | null;
+  origen?: string;
+  intentos_acceso?: number;
+  ultimo_intento?: string;
+  creado_en?: string;
+}
+
+/**
+ * Registra o actualiza un lead en la tabla 'leads_marketing' de Supabase.
+ * Guarda a todos los usuarios que no cuentan con suscripción activa (nuevos o expirados)
+ * para realizar campañas de email marketing.
+ */
+export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise<void> {
+  const emailLower = lead.email.toLowerCase().trim();
+  if (!emailLower || emailLower === 'admin@bulkscene.ai') return;
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Guardar en respaldo local para el panel admin
+  try {
+    const raw = localStorage.getItem('bulkscene_local_leads_backup');
+    const backupList: MarketingLeadRecord[] = raw ? JSON.parse(raw) : [];
+    const existingIdx = backupList.findIndex(b => b.email.toLowerCase() === emailLower);
+    
+    if (existingIdx >= 0) {
+      backupList[existingIdx] = {
+        ...backupList[existingIdx],
+        tipo_lead: lead.tipo_lead,
+        estado_suscripcion: lead.estado_suscripcion,
+        fecha_expiracion_anterior: lead.fecha_expiracion_anterior || backupList[existingIdx].fecha_expiracion_anterior,
+        intentos_acceso: (backupList[existingIdx].intentos_acceso || 1) + 1,
+        ultimo_intento: nowIso,
+        origen: lead.origen || backupList[existingIdx].origen || 'bulkscene_login'
+      };
+    } else {
+      backupList.unshift({
+        email: emailLower,
+        tipo_lead: lead.tipo_lead,
+        estado_suscripcion: lead.estado_suscripcion,
+        fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
+        intentos_acceso: 1,
+        ultimo_intento: nowIso,
+        creado_en: nowIso,
+        origen: lead.origen || 'bulkscene_login'
+      });
+    }
+    localStorage.setItem('bulkscene_local_leads_backup', JSON.stringify(backupList.slice(0, 500)));
+  } catch (localErr) {
+    console.warn('[LEADS BACKUP] Error guardando respaldo local:', localErr);
+  }
+
+  // 2. Insertar o actualizar directamente en Supabase (tabla leads_marketing)
+  try {
+    const { data: existing, error: searchError } = await supabase
+      .from('leads_marketing')
+      .select('id, intentos_acceso')
+      .eq('email', emailLower)
+      .maybeSingle();
+
+    if (existing) {
+      const nextCount = (existing.intentos_acceso || 1) + 1;
+      await supabase
+        .from('leads_marketing')
+        .update({
+          tipo_lead: lead.tipo_lead,
+          estado_suscripcion: lead.estado_suscripcion,
+          fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
+          intentos_acceso: nextCount,
+          ultimo_intento: nowIso,
+          origen: lead.origen || 'bulkscene_login'
+        })
+        .eq('email', emailLower);
+    } else {
+      await supabase
+        .from('leads_marketing')
+        .insert({
+          email: emailLower,
+          tipo_lead: lead.tipo_lead,
+          estado_suscripcion: lead.estado_suscripcion,
+          fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
+          intentos_acceso: 1,
+          ultimo_intento: nowIso,
+          creado_en: nowIso,
+          origen: lead.origen || 'bulkscene_login'
+        });
+    }
+  } catch (err: any) {
+    // Si la tabla aún no se ha creado en Supabase con el script SQL, queda en el respaldo local
+    console.warn('[LEADS MARKETING] Nota: pendiente ejecutar script SQL en Supabase para tabla leads_marketing:', err?.message || err);
+  }
+}
+
+/**
+ * Consulta la lista de leads de marketing desde Supabase o desde el almacenamiento local
+ */
+export async function fetchMarketingLeads(): Promise<MarketingLeadRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('leads_marketing')
+      .select('*')
+      .order('ultimo_intento', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (e) {}
+
+  // Fallback al almacenamiento local
+  try {
+    const raw = localStorage.getItem('bulkscene_local_leads_backup');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Comprueba de manera síncrona si el usuario actual cuenta con suscripción activa.
  * Devuelve true si el correo es la cuenta administrativa o si la bandera de sesión es 'true'.
@@ -115,19 +235,15 @@ export async function validateUserSubscription(email: string): Promise<Subscript
       console.warn('[SUBSCRIPTION SERVICE] Aviso de consulta Supabase:', queryError.message);
     }
 
-    // Caso 1: El correo NO existe en Supabase
+    // Caso 1: El correo NO existe en Supabase -> Registrar en tabla leads_marketing
     if (!userData) {
-      // Registrar automáticamente en Supabase para tener constancia del intento de acceso / lead
-      try {
-        await supabase.from('usuarios_autorizados').insert({
-          email: emailLower,
-          activo: false,
-          fecha_expiracion: new Date().toISOString()
-        });
-      } catch (insertErr) {
-        // Silencioso ante políticas RLS restrictivas
-        console.warn('[SUBSCRIPTION SERVICE] Registro automático de lead:', insertErr);
-      }
+      await registrarLeadMarketing({
+        email: emailLower,
+        tipo_lead: 'nuevo_prospecto',
+        estado_suscripcion: 'sin_suscripcion',
+        fecha_expiracion_anterior: null,
+        origen: 'login_prospecto_nuevo'
+      });
 
       localStorage.setItem(STORAGE_SUBSCRIPTION_ACTIVE_KEY, 'false');
       localStorage.removeItem(STORAGE_EXPIRATION_DATE_KEY);
@@ -158,7 +274,7 @@ export async function validateUserSubscription(email: string): Promise<Subscript
       };
     }
 
-    // Caso 3: Inactivo o expirado
+    // Caso 3: Inactivo o expirado -> Registrar en tabla leads_marketing para reactivación
     localStorage.setItem(STORAGE_SUBSCRIPTION_ACTIVE_KEY, 'false');
     if (expDateStr) {
       localStorage.setItem(STORAGE_EXPIRATION_DATE_KEY, expDateStr);
@@ -167,6 +283,14 @@ export async function validateUserSubscription(email: string): Promise<Subscript
     }
 
     if (!isActivo) {
+      await registrarLeadMarketing({
+        email: emailLower,
+        tipo_lead: 'cuenta_inactiva',
+        estado_suscripcion: 'inactivo',
+        fecha_expiracion_anterior: expDateStr,
+        origen: 'login_cuenta_inactiva'
+      });
+
       return {
         isSubscribed: false,
         reason: 'inactive',
@@ -174,6 +298,15 @@ export async function validateUserSubscription(email: string): Promise<Subscript
         expirationDate: expDateStr
       };
     }
+
+    // Expirado (fue alumno anterior pero ya no está al día)
+    await registrarLeadMarketing({
+      email: emailLower,
+      tipo_lead: 'suscripcion_expirada',
+      estado_suscripcion: 'expirado',
+      fecha_expiracion_anterior: expDateStr,
+      origen: 'login_alumno_vencido'
+    });
 
     return {
       isSubscribed: false,
