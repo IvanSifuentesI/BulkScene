@@ -32,7 +32,8 @@ import {
   Volume2,
   Scissors,
   X,
-  CheckCheck
+  CheckCheck,
+  Globe
 } from 'lucide-react';
 import { 
   CharacterPersona, 
@@ -82,6 +83,7 @@ interface MasterStudioStageProps {
   styles: StylePreset[];
   activeStyleId?: string;
   onSelectStyle: (id?: string) => void;
+  onAddStyle?: (style: StylePreset) => void;
 
   // Project configuration
   projectName?: string;
@@ -109,6 +111,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   styles,
   activeStyleId,
   onSelectStyle,
+  onAddStyle,
   projectName = 'BulkScene_Proyecto_01',
   setProjectName,
   onProceedToScenes,
@@ -121,9 +124,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const wordCount = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
   const estimatedSeconds = Math.round((wordCount / 140) * 60);
 
-  // 2. LLM Director Engine Selection
+  // 2. LLM Director Engine Selection (Predeterminado: Gemini 2.0 Flash)
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem('bulkscene_selected_director_model') || 'nvidia-llama-70b';
+    return localStorage.getItem('bulkscene_selected_director_model') || 'gemini-2.0-flash';
   });
 
   // 3. Audio & Whisper State
@@ -228,18 +231,24 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     culture: '',
     environment: ''
   });
+  const [culturalContextInput, setCulturalContextInput] = useState<string>('');
   const [isExtractingContext, setIsExtractingContext] = useState<boolean>(false);
 
   // 8. Visual Style & Auto-AI
   const activeStyle = styles.find((s) => s.id === activeStyleId) || styles[0];
+  const [customStyleInstructions, setCustomStyleInstructions] = useState<string>(
+    () => activeStyle?.promptModifier || ''
+  );
   const [isDetectingStyle, setIsDetectingStyle] = useState<boolean>(false);
   const [detectedStyleReason, setDetectedStyleReason] = useState<string | null>(null);
+  const [styleSavedToast, setStyleSavedToast] = useState<boolean>(false);
 
   // 9. Character Vault & Biometric Consistency
   const activeChar = characters.find((c) => c.id === activeCharacterId);
   const [consistencyMode, setConsistencyMode] = useState<CharacterConsistencyMode>('nombre_en_prompt');
   const [detectedCharacters, setDetectedCharacters] = useState<ScriptDirectorCharacter[]>([]);
   const [isDetectingChars, setIsDetectingChars] = useState<boolean>(false);
+  const [charSavedToast, setCharSavedToast] = useState<boolean>(false);
 
   // 10. Optional Content Direction & Framing
   const [cameraPreference, setCameraPreference] = useState<string>('variado_dinamico');
@@ -415,12 +424,40 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         groqKey: groqKeys[0] || ''
       });
       onSelectStyle(result.recommendedStyleId);
+      const matched = styles.find(s => s.id === result.recommendedStyleId);
+      if (matched) {
+        setCustomStyleInstructions(matched.promptModifier || matched.description);
+      }
       setDetectedStyleReason(result.reason);
     } catch (err) {
       console.warn('Fallo en detección de estilo:', err);
     } finally {
       setIsDetectingStyle(false);
     }
+  };
+
+  // Guardar Estilo Creado en el Banco de Estilos Permanente
+  const handleSaveStyleToVault = () => {
+    const styleModifier = customStyleInstructions.trim() || activeStyle?.promptModifier || 'cinematic 35mm film photography, 8k';
+    const newStyle: StylePreset = {
+      id: `style-custom-${Date.now()}`,
+      name: activeStyle?.id && activeStyle.id !== 'custom' ? `${activeStyle.name} (Modificado)` : 'Estilo Personalizado Director',
+      category: 'Personalizado',
+      promptModifier: styleModifier,
+      badgeColor: '#f59e0b',
+      description: styleModifier.slice(0, 110) + '...'
+    };
+    if (onAddStyle) {
+      onAddStyle(newStyle);
+    } else {
+      try {
+        const existing = JSON.parse(localStorage.getItem('bulk_styles_matrix') || '[]');
+        localStorage.setItem('bulk_styles_matrix', JSON.stringify([newStyle, ...existing]));
+      } catch {}
+    }
+    onSelectStyle(newStyle.id);
+    setStyleSavedToast(true);
+    setTimeout(() => setStyleSavedToast(false), 3000);
   };
 
   // AI Auto-Extract Cultural & Temporal Context
@@ -439,6 +476,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         groqKey: groqKeys[0] || ''
       });
       setCulturalContext(extracted);
+      const textSummary = [extracted.epoch, extracted.culture, extracted.environment].filter(Boolean).join(' • ');
+      setCulturalContextInput(textSummary || extracted.epoch || '');
     } catch (err) {
       console.warn('Fallo en extracción de contexto:', err);
     } finally {
@@ -463,7 +502,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       });
       setDetectedCharacters(detected);
 
-      // Si se detectó un protagonista y onAddCharacter existe, agregar automáticamente
+      // Si se detectó un protagonista y onAddCharacter existe, asociarlo
       if (detected.length > 0 && onAddCharacter) {
         const proto = detected[0];
         const newPersona: CharacterPersona = {
@@ -484,6 +523,33 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
   };
 
+  // Guardar Personaje en el Banco Permanente
+  const handleSaveCharacterToVault = (charToSave?: CharacterPersona | ScriptDirectorCharacter) => {
+    const target = charToSave || activeChar || (detectedCharacters.length > 0 ? detectedCharacters[0] : null);
+    if (!target) return;
+
+    const newPersona: CharacterPersona = {
+      id: (target as any).id || `char-saved-${Date.now()}`,
+      name: target.name || 'Protagonista Guardado',
+      anchorDescription: target.anchorDescription || 'Consistent character with distinct facial features',
+      clothingAnchor: target.clothingAnchor || 'Distinctive costume matching setting',
+      defaultSeed: target.defaultSeed || Math.floor(Math.random() * 900000) + 100000,
+      createdAt: new Date().toISOString()
+    };
+
+    if (onAddCharacter) {
+      onAddCharacter(newPersona);
+    } else {
+      try {
+        const existing = JSON.parse(localStorage.getItem('bulk_characters_vault') || '[]');
+        localStorage.setItem('bulk_characters_vault', JSON.stringify([newPersona, ...existing]));
+      } catch {}
+    }
+    onSelectCharacter(newPersona.id);
+    setCharSavedToast(true);
+    setTimeout(() => setCharSavedToast(false), 3000);
+  };
+
   // Core Pipeline Execution
   const executeGeneration = async (mode: 'full_auto' | 'prompts_only') => {
     if (!scriptText.trim()) {
@@ -492,15 +558,27 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
 
     setIsProcessingPipeline(true);
-    setPipelineProgressText(mode === 'full_auto' ? 'Iniciando Pipeline Automático Total...' : 'Generando Prompts de Escenas...');
+    setPipelineProgressText(mode === 'full_auto' ? 'Iniciando Pipeline Automático Total...' : 'Generando Prompts de Escenas con IA...');
 
     try {
-      // 1. Si es modo total y hay audio sin transcribir, intentar extraer beats fonéticos
+      // 1. Si es modo total y hay audio sin transcribir, intentar extraer beats fonéticos con Whisper
       if (mode === 'full_auto' && audioBlob && !transcription) {
         setPipelineProgressText('Extrayendo beats fonéticos palabra por palabra con Whisper...');
         try {
           const activeGroqKey = groqKeys[0] || localStorage.getItem('bulk_groq_api_keys') || '';
-          const res = await transcribeAudioWithGroq(audioBlob, activeGroqKey);
+          const activeNvidiaKey = nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '';
+          const activeAssemblyKey = localStorage.getItem('bulk_assembly_api_key') || '';
+          const activeDeepgramKey = localStorage.getItem('bulk_deepgram_api_key') || '';
+
+          const res = await transcribeAudioUniversal({
+            file: audioBlob,
+            modelId: selectedSTTModel,
+            groqKey: activeGroqKey,
+            nvidiaKey: activeNvidiaKey,
+            assemblyKey: activeAssemblyKey,
+            deepgramKey: activeDeepgramKey,
+            onProgress: (status) => setPipelineProgressText(status)
+          });
           setTranscription(res);
           if (res.duration) setAudioDuration(res.duration);
         } catch (whisperErr) {
@@ -508,10 +586,10 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         }
       }
 
-      // 2. Si no se ha configurado contexto temporal y es modo full_auto, auto-extraer si está vacío
+      // 2. Si no se ha configurado contexto temporal y es modo full_auto, auto-extraer con IA real
       let activeContext = { ...culturalContext };
-      if (mode === 'full_auto' && !activeContext.epoch && !activeContext.culture) {
-        setPipelineProgressText('Analizando marco temporal y cultural del guion...');
+      if (mode === 'full_auto' && !activeContext.epoch && !culturalContextInput.trim()) {
+        setPipelineProgressText('Analizando marco temporal y cultural del guion con IA...');
         try {
           activeContext = await extractCulturalContextWithAI({
             scriptText,
@@ -521,19 +599,57 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             groqKey: groqKeys[0] || ''
           });
           setCulturalContext(activeContext);
+          const textSummary = [activeContext.epoch, activeContext.culture, activeContext.environment].filter(Boolean).join(' • ');
+          setCulturalContextInput(textSummary || activeContext.epoch || '');
         } catch (cErr) {
           console.warn('Aviso Contexto:', cErr);
         }
       }
 
-      // 3. Preparar directiva de personaje y encuadre
-      const charDirective = activeChar
-        ? `${activeChar.name}: ${activeChar.anchorDescription}, ${activeChar.clothingAnchor}`
-        : '';
+      // 3. Si no hay personajes y es modo full_auto, auto-detectar con IA real
+      let activeProtagonist = activeChar;
+      if (mode === 'full_auto' && !activeProtagonist && detectedCharacters.length === 0) {
+        setPipelineProgressText('Detectando personajes e identidades biométricas con IA...');
+        try {
+          const detected = await detectCharactersWithAI({
+            scriptText,
+            model: selectedModel,
+            geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
+            nvidiaNimKey: nvidiaNimKeys[0] || localStorage.getItem('bulk_nvidia_api_keys') || '',
+            groqKey: groqKeys[0] || ''
+          });
+          setDetectedCharacters(detected);
+          if (detected.length > 0 && onAddCharacter) {
+            const proto = detected[0];
+            const newPersona: CharacterPersona = {
+              id: `char-auto-${Date.now()}`,
+              name: proto.name,
+              anchorDescription: proto.anchorDescription,
+              clothingAnchor: proto.clothingAnchor,
+              defaultSeed: proto.defaultSeed,
+              createdAt: new Date().toISOString()
+            };
+            onAddCharacter(newPersona);
+            onSelectCharacter(newPersona.id);
+            activeProtagonist = newPersona;
+          }
+        } catch (charErr) {
+          console.warn('Aviso Personajes:', charErr);
+        }
+      }
 
-      setPipelineProgressText('Segmentando guion y construyendo prompts visuales cinematográficos...');
+      // 4. Preparar directiva de personaje y encuadre
+      const charDirective = activeProtagonist
+        ? `${activeProtagonist.name}: ${activeProtagonist.anchorDescription}, ${activeProtagonist.clothingAnchor}`
+        : (detectedCharacters.length > 0
+          ? `${detectedCharacters[0].name}: ${detectedCharacters[0].anchorDescription}, ${detectedCharacters[0].clothingAnchor}`
+          : '');
 
-      // 4. Invocar LLM Director
+      const styleModifierToUse = customStyleInstructions.trim() || activeStyle?.promptModifier || '';
+
+      setPipelineProgressText('Segmentando guion y construyendo prompts visuales cinematográficos con IA...');
+
+      // 5. Invocar LLM Director con procesamiento por lotes para guiones extensos
       const analysis = await analyzeScriptWithLLM({
         scriptText,
         model: selectedModel,
@@ -541,12 +657,14 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         nvidiaNimKey: nvidiaNimKeys[0] || '',
         geminiKey: geminiKey || localStorage.getItem('bulk_gemini_api_key') || '',
         targetStyleName: activeStyle?.name || 'Cinematográfico 35mm Hiperrealista',
-        targetStyleModifier: activeStyle?.promptModifier || '',
+        targetStyleModifier: styleModifierToUse,
         characterAnchor: charDirective,
         narrativeMode,
         culturalContext: activeContext,
         characterConsistencyMode: consistencyMode,
-        pacingWords
+        pacingWords,
+        precalculatedScenes: calculatedScenes.map(cs => ({ sceneNumber: cs.sceneNumber, text: cs.text, duration: cs.duration })),
+        onProgress: (text) => setPipelineProgressText(text)
       });
 
       if (!analysis || !analysis.scenes || analysis.scenes.length === 0) {
@@ -1005,46 +1123,49 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         </div>
       </div>
 
-      {/* 2.5 GRAN MOCKUP / INSPECTOR DE BEATS FONÉTICOS Y RANGOS MULTI-RITMO */}
+      {/* 2.5 GRAN MOCKUP / INSPECTOR DE BEATS FONÉTICOS Y RANGOS MULTI-RITMO (MODAL EMERGENTE) */}
       {isBeatsInspectorOpen && (
-        <div className="bg-[#0b0e17] border-2 border-cyan-500/40 rounded-3xl p-6 shadow-[0_0_50px_rgba(6,182,212,0.15)] space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-          {/* HEADER */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-black flex items-center justify-center font-black shadow-lg shadow-cyan-500/30 shrink-0">
-                <SlidersHorizontal className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-black text-white tracking-wide">
-                    Inspector de Beats Fonéticos & Mockup de Rangos Temporales
-                  </h2>
-                  <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2.5 py-0.5 rounded-full">
-                    Sincronización Milimétrica
-                  </span>
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-hidden animate-in fade-in duration-200">
+          <div className="bg-[#0b0e17] border-2 border-cyan-500/50 rounded-3xl w-full max-w-6xl max-h-[92vh] flex flex-col shadow-[0_0_70px_rgba(6,182,212,0.25)] overflow-hidden">
+            {/* HEADER */}
+            <div className="p-5 border-b border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 bg-[#07090e]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500 text-black flex items-center justify-center font-black shadow-lg shadow-cyan-500/30 shrink-0">
+                  <SlidersHorizontal className="w-5 h-5" />
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Elige los rangos del Gancho y del resto del video. Si cambias los segundos, el total de escenas y los cortes con sentido se recalculan instantáneamente.
-                </p>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-black text-white tracking-wide">
+                      Inspector de Beats Fonéticos & Mockup de Rangos Temporales
+                    </h2>
+                    <span className="text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2.5 py-0.5 rounded-full">
+                      Sincronización Milimétrica
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Elige los rangos del Gancho y del resto del video. Si cambias los segundos, el total de escenas y los cortes con sentido se recalculan instantáneamente.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  🔥 {calculatedScenes.length} Escenas Calculadas
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsBeatsInspectorOpen(false)}
+                  className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title="Cerrar Mockup"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                🔥 {calculatedScenes.length} Escenas Calculadas
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsBeatsInspectorOpen(false)}
-                className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors"
-                title="Cerrar Mockup"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* TOP CONTROLS: RANGOS MULTI-RITMO & MODELO WHISPER */}
+            {/* SCROLLABLE BODY */}
+            <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6 scrollbar-thin scrollbar-thumb-cyan-500/20">
+              {/* TOP CONTROLS: RANGOS MULTI-RITMO & MODELO WHISPER */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* COL 1: FASE 1 - GANCHO INICIAL (4 COLS) */}
             <div className="lg:col-span-4 bg-[#07090e] border border-emerald-500/30 rounded-2xl p-4 space-y-4">
@@ -1478,240 +1599,214 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </div>
           </div>
 
-          {/* FOOTER ACTIONS */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/[0.08]">
-            <div className="text-xs text-slate-400 font-mono">
-              ✓ <strong className="text-white">{calculatedScenes.length} escenas listas</strong> • Gancho ({hookScenesCount} esc. @ {hookDurationSec}s) • Resto (@ {restDurationSec}s)
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsBeatsInspectorOpen(false)}
-                className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 text-xs font-bold transition-all cursor-pointer"
-              >
-                Cerrar Inspector
-              </button>
+            {/* FOOTER ACTIONS */}
+            <div className="p-4 border-t border-white/[0.08] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 bg-[#07090e]">
+              <div className="text-xs text-slate-400 font-mono">
+                ✓ <strong className="text-white">{calculatedScenes.length} escenas listas</strong> • Gancho ({hookScenesCount} esc. @ {hookDurationSec}s) • Resto (@ {restDurationSec}s)
+              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setIsBeatsInspectorOpen(false);
-                }}
-                className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
-              >
-                <CheckCheck className="w-4 h-4" />
-                <span>✓ Aplicar Rangos y Sincronizar Guion</span>
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsBeatsInspectorOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.08] text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cerrar Mockup
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsBeatsInspectorOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  <CheckCheck className="w-4 h-4" />
+                  <span>✓ Aplicar Rangos y Sincronizar Guion</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
 
-      {/* 3. DIRECTION PARAMETERS: NARRATIVE MODE, STYLE & CONTEXT */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* COL 1: MODOS DE DIRECCIÓN NARRATIVA */}
-        <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 flex flex-col justify-between shadow-xl">
-          <div className="flex items-center gap-2 pb-2 border-b border-white/[0.04]">
-            <Clapperboard className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-400">
-              Modo de Dirección Narrativa
-            </h3>
-          </div>
-
-          <div className="space-y-2">
-            {[
-              {
-                id: 'documental_secuencial' as DirectionNarrativeMode,
-                name: 'Documental Secuencial',
-                desc: 'Causa-efecto estricta: la escena 2 nace del final de la escena 1.'
-              },
-              {
-                id: 'motivacional_conceptual' as DirectionNarrativeMode,
-                name: 'Motivacional / Conceptual',
-                desc: 'Metáforas visuales épicas de alto impacto emocional, no necesariamente lineales.'
-              },
-              {
-                id: 'storytelling_cinematico' as DirectionNarrativeMode,
-                name: 'Storytelling Cinemático',
-                desc: 'Estructura en 3 actos con gancho inicial, tensión y clímax dramático.'
-              },
-              {
-                id: 'educativo_viral' as DirectionNarrativeMode,
-                name: 'Educativo / Viral Faceless',
-                desc: 'Cortes rápidos y cambios de escala cada 2s para retención máxima en Shorts.'
-              }
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setNarrativeMode(m.id)}
-                className={`w-full p-2.5 rounded-2xl text-left transition-all border ${
-                  narrativeMode === m.id
-                    ? 'bg-emerald-500/15 border-emerald-500/60 text-white shadow-sm'
-                    : 'bg-[#07090e] border-white/[0.04] text-slate-400 hover:text-white hover:border-white/10'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-bold ${narrativeMode === m.id ? 'text-emerald-300' : 'text-slate-200'}`}>
-                    {m.name}
-                  </span>
-                  {narrativeMode === m.id && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1 leading-normal">
-                  {m.desc}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* COL 2: ESTILO VISUAL & AUTO-IA */}
-        <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 flex flex-col justify-between shadow-xl">
-          <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
+      {/* 3. DIRECTION PARAMETERS: NARRATIVE MODE, STYLE & CONTEXT (MATCHING SCREENSHOT) */}
+      <div className="space-y-4">
+        {/* TOP ROW: 2 CARDS (MODO DE DIRECCION & ESTILO VISUAL) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* CARD 1: MODO DE DIRECCION */}
+          <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 shadow-xl flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <Palette className="w-4 h-4 text-amber-400" />
-              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
-                Estilo Visual & Arte
-              </h3>
+              <Film className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
+                MODO DE DIRECCION
+              </span>
             </div>
-            {onNavigateToSettings && (
-              <button
-                type="button"
-                onClick={onNavigateToSettings}
-                className="text-[10px] text-slate-400 hover:text-amber-300 font-mono transition-colors"
+
+            <div className="relative">
+              <select
+                value={narrativeMode}
+                onChange={(e) => setNarrativeMode(e.target.value as DirectionNarrativeMode)}
+                className="w-full bg-[#121418] border-2 border-amber-500/70 text-amber-200 font-bold rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)] appearance-none cursor-pointer"
               >
-                + Crear Estilo
-              </button>
-            )}
+                <option value="documental_secuencial" className="bg-[#121418] text-white">
+                  Secuencia Historias
+                </option>
+                <option value="motivacional_conceptual" className="bg-[#121418] text-white">
+                  Motivacional / Conceptual
+                </option>
+                <option value="storytelling_cinematico" className="bg-[#121418] text-white">
+                  Storytelling Cinemático
+                </option>
+                <option value="educativo_viral" className="bg-[#121418] text-white">
+                  Educativo / Viral Faceless
+                </option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-amber-400">
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {narrativeMode === 'documental_secuencial' && 'Secuencia lógica continua de causa-efecto cronológica entre planos consecutivos.'}
+              {narrativeMode === 'motivacional_conceptual' && 'Metáforas visuales de alto impacto emocional no estrictamente lineales.'}
+              {narrativeMode === 'storytelling_cinematico' && 'Estructura clásica de 3 actos con gancho inicial, tensión y resolución dramática.'}
+              {narrativeMode === 'educativo_viral' && 'Cortes rápidos y cambios de escala cada 2s para retención máxima en Shorts/TikTok.'}
+            </p>
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] font-mono text-slate-400 block mb-1">
-                Preset Visual Activo:
-              </label>
+          {/* CARD 2: ESTILO VISUAL */}
+          <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 shadow-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
+                  ESTILO VISUAL
+                </span>
+              </div>
+              {styleSavedToast && (
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 animate-pulse font-bold">
+                  ✓ Guardado en Banco
+                </span>
+              )}
+            </div>
+
+            <div className="relative">
               <select
-                value={activeStyleId || styles[0]?.id}
-                onChange={(e) => onSelectStyle(e.target.value)}
-                className="w-full bg-[#07090e] border border-amber-500/30 text-white rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-amber-400"
+                value={activeStyleId || 'custom'}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'custom') {
+                    // Mantiene el texto actual del usuario
+                  } else {
+                    onSelectStyle(val);
+                    const matched = styles.find(s => s.id === val);
+                    if (matched) setCustomStyleInstructions(matched.promptModifier || matched.description);
+                  }
+                }}
+                className="w-full bg-[#121418] border-2 border-amber-500/70 text-amber-200 font-bold rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.15)] appearance-none cursor-pointer"
               >
+                <option value="custom" className="bg-[#121418] text-white">
+                  Estilo personalizado
+                </option>
                 {styles.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={s.id} className="bg-[#121418] text-white">
                     {s.name} ({s.category})
                   </option>
                 ))}
               </select>
-            </div>
-
-            {/* Active Style Details Badge */}
-            <div className="bg-[#07090e] p-3 rounded-2xl border border-white/[0.04] space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                <span className="text-xs font-bold text-amber-300">{activeStyle?.name}</span>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-amber-400">
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
               </div>
-              <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2">
-                {activeStyle?.description}
-              </p>
             </div>
 
-            {/* AI Auto-Detect Button */}
-            <button
-              type="button"
-              onClick={handleAutoDetectStyle}
-              disabled={isDetectingStyle || !scriptText.trim()}
-              className="w-full py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-40"
-            >
-              {isDetectingStyle ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Analizando Estilo Óptimo...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>✨ Auto-Detectar Estilo con IA</span>
-                </>
-              )}
-            </button>
+            <textarea
+              rows={3}
+              value={customStyleInstructions}
+              onChange={(e) => setCustomStyleInstructions(e.target.value)}
+              placeholder="Instrucciones del Director de Fotografía..."
+              className="w-full bg-[#07090e] border border-white/[0.08] text-slate-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-amber-400 resize-none font-sans leading-relaxed"
+            />
 
-            {detectedStyleReason && (
-              <p className="text-[10px] text-amber-200/80 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20 font-mono leading-relaxed">
-                💡 {detectedStyleReason}
-              </p>
-            )}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleAutoDetectStyle}
+                disabled={isDetectingStyle || !scriptText.trim()}
+                className="flex-1 py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 cursor-pointer"
+              >
+                {isDetectingStyle ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Sparkles className="w-3.5 h-3.5 text-cyan-400" />}
+                <span>Auto-Detectar Estilo con IA</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveStyleToVault}
+                className="py-2 px-3.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                title="Guardar este estilo en el Banco de Estilos permanente"
+              >
+                <span>💾 Guardar en Banco</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* COL 3: CONTEXTO TEMPORAL & CULTURAL */}
-        <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 flex flex-col justify-between shadow-xl">
-          <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
+        {/* BOTTOM CARD: CONTEXTO TEMPORAL/CULTURAL (FULL-WIDTH) */}
+        <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-5 space-y-3 shadow-xl">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
-              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-purple-400">
-                Contexto Temporal & Cultural
-              </h3>
+              <Globe className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400">
+                CONTEXTO TEMPORAL/CULTURAL
+              </span>
             </div>
+            {culturalContext.autoDetected && (
+              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+                ✓ Detectado por IA
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-stretch gap-3">
+            <textarea
+              rows={3}
+              value={culturalContextInput}
+              onChange={(e) => {
+                setCulturalContextInput(e.target.value);
+                setCulturalContext({
+                  epoch: e.target.value,
+                  culture: culturalContext.culture,
+                  environment: culturalContext.environment
+                });
+              }}
+              placeholder="Ej: Roma imperial, oficina contemporánea o mundo futurista..."
+              className="flex-1 bg-[#07090e] border border-white/[0.08] text-slate-200 rounded-2xl p-3.5 text-xs focus:outline-none focus:border-cyan-400 resize-none font-sans leading-relaxed"
+            />
+
             <button
               type="button"
               onClick={handleAutoExtractContext}
               disabled={isExtractingContext || !scriptText.trim()}
-              className="text-[10px] font-mono font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors disabled:opacity-40"
+              className="w-24 bg-[#0e1219] hover:bg-cyan-950/40 border border-white/10 hover:border-cyan-500/50 rounded-2xl flex flex-col items-center justify-center gap-1.5 text-slate-300 hover:text-cyan-300 transition-all disabled:opacity-40 p-2 shrink-0 cursor-pointer group shadow-inner"
+              title="Analizar guion con IA para extraer automáticamente el marco temporal, cultural y ambiental"
             >
-              {isExtractingContext ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-              <span>Auto-IA</span>
+              {isExtractingContext ? (
+                <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin" />
+              ) : (
+                <Clock className="w-5 h-5 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+              )}
+              <span className="text-[10px] font-black uppercase tracking-wider">ANALIZAR</span>
             </button>
-          </div>
-
-          <div className="space-y-2.5">
-            <div>
-              <label className="text-[10px] font-mono text-slate-400 block mb-0.5">
-                Época Histórica / Futurista:
-              </label>
-              <input
-                type="text"
-                value={culturalContext.epoch}
-                onChange={(e) => setCulturalContext({ ...culturalContext, epoch: e.target.value })}
-                placeholder="Ej: Siglo I d.C. Roma, Cyberpunk 2088..."
-                className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-purple-400"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-mono text-slate-400 block mb-0.5">
-                Cultura y Ambientación:
-              </label>
-              <input
-                type="text"
-                value={culturalContext.culture}
-                onChange={(e) => setCulturalContext({ ...culturalContext, culture: e.target.value })}
-                placeholder="Ej: Tradición Japonesa Feudal, Metrópoli Neoyorquina..."
-                className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-purple-400"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-mono text-slate-400 block mb-0.5">
-                Entorno Físico y Atmósfera:
-              </label>
-              <input
-                type="text"
-                value={culturalContext.environment}
-                onChange={(e) => setCulturalContext({ ...culturalContext, environment: e.target.value })}
-                placeholder="Ej: Laboratorio subterráneo con neón, Desierto al atardecer..."
-                className="w-full bg-[#07090e] border border-white/[0.08] text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-purple-400"
-              />
-            </div>
-
-            <p className="text-[10px] text-slate-500 leading-normal pt-1">
-              Todos los prompts reflejarán estrictamente esta arquitectura, vestuario y ambientación.
-            </p>
           </div>
         </div>
       </div>
 
-      {/* 4. PERSONAJES & CONSISTENCIA BIOMÉTRICA (ADVANCED CHARACTER VAULT & ENGINE) */}
+      {/* 4. PERSONAJES & CONSISTENCIA BIOMÉTRICA (BÓVEDA MEJORADA) */}
       <div className="bg-[#0b0e17] border border-white/[0.08] rounded-3xl p-6 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
           <div className="flex items-center gap-3">
@@ -1724,6 +1819,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                 <span className="text-[10px] font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold">
                   Identidad Estable
                 </span>
+                {charSavedToast && (
+                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30 animate-pulse font-bold">
+                    ✓ Guardado en Banco
+                  </span>
+                )}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Garantiza que el protagonista conserve exactamente el mismo rostro, edad, peinado y ropa en cada escena.
@@ -1731,24 +1831,26 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleAutoDetectCharacters}
-            disabled={isDetectingChars || !scriptText.trim()}
-            className="px-4 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-40 shrink-0"
-          >
-            {isDetectingChars ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Analizando Personajes con IA...</span>
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-3.5 h-3.5" />
-                <span>🔍 Detectar Personajes con IA</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAutoDetectCharacters}
+              disabled={isDetectingChars || !scriptText.trim()}
+              className="px-4 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-40 shrink-0 cursor-pointer shadow-sm"
+            >
+              {isDetectingChars ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Analizando Personajes con IA...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>🔍 Detectar Personajes con IA</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* 4 Consistency Modes */}
@@ -1779,7 +1881,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
               key={mode.id}
               type="button"
               onClick={() => setConsistencyMode(mode.id)}
-              className={`p-3 rounded-2xl text-left border transition-all ${
+              className={`p-3 rounded-2xl text-left border transition-all cursor-pointer ${
                 consistencyMode === mode.id
                   ? 'bg-purple-950/40 border-purple-500/60 text-white shadow-md'
                   : 'bg-[#07090e] border-white/[0.04] text-slate-400 hover:text-white'
@@ -1798,71 +1900,119 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           ))}
         </div>
 
-        {/* Active Character Selector & Computed Appearance Badge */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          {/* Selector */}
-          <div className="bg-[#07090e] border border-white/[0.04] rounded-2xl p-4 space-y-2">
-            <label className="text-[10px] font-mono text-slate-400 uppercase font-bold block">
-              Personaje Protagónico Fijado:
-            </label>
-            <select
-              value={activeCharacterId || ''}
-              onChange={(e) => onSelectCharacter(e.target.value || undefined)}
-              className="w-full bg-[#0d111a] border border-purple-500/30 text-white rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-purple-400"
-            >
-              <option value="">(Sin Personaje Fijo / Modo Libre)</option>
-              {characters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} (Seed #{c.defaultSeed})
-                </option>
-              ))}
-            </select>
-
-            {activeChar ? (
-              <div className="pt-2 text-[11px] text-slate-300 font-mono space-y-1">
-                <div><strong className="text-purple-400">Rostro:</strong> {activeChar.anchorDescription}</div>
-                <div><strong className="text-purple-400">Vestimenta:</strong> {activeChar.clothingAnchor}</div>
+        {/* SECCIONES DE PERSONAJES: VACÍAS AL INICIO O LLENAS TRAS DETECTAR / SELECCIONAR */}
+        {(!activeChar && detectedCharacters.length === 0) ? (
+          /* ESTADO INICIAL VACÍO (Como pidió el usuario: secciones vacías con botón de auto-detección y guardado) */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
+              <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+                <UserCheck className="w-5 h-5 opacity-50" />
               </div>
-            ) : (
-              <p className="text-[10px] text-slate-500 pt-1">
-                Selecciona un personaje o usa el botón de auto-detección para fijar el rostro.
-              </p>
-            )}
-          </div>
-
-          {/* Internal Appearance Block Indicator */}
-          <div className="bg-[#07090e] border border-white/[0.04] rounded-2xl p-4 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
-                  Bloque de Apariencia Automático
+              <div>
+                <span className="text-xs font-bold text-slate-300 block">
+                  🎭 Protagonista Principal (Vacío - Sin asignar)
                 </span>
+                <p className="text-[10px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  Haz clic en "Detectar Personajes con IA" arriba para analizar el guion y auto-completar esta ficha biométrica invariable.
+                </p>
               </div>
-              <p className="text-xs text-slate-300 font-semibold mt-1">
-                No requiere configuración manual compleja.
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                El motor calcula internamente los tokens de anclaje para que la semilla #{activeChar?.defaultSeed || 'Auto'} y los descriptores biométricos se fusionen sin deformar el estilo visual.
-              </p>
             </div>
 
-            {detectedCharacters.length > 0 && (
-              <div className="mt-3 flex items-center gap-2 overflow-x-auto pt-2 border-t border-white/[0.04]">
-                <span className="text-[10px] text-slate-400 font-mono shrink-0">Detectados:</span>
-                {detectedCharacters.map((dc, i) => (
-                  <span
-                    key={i}
-                    className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/30 flex items-center gap-1 shrink-0"
-                  >
-                    <span>{dc.name}</span>
-                    <span className="opacity-60">({dc.alive ? 'Vivo' : 'Baja'})</span>
-                  </span>
-                ))}
+            <div className="border-2 border-dashed border-white/10 hover:border-purple-500/40 rounded-2xl p-6 text-center bg-[#07090e] space-y-3 transition-colors">
+              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto">
+                <Users className="w-5 h-5 opacity-50" />
               </div>
-            )}
+              <div>
+                <span className="text-xs font-bold text-slate-300 block">
+                  👥 Personaje Secundario (Opcional - Vacío)
+                </span>
+                <p className="text-[10px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  La IA detectará personajes secundarios y calculará su continuidad o salida de escena automáticamente.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* ESTADO ACTIVO: FICHAS CON DATOS Y BOTÓN DE GUARDADO EN BANCO */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            {/* Ficha Protagonista */}
+            <div className="bg-[#07090e] border border-purple-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-purple-400" />
+                  <span>Protagonista: {activeChar?.name || detectedCharacters[0]?.name || 'Protagonista'}</span>
+                </span>
+                <span className="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30 font-bold">
+                  Seed #{activeChar?.defaultSeed || detectedCharacters[0]?.defaultSeed || '482910'}
+                </span>
+              </div>
+
+              <div className="text-xs font-mono space-y-1.5 text-slate-300 bg-black/40 p-3 rounded-xl border border-white/[0.04]">
+                <div>
+                  <strong className="text-purple-400">Rostro/Cuerpo:</strong>{' '}
+                  {activeChar?.anchorDescription || detectedCharacters[0]?.anchorDescription}
+                </div>
+                <div>
+                  <strong className="text-purple-400">Vestimenta:</strong>{' '}
+                  {activeChar?.clothingAnchor || detectedCharacters[0]?.clothingAnchor}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <select
+                  value={activeCharacterId || ''}
+                  onChange={(e) => onSelectCharacter(e.target.value || undefined)}
+                  className="bg-[#0d111a] border border-white/10 text-white rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-purple-400 flex-1 truncate"
+                >
+                  <option value="">(Cambiar Protagonista)</option>
+                  {characters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} (Seed #{c.defaultSeed})
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => handleSaveCharacterToVault()}
+                  className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-sm"
+                  title="Guardar este personaje en el Banco de Personajes permanente"
+                >
+                  <span>💾 Guardar en Banco</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Secundarios Detectados / Selector de Banco */}
+            <div className="bg-[#07090e] border border-white/[0.06] rounded-2xl p-4 flex flex-col justify-between space-y-3">
+              <div>
+                <span className="text-xs font-bold text-white block mb-1">
+                  Continuidad y Ciclo Vital de Personajes
+                </span>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  El motor calcula automáticamente la consistencia biométrica. Si un personaje muere o desaparece en una escena, no saldrá en los planos posteriores.
+                </p>
+              </div>
+
+              {detectedCharacters.length > 1 && (
+                <div className="space-y-1.5 pt-2 border-t border-white/[0.04]">
+                  <span className="text-[10px] font-mono text-slate-400 block">Personajes Secundarios:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detectedCharacters.slice(1).map((dc, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1"
+                      >
+                        <span>{dc.name}</span>
+                        <span className="opacity-60">({dc.alive ? 'Vivo' : 'Baja'})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 5. DIRECCIÓN DE CONTENIDO Y REPRESENTACIÓN (OPCIONAL) */}

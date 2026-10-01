@@ -3,6 +3,7 @@
  * Soporta Groq (Llama 3.3 70B Versatile), NVIDIA NIM (Llama 3.3 70B, DeepSeek R1, Mistral, Qwen), y Google Gemini.
  */
 import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter } from '../types';
+export type { ScriptDirectorCharacter };
 
 export const DEFAULT_GROQ_API_KEY = '';
 export const DEFAULT_NVIDIA_NIM_API_KEY = '';
@@ -77,7 +78,7 @@ function extractCleanJson(raw: string): any {
   return JSON.parse(text);
 }
 
-export async function analyzeScriptWithLLM(params: {
+export interface AnalyzeScriptParams {
   scriptText: string;
   model?: string;
   groqKey?: string;
@@ -92,11 +93,199 @@ export async function analyzeScriptWithLLM(params: {
   pacingWords?: number;
   hookMinSeconds?: number;
   hookMaxSeconds?: number;
+  precalculatedScenes?: Array<{ sceneNumber: number; text: string; duration: number }>;
+  onProgress?: (progressText: string, currentStep: number, totalSteps: number) => void;
   signal?: AbortSignal;
-}): Promise<DirectorAnalysisResponse> {
+}
+
+/**
+ * Invoca el LLM con cascada automática multi-proveedor:
+ * Prioridad: 1) Modelo elegido -> 2) Google Gemini 2.0 -> 3) NVIDIA NIM 70B -> 4) Groq Llama 3.3.
+ */
+async function callLLMDirectorRaw(params: {
+  systemPrompt: string;
+  userPrompt: string;
+  model: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const { systemPrompt, userPrompt, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+
+  const cleanGeminiKey = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
+  const cleanNvidiaKey = extractCleanKey(nvidiaNimKey) || extractCleanKey(localStorage.getItem('bulk_nvidia_api_keys') || '') || DEFAULT_NVIDIA_NIM_API_KEY;
+  const cleanGroqKey = extractCleanKey(groqKey) || extractCleanKey(localStorage.getItem('bulk_groq_api_keys') || '') || DEFAULT_GROQ_API_KEY;
+
+  // Lista ordenada de intentos
+  const attempts: Array<{
+    name: string;
+    provider: 'gemini' | 'nvidia' | 'groq';
+    modelId: string;
+    key: string;
+  }> = [];
+
+  // Intento 1: El modelo seleccionado explícitamente
+  if (model.startsWith('gemini-') && cleanGeminiKey) {
+    attempts.push({ name: `Gemini (${model})`, provider: 'gemini', modelId: model, key: cleanGeminiKey });
+  } else if ((model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-')) && cleanNvidiaKey) {
+    attempts.push({ name: `NVIDIA (${model})`, provider: 'nvidia', modelId: model, key: cleanNvidiaKey });
+  } else if (model.startsWith('groq-') && cleanGroqKey) {
+    attempts.push({ name: `Groq (${model})`, provider: 'groq', modelId: model, key: cleanGroqKey });
+  }
+
+  // Fallbacks de seguridad con prioridad definida: Gemini -> NVIDIA -> Groq
+  if (cleanGeminiKey && !attempts.some(a => a.provider === 'gemini')) {
+    attempts.push({ name: 'Gemini 2.0 Flash (Fallback)', provider: 'gemini', modelId: 'gemini-2.0-flash', key: cleanGeminiKey });
+  }
+  if (cleanNvidiaKey && !attempts.some(a => a.provider === 'nvidia')) {
+    attempts.push({ name: 'NVIDIA Llama 3.3 70B (Fallback)', provider: 'nvidia', modelId: 'nvidia-llama-70b', key: cleanNvidiaKey });
+  }
+  if (cleanGroqKey && !attempts.some(a => a.provider === 'groq')) {
+    attempts.push({ name: 'Groq Llama 3.3 70B (Fallback)', provider: 'groq', modelId: 'groq-llama-70b', key: cleanGroqKey });
+  }
+
+  if (attempts.length === 0) {
+    throw new Error('No se detectaron API Keys configuradas para Gemini, NVIDIA NIM ni Groq. Por favor ingresa al menos una API Key en Configuración.');
+  }
+
+  const errors: string[] = [];
+
+  for (const attempt of attempts) {
+    try {
+      if (attempt.provider === 'gemini') {
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${attempt.modelId}:generateContent?key=${attempt.key}`;
+        const res = await fetch(geminiEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 8192,
+              responseMimeType: 'application/json'
+            }
+          }),
+          signal
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        }
+
+        const data = await res.json();
+        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!raw) throw new Error('Gemini devolvió respuesta vacía.');
+        return raw;
+      }
+
+      if (attempt.provider === 'nvidia') {
+        const nvidiaModelMapping: Record<string, string> = {
+          'nvidia-llama-70b': 'meta/llama-3.3-70b-instruct',
+          'nvidia-deepseek-r1': 'deepseek-ai/deepseek-r1',
+          'nvidia-deepseek-r1-32b': 'deepseek-ai/deepseek-r1',
+          'nvidia-mistral-nemo': 'mistralai/mistral-nemo-12b-instruct',
+          'nvidia-qwen-72b': 'qwen/qwen2.5-72b-instruct',
+          'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
+        };
+        const payloadModel = nvidiaModelMapping[attempt.modelId] || 'meta/llama-3.3-70b-instruct';
+        const endpoints = [
+          '/api/nvidia-nim/v1/chat/completions',
+          'https://integrate.api.nvidia.com/v1/chat/completions'
+        ];
+
+        for (const ep of endpoints) {
+          try {
+            const res = await fetch(ep, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${attempt.key}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: payloadModel,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.4,
+                max_tokens: 4096
+              }),
+              signal
+            });
+
+            if (!res.ok) {
+              if (res.status === 404 && ep.startsWith('/api')) continue;
+              const errText = await res.text();
+              throw new Error(`NVIDIA HTTP ${res.status}: ${errText.slice(0, 150)}`);
+            }
+
+            const data = await res.json();
+            const raw = data.choices?.[0]?.message?.content;
+            if (!raw) throw new Error('NVIDIA devolvió respuesta vacía.');
+            return raw;
+          } catch (e: any) {
+            if (ep === endpoints[endpoints.length - 1]) throw e;
+          }
+        }
+      }
+
+      if (attempt.provider === 'groq') {
+        const payloadModel = attempt.modelId === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
+        const endpoints = [
+          '/api/groq/openai/v1/chat/completions',
+          'https://api.groq.com/openai/v1/chat/completions'
+        ];
+
+        for (const ep of endpoints) {
+          try {
+            const res = await fetch(ep, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${attempt.key}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: payloadModel,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.4,
+                max_tokens: 4096
+              }),
+              signal
+            });
+
+            if (!res.ok) {
+              if (res.status === 404 && ep.startsWith('/api')) continue;
+              const errText = await res.text();
+              throw new Error(`Groq HTTP ${res.status}: ${errText.slice(0, 150)}`);
+            }
+
+            const data = await res.json();
+            const raw = data.choices?.[0]?.message?.content;
+            if (!raw) throw new Error('Groq devolvió respuesta vacía.');
+            return raw;
+          } catch (e: any) {
+            if (ep === endpoints[endpoints.length - 1]) throw e;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[LLM DIRECTOR] Falló intento con ${attempt.name}:`, err.message);
+      errors.push(`${attempt.name}: ${err.message}`);
+    }
+  }
+
+  throw new Error(`Todos los motores neuronales fallaron:\n${errors.join('\n')}`);
+}
+
+export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise<DirectorAnalysisResponse> {
   const {
     scriptText,
-    model = 'nvidia-llama-70b',
+    model = 'gemini-2.0-flash',
     groqKey = DEFAULT_GROQ_API_KEY,
     nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
     geminiKey = '',
@@ -107,6 +296,9 @@ export async function analyzeScriptWithLLM(params: {
     culturalContext,
     characterConsistencyMode = 'nombre_en_prompt',
     pacingWords = 8,
+    precalculatedScenes,
+    onProgress,
+    signal
   } = params;
 
   const minWords = Math.max(4, pacingWords - 3);
@@ -138,7 +330,7 @@ Todos los elementos de vestuario, arquitectura, utilería y atmósfera deben ref
     consistencyDirective = '\nREGLA DE CONTINUIDAD VITAL: Si un personaje muere o abandona la historia en una escena, NO lo vuelvas a incluir en los prompts visuales de escenas posteriores.';
   }
 
-  const systemPrompt = `Eres el Director Supremo de Cine y Guiones para producciones de video viral de alta retención (YouTube Shorts, Reels, TikTok).
+  const baseSystemPrompt = `Eres el Director Supremo de Cine y Guiones para producciones de video viral de alta retención (YouTube Shorts, Reels, TikTok).
 Tu misión es transformar el guion del usuario en una estructura narrativa cinematográfica precisa y secuencial para generar imágenes escena por escena.
 
 ${narrativeDirectives[narrativeMode] || narrativeDirectives.documental_secuencial}
@@ -154,7 +346,37 @@ DIRECTRIZ DE ESTILO VISUAL ABSOLUTA:
 
 PROTOCOLO DE ACCIÓN DINÁMICA (CRÍTICO):
 - VISUALIZA EL VERBO: Si el texto dice correr, nadar o gritar, el sujeto debe estar en movimiento activo enérgico, jamás en una pose estática mirando a cámara.
-${characterAnchor ? `- PERSONAJE PROTAGÓNICO FIJADO: "${characterAnchor}". Mantén sus rasgos constantes.` : ''}
+${characterAnchor ? `- PERSONAJE PROTAGÓNICO FIJADO: "${characterAnchor}". Mantén sus rasgos constantes.` : ''}`;
+
+  // Determinamos si el guion es extenso (> 18 escenas calculadas o > 200 palabras) para procesarlo por lotes
+  const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
+  const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
+
+  // Segmentación base en oraciones / frases
+  const textSegments: string[] = [];
+  if (precalculatedScenes && precalculatedScenes.length > 0) {
+    precalculatedScenes.forEach(s => textSegments.push(s.text));
+  } else {
+    sentences.forEach((sentence) => {
+      const words = sentence.trim().split(/\s+/);
+      if (words.length <= maxWords) {
+        textSegments.push(sentence.trim());
+      } else {
+        for (let i = 0; i < words.length; i += pacingWords) {
+          const chunk = words.slice(i, i + pacingWords).join(' ');
+          if (chunk.trim()) textSegments.push(chunk.trim());
+        }
+      }
+    });
+  }
+
+  const isLongScript = textSegments.length > 16;
+
+  // CASO 1: Guion corto a moderado (<= 16 escenas) -> Procesamiento en 1 pasada completa
+  if (!isLongScript) {
+    if (onProgress) onProgress('Generando desglose cinematográfico con IA...', 1, 1);
+
+    const promptUser = `${baseSystemPrompt}
 
 SEGMENTACIÓN Y CERO PÉRDIDA DE DATOS:
 - Cada escena debe contener aproximadamente entre ${minWords} y ${maxWords} palabras del guion.
@@ -186,143 +408,127 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
       "charactersPresent": ["Protagonista"]
     }
   ]
+}
+
+Analiza y segmenta cinematográficamente este guion:
+${scriptText}`;
+
+    const rawResponse = await callLLMDirectorRaw({
+      systemPrompt: 'Eres un director de cine experto en estructuración de guiones audiovisuales virales y prompts para IA.',
+      userPrompt: promptUser,
+      model,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
+
+    const parsed = extractCleanJson(rawResponse);
+    if (!parsed.scenes || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
+      throw new Error('La IA respondió pero no incluyó la lista de escenas en el JSON.');
+    }
+
+    return parsed as DirectorAnalysisResponse;
+  }
+
+  // CASO 2: Guion largo (1h - 2h, 20 a 300+ escenas) -> Procesamiento por lotes secuenciales de 10-12 escenas
+  // Esto previene que se corte el JSON por límite de tokens de salida.
+  const BATCH_SIZE = 12;
+  const totalBatches = Math.ceil(textSegments.length / BATCH_SIZE);
+  const allScenes: ScriptSceneResult[] = [];
+  let globalStoryBible = {
+    summary: scriptText.slice(0, 200) + '...',
+    genreAndTone: targetStyleName,
+    culturalContext: culturalContext?.epoch || 'Cinematográfica'
+  };
+  let globalCharacters: any[] = [];
+
+  for (let b = 0; b < totalBatches; b++) {
+    const startIdx = b * BATCH_SIZE;
+    const endIdx = Math.min(startIdx + BATCH_SIZE, textSegments.length);
+    const batchSegments = textSegments.slice(startIdx, endIdx);
+    const sceneStartNum = startIdx + 1;
+    const sceneEndNum = endIdx;
+
+    if (onProgress) {
+      onProgress(
+        `Generando lote ${b + 1} de ${totalBatches} (Escenas ${sceneStartNum} a ${sceneEndNum}) con IA...`,
+        b + 1,
+        totalBatches
+      );
+    }
+
+    const previousContext = allScenes.length > 0
+      ? `CONTINUIDAD: La última escena generada (#${allScenes.length}) fue: "${allScenes[allScenes.length - 1].visualPrompt}". Mantén la coherencia visual con esta escena.`
+      : '';
+
+    const batchPrompt = `${baseSystemPrompt}
+
+${previousContext}
+
+INSTRUCCIÓN ESPECÍFICA PARA ESTE LOTE DE ESCENAS:
+Debes procesar exactamente las siguientes ${batchSegments.length} frases numeradas del guion (desde la escena #${sceneStartNum} hasta la #${sceneEndNum}):
+${batchSegments.map((seg, i) => `[Escena ${sceneStartNum + i}]: "${seg}"`).join('\n')}
+
+FORMATO DE RESPUESTA OBLIGATORIO:
+Responde ÚNICAMENTE con un JSON válido con este formato:
+{
+  "scenes": [
+    {
+      "sceneNumber": ${sceneStartNum},
+      "scriptSegment": "Frase exacta del guion",
+      "visualPrompt": "Prompt en inglés <= 350 chars con ${targetStyleName} y acción dinámica",
+      "cameraAngle": "Extreme Close-Up | Dutch Angle | Wide Cinematic",
+      "lighting": "Volumetric golden hour | Neon contrast",
+      "charactersPresent": ["Protagonista"]
+    }
+  ]
 }`;
 
-  // 1. Si es modelo de Google Gemini
-  const isGemini = model.startsWith('gemini-');
-  const cleanGeminiKey = extractCleanKey(geminiKey) || extractCleanKey(localStorage.getItem('bulk_gemini_api_key') || '');
+    const rawBatch = await callLLMDirectorRaw({
+      systemPrompt: 'Eres un director de cine experto en estructuración de guiones por lotes y prompts de IA.',
+      userPrompt: batchPrompt,
+      model,
+      geminiKey,
+      nvidiaNimKey,
+      groqKey,
+      signal
+    });
 
-  if (isGemini && cleanGeminiKey) {
-    try {
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanGeminiKey}`;
-      const res = await fetch(geminiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: `${systemPrompt}\n\nAnaliza y segmenta cinematográficamente este guion:\n\n${scriptText}` }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 8192,
-            responseMimeType: 'application/json'
-          }
-        }),
-        signal: params.signal
+    const parsedBatch = extractCleanJson(rawBatch);
+    const batchScenes = parsedBatch.scenes || [];
+
+    if (Array.isArray(batchScenes) && batchScenes.length > 0) {
+      batchScenes.forEach((sc: any, idx: number) => {
+        allScenes.push({
+          sceneNumber: sceneStartNum + idx,
+          scriptSegment: sc.scriptSegment || batchSegments[idx] || '',
+          visualPrompt: sc.visualPrompt || `Cinematic ${targetStyleName} capturing ${batchSegments[idx]}`,
+          cameraAngle: sc.cameraAngle || 'Medium cinematic shot',
+          lighting: sc.lighting || 'Volumetric cinematic lighting',
+          charactersPresent: sc.charactersPresent || (characterAnchor ? ['Protagonista'] : [])
+        });
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (raw) {
-          const parsed = extractCleanJson(raw);
-          if (parsed.scenes && Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
-            return parsed as DirectorAnalysisResponse;
-          }
-        }
-      }
-    } catch (gErr) {
-      console.warn('[LLM DIRECTOR] Gemini API error, probando alternativas:', gErr);
+    } else {
+      // Si un lote específico falló en la estructura del JSON, autocompletar ese lote manteniendo el orden
+      batchSegments.forEach((seg, idx) => {
+        allScenes.push({
+          sceneNumber: sceneStartNum + idx,
+          scriptSegment: seg,
+          visualPrompt: `Cinematic ${targetStyleName}, ${characterAnchor ? `${characterAnchor}, ` : ''}capturing "${seg.slice(0, 100)}", ${targetStyleModifier}`,
+          cameraAngle: 'Dynamic cinematic framing',
+          lighting: 'Cinematic lighting',
+          charactersPresent: characterAnchor ? ['Protagonista'] : []
+        });
+      });
     }
   }
 
-  // 2. Mapeo de Modelos para NVIDIA NIM y Groq
-  let endpoint = '';
-  let authHeader = '';
-  let payloadModel = '';
-
-  const nvidiaModelMapping: Record<string, string> = {
-    'nvidia-llama-70b': 'meta/llama-3.3-70b-instruct',
-    'nvidia-deepseek-r1': 'deepseek-ai/deepseek-r1',
-    'nvidia-deepseek-r1-32b': 'deepseek-ai/deepseek-r1',
-    'nvidia-mistral-nemo': 'mistralai/mistral-nemo-12b-instruct',
-    'nvidia-qwen-72b': 'qwen/qwen2.5-72b-instruct',
-    'nvidia-nemotron-70b': 'nvidia/llama-3.1-nemotron-70b-instruct'
+  return {
+    storyBible: globalStoryBible,
+    characters: globalCharacters,
+    scenes: allScenes
   };
-
-  const cleanNvidiaKey = extractCleanKey(nvidiaNimKey) || extractCleanKey(localStorage.getItem('bulk_nvidia_api_keys') || '') || DEFAULT_NVIDIA_NIM_API_KEY;
-  const cleanGroqKey = extractCleanKey(groqKey) || extractCleanKey(localStorage.getItem('bulk_groq_api_keys') || '') || DEFAULT_GROQ_API_KEY;
-
-  const isNvidiaModel = model.startsWith('nvidia-') || model.startsWith('meta/') || model.startsWith('deepseek-');
-
-  if (isNvidiaModel) {
-    endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${cleanNvidiaKey}`;
-    payloadModel = nvidiaModelMapping[model] || 'meta/llama-3.3-70b-instruct';
-  } else if (model.startsWith('groq-')) {
-    endpoint = '/api/groq/openai/v1/chat/completions';
-    authHeader = `Bearer ${cleanGroqKey}`;
-    payloadModel = model === 'groq-mixtral-8x7b' ? 'mixtral-8x7b-32768' : 'llama-3.3-70b-versatile';
-  } else {
-    // Default a NVIDIA Llama 70B
-    endpoint = '/api/nvidia-nim/v1/chat/completions';
-    authHeader = `Bearer ${cleanNvidiaKey}`;
-    payloadModel = 'meta/llama-3.3-70b-instruct';
-  }
-
-  const directEndpoints: Record<string, string> = {
-    '/api/groq/openai/v1/chat/completions': 'https://api.groq.com/openai/v1/chat/completions',
-    '/api/nvidia-nim/v1/chat/completions': 'https://integrate.api.nvidia.com/v1/chat/completions',
-  };
-
-  const candidateEndpoints = [endpoint, directEndpoints[endpoint] || endpoint];
-  let lastError: any = null;
-
-  for (const ep of candidateEndpoints) {
-    try {
-      const response = await fetch(ep, {
-        method: 'POST',
-        headers: {
-          'Authorization': authHeader,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: payloadModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Analiza y segmenta cinematográficamente este guion:\n\n${scriptText}` }
-          ],
-          temperature: 0.5,
-          max_tokens: 4096,
-        }),
-        signal: params.signal,
-      });
-
-      if (!response.ok) {
-        if (response.status === 404 && ep.startsWith('/api')) {
-          continue; // Intenta con la URL directa
-        }
-        const err = await response.text();
-        throw new Error(`Error en modelo LLM (${response.status}): ${err.slice(0, 180)}`);
-      }
-
-      const json = await response.json();
-      const rawContent = json.choices?.[0]?.message?.content;
-      if (!rawContent) throw new Error('Respuesta vacía del modelo de dirección LLM.');
-
-      const parsed = extractCleanJson(rawContent);
-      if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
-        throw new Error('La respuesta de la IA no incluyó el arreglo de escenas requerido.');
-      }
-
-      return parsed as DirectorAnalysisResponse;
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Fallo al contactar ${ep}:`, err.message);
-    }
-  }
-
-  // Si todas las conexiones remotas fallan o no hay keys, activar el motor local algorítmico sin bloquear
-  console.info('[LLM DIRECTOR] Activando motor local de respaldo algorítmico.');
-  return createLocalFallbackScenes({
-    scriptText,
-    targetStyleName,
-    targetStyleModifier,
-    characterAnchor,
-    pacingWords
-  });
 }
 
 /**

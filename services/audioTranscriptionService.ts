@@ -614,7 +614,7 @@ export async function transcribeAudioWithAssembly(
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      audio_url,
+      audio_url: upload_url,
       language_detection: true,
       punctuate: true,
       format_text: true,

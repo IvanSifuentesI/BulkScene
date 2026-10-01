@@ -50,9 +50,6 @@ export const MainApplication: React.FC = () => {
   const [currentStage, setCurrentStage] = useState<AppStage>('guion');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('creador@bulkscene.ai');
-  const [showMobileNotice, setShowMobileNotice] = useState<boolean>(() => {
-    return typeof window !== 'undefined' && window.innerWidth < 768;
-  });
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [reportTechnicalContext, setReportTechnicalContext] = useState<any>(null);
 
@@ -341,25 +338,6 @@ export const MainApplication: React.FC = () => {
               <span className="hidden sm:inline">Reportar Error</span>
             </button>
 
-            {/* Acceso discreto para el Administrador */}
-            {(userEmail === 'admin@bulkscene.ai' || localStorage.getItem('bulkscene_admin_authenticated') === 'true') && (
-              <Link
-                to="/admin"
-                className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-mono font-bold transition-all"
-                title="Panel Administrativo de Errores y Notificaciones Telegram"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                <span>Admin</span>
-              </Link>
-            )}
-
-            {/* Cluster Status */}
-            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#111420] text-xs font-mono text-gray-300 shadow-inner border border-white/5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-gray-400">Cluster Neuronal:</span>
-              <span className="text-emerald-400 font-bold">Activo</span>
-            </div>
-
             {/* Settings Stage Trigger */}
             <button
               onClick={() => setCurrentStage('ajustes')}
@@ -374,25 +352,6 @@ export const MainApplication: React.FC = () => {
             </button>
           </div>
         </header>
-
-        {/* Mobile Screen Notice (Only visible when viewport is mobile/small tablet) */}
-        {showMobileNotice && (
-          <div className="md:hidden bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-cyan-500/15 border-b border-amber-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-amber-200">
-            <div className="flex items-center gap-2 pr-2">
-              <Monitor className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>
-                <strong>Modo PC Recomendado:</strong> BulkScene Studio está optimizado para pantallas de PC/Laptop para trabajar cómodamente con cientos de escenas y exportación.
-              </span>
-            </div>
-            <button
-              onClick={() => setShowMobileNotice(false)}
-              className="text-gray-400 hover:text-white p-1 rounded font-bold"
-              aria-label="Cerrar aviso"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         {/* Scrollable Stage Content View */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
@@ -413,6 +372,7 @@ export const MainApplication: React.FC = () => {
                 styles={styles}
                 activeStyleId={activeStyleId}
                 onSelectStyle={setActiveStyleId}
+                onAddStyle={handleAddStyle}
                 projectName={projectName}
                 setProjectName={setProjectName}
                 onProceedToScenes={handleProceedFromScenes}
