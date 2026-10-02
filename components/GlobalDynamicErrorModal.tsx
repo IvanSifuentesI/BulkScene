@@ -34,7 +34,9 @@ export const GlobalDynamicErrorModal: React.FC = () => {
 
       // Pre-llenar nota inteligente según el error
       const stageName = data.stage || 'Proceso General';
-      const errMsg = data.errorMessage || 'Error desconocido';
+      const errMsg = typeof data.errorMessage === 'string'
+        ? data.errorMessage
+        : (data.errorMessage ? JSON.stringify(data.errorMessage) : 'Error desconocido');
       let defaultNote = `Ocurrió un error en [${stageName}]: "${errMsg}". Estaba intentando procesar mi contenido.`;
       if (errMsg.toLowerCase().includes('failed to fetch')) {
         defaultNote = `Fallo de conexión o timeout en [${stageName}]: Failed to fetch al comunicar con el motor neuronal.`;
@@ -208,7 +210,7 @@ export const GlobalDynamicErrorModal: React.FC = () => {
                 </button>
               </div>
               <div className="font-mono text-[11px] text-red-300 bg-black/50 p-2 rounded-lg border border-red-500/10 truncate">
-                {errorData.errorMessage}
+                {typeof errorData.errorMessage === 'string' ? errorData.errorMessage : JSON.stringify(errorData.errorMessage)}
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
                 {diagnosis.desc}

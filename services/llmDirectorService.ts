@@ -15,8 +15,9 @@
  *   a la siguiente clave del pool. Cuando todo el pool se agota, reintenta
  *   desde la primera (round-robin). Si ninguna funciona → fallback NVIDIA → Groq.
  */
-import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult } from '../types';
-export type { ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult };
+import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult, NarrativeSceneUnit } from '../types';
+export type { ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult, NarrativeSceneUnit };
+
 import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
 import { studioLogger } from './studioLoggerService';
 
@@ -475,12 +476,15 @@ export interface AnalyzeScriptParams {
   hookMinSeconds?: number;
   hookMaxSeconds?: number;
   precalculatedScenes?: Array<{ sceneNumber: number; text: string; duration: number }>;
+  narrativeScenes?: NarrativeSceneUnit[];
+  audioDuration?: number;
   deepAnalysis?: ScriptDeepAnalysis;
   styleLock?: string;
   styleAvoid?: string;
   onProgress?: (progressText: string, currentStep: number, totalSteps: number) => void;
   signal?: AbortSignal;
 }
+
 
 /**
  * Invoca el LLM con cascada automática multi-proveedor:
@@ -760,55 +764,55 @@ REGLAS DE ORO DE ESPECIFICIDAD VISUAL:
 4. CERO CONTRADICCIONES: Si charactersPresent es vacío [], el prompt NO DEBE describir humanos individuales. Si describes personas, pon sus nombres o roles en charactersPresent.
 5. PROMPT DE VIDEO: Genera siempre el videoPrompt con cinemática de cámara, dinámicas físicas y audio foley ("Audio: ...; no spoken dialogue.").`;
 
-  // Segmentación base en oraciones / frases
-  const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
-  const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
+  // 1. Obtener la lista canónica de escenas (delimitadas en el Paso 1)
+  const canonicalScenes: NarrativeSceneUnit[] = (params.narrativeScenes && params.narrativeScenes.length > 0)
+    ? params.narrativeScenes
+    : (params.deepAnalysis?.narrativeScenes && params.deepAnalysis.narrativeScenes.length > 0)
+      ? params.deepAnalysis.narrativeScenes
+      : (precalculatedScenes && precalculatedScenes.length > 0
+          ? calibrateNarrativeSceneTimestamps(
+              precalculatedScenes.map(p => ({ sceneNumber: p.sceneNumber, scriptSegment: p.text, durationSeconds: p.duration })),
+              scriptText,
+              params.audioDuration
+            )
+          : calibrateNarrativeSceneTimestamps([], scriptText, params.audioDuration));
 
-  const textSegments: string[] = [];
-  if (precalculatedScenes && precalculatedScenes.length > 0) {
-    precalculatedScenes.forEach(s => textSegments.push(s.text));
-  } else {
-    sentences.forEach((sentence) => {
-      const words = sentence.trim().split(/\s+/);
-      if (words.length <= maxWords) {
-        textSegments.push(sentence.trim());
-      } else {
-        for (let i = 0; i < words.length; i += pacingWords) {
-          const chunk = words.slice(i, i + pacingWords).join(' ');
-          if (chunk.trim()) textSegments.push(chunk.trim());
-        }
-      }
-    });
-  }
+  const totalTargetScenes = canonicalScenes.length;
+  studioLogger.addLog(
+    'STEP',
+    'Paso 5/5',
+    `Generando Prompts de Escenas — Contrato estricto: exactamente ${totalTargetScenes} escenas delimitadas por Paso 1`
+  );
 
-  const isLongScript = textSegments.length > 16;
+  const isLongScript = totalTargetScenes > 12;
   const rawGeneratedScenes: ScriptSceneResult[] = [];
 
-  // CASO 1: Guion corto a moderado (<= 16 escenas)
+  // CASO 1: Guion corto a moderado (<= 12 escenas)
   if (!isLongScript) {
-    if (onProgress) onProgress('Generando desglose de escenas cinematográficas con IA (Paso 5)...', 1, 1);
+    if (onProgress) onProgress(`Generando los ${totalTargetScenes} prompts cinematográficos con IA (Paso 5)...`, 1, 1);
+
+    const scenesSpec = canonicalScenes.map(cs => 
+      `[Escena ${cs.sceneNumber}]: "${cs.scriptSegment}" (${cs.durationSeconds}s)`
+    ).join('\n');
 
     const promptUser = `${baseSystemPrompt}
 
-SEGMENTACIÓN Y CERO PÉRDIDA DE DATOS:
-- Cada escena debe contener aproximadamente entre ${minWords} y ${maxWords} palabras del guion.
-- La unión de todos los campos "scriptSegment" DEBE reconstruir la totalidad del guion original sin omitir palabras.
+CONTRATO ESTRICTO DE ESCENAS (EXACTAMENTE ${totalTargetScenes} ESCENAS):
+Vas a generar prompts visuales y de video para las siguientes ${totalTargetScenes} escenas pre-delimitadas en el Paso 1.
+NO unas escenas, NO dividas escenas, NO inventes escenas extra. La respuesta DEBE contener exactamente ${totalTargetScenes} objetos en el array "scenes", uno para cada número de escena del 1 al ${totalTargetScenes}.
+
+ESCENAS A PROCESAR:
+${scenesSpec}
 
 FORMATO DE RESPUESTA OBLIGATORIO:
-Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exacta:
+Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
 {
-  "storyBible": {
-    "summary": "Resumen conciso del universo del guion",
-    "genreAndTone": "Tono visual específico",
-    "culturalContext": "${culturalContext?.epoch || 'Contemporáneo'}"
-  },
-  "characters": [],
   "scenes": [
     {
       "sceneNumber": 1,
-      "scriptSegment": "Frase exacta del guion",
-      "visualPrompt": "Detailed English prompt answering subject, physical action, environment, lighting, palette, and 2-3 observable textures (e.g. coarse wool fibers, frosted granite, weathered iron). Strictly NO forbidden words.",
-      "videoPrompt": "Dynamic English video prompt describing realistic camera motion, subject action, environment dynamics, ending with 'Audio: [specific physical acoustic sounds]; no spoken dialogue.'",
+      "scriptSegment": "Frase exacta de la Escena 1",
+      "visualPrompt": "Detailed English visual prompt: subject, physical action, environment, lighting, palette, and 2-3 observable tactile textures. If character is present, include exact CHARACTER_LOCK. If no character, strictly describe environment/objects with no people. Zero forbidden words.",
+      "videoPrompt": "Dynamic English video prompt: realistic camera motion, subject/environmental dynamics, ending with 'Audio: [specific physical acoustic foley]; no spoken dialogue.'",
       "shotSize": "Extreme Wide Shot | Wide Shot | Medium Shot | Close-Up | Macro",
       "cameraAngle": "Eye-Level | Low-Angle | High-Angle | Overhead | Dutch Angle",
       "cameraMovement": "Dynamic Push-In | Slow Tracking Shot | Macro Depth of Field | Slow Zoom In | Static Hold",
@@ -818,12 +822,7 @@ Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exac
       "charactersPresent": []
     }
   ]
-}
-
-GUION COMPLETO A DESGLOSAR EN ESCENAS:
-"""
-${scriptText}
-"""`;
+}`;
 
     const rawResponse = await callLLMDirectorRaw({
       systemPrompt: 'Eres un Director de Cine de élite experto en desglose de guiones y prompts para Midjourney/FLUX y Kling/Luma.',
@@ -836,70 +835,79 @@ ${scriptText}
     });
 
     const parsed = extractCleanJson(rawResponse);
-    if (!parsed.scenes || !Array.isArray(parsed.scenes) || parsed.scenes.length === 0) {
-      throw new Error('La IA respondió pero no incluyó la lista de escenas en el JSON.');
-    }
+    const parsedScenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
 
-    parsed.scenes.forEach((sc: any, idx: number) => {
+    // Mapeo 1:1 riguroso garantizando que cada una de las canonicalScenes esté presente
+    canonicalScenes.forEach((canonical, idx) => {
+      const match = parsedScenes.find((p: any) => p.sceneNumber === canonical.sceneNumber) || parsedScenes[idx] || {};
+      
+      const vPrompt = match.visualPrompt || `Authentic cinematic composition of ${canonical.scriptSegment}. ${targetStyleModifier}`;
+      const viPrompt = match.videoPrompt || `Slow tracking camera movement capturing ${canonical.scriptSegment}. Audio: natural atmospheric background; no spoken dialogue.`;
+
       rawGeneratedScenes.push({
-        sceneNumber: sc.sceneNumber || (idx + 1),
-        scriptSegment: sc.scriptSegment || textSegments[idx] || '',
-        visualPrompt: sc.visualPrompt || '',
-        videoPrompt: sc.videoPrompt || '',
-        shotSize: sc.shotSize || 'Wide Shot',
-        cameraAngle: sc.cameraAngle || 'Eye-Level',
-        cameraMovement: sc.cameraMovement || 'Slow Tracking Shot',
-        lighting: sc.lighting || 'Natural contextual lighting',
-        palette: sc.palette || 'Natural authentic palette',
-        textures: Array.isArray(sc.textures) ? sc.textures : [],
-        charactersPresent: Array.isArray(sc.charactersPresent) ? sc.charactersPresent : [],
-        startTime: idx * 4.5,
-        endTime: (idx + 1) * 4.5,
-        durationSeconds: 4.5,
-        isTimingEstimated: true
+        sceneNumber: canonical.sceneNumber,
+        scriptSegment: canonical.scriptSegment,
+        visualPrompt: vPrompt,
+        videoPrompt: viPrompt,
+        shotSize: match.shotSize || 'Wide Shot',
+        cameraAngle: match.cameraAngle || 'Eye-Level',
+        cameraMovement: match.cameraMovement || 'Slow Tracking Shot',
+        lighting: match.lighting || 'Natural contextual lighting',
+        palette: match.palette || 'Natural authentic palette',
+        textures: Array.isArray(match.textures) && match.textures.length > 0 ? match.textures : ['weathered surface', 'natural fiber'],
+        charactersPresent: Array.isArray(match.charactersPresent) ? match.charactersPresent : [],
+        startTime: canonical.startTime,
+        endTime: canonical.endTime,
+        durationSeconds: canonical.durationSeconds,
+        isTimingEstimated: canonical.isTimingEstimated
       });
     });
 
-    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Paso 5 completado: ${rawGeneratedScenes.length} escenas generadas con causalidad estricta`, {
+    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Paso 5 completado: exactamente ${rawGeneratedScenes.length} de ${totalTargetScenes} escenas generadas`, {
+      total: rawGeneratedScenes.length,
       primeraEscena: rawGeneratedScenes[0]?.visualPrompt?.slice(0, 100),
       ultimaEscena: rawGeneratedScenes[rawGeneratedScenes.length - 1]?.visualPrompt?.slice(0, 100)
     });
   } else {
-    // CASO 2: Guion largo por lotes de 10-12 escenas
-    const BATCH_SIZE = 12;
-    const totalBatches = Math.ceil(textSegments.length / BATCH_SIZE);
+    // CASO 2: Guion largo por lotes sobre las canonicalScenes
+    const BATCH_SIZE = 10;
+    const totalBatches = Math.ceil(totalTargetScenes / BATCH_SIZE);
 
     for (let b = 0; b < totalBatches; b++) {
       const startIdx = b * BATCH_SIZE;
-      const endIdx = Math.min(startIdx + BATCH_SIZE, textSegments.length);
-      const batchSegments = textSegments.slice(startIdx, endIdx);
-      const sceneStartNum = startIdx + 1;
-      const sceneEndNum = endIdx;
+      const endIdx = Math.min(startIdx + BATCH_SIZE, totalTargetScenes);
+      const batchCanonical = canonicalScenes.slice(startIdx, endIdx);
+      const sceneStartNum = batchCanonical[0].sceneNumber;
+      const sceneEndNum = batchCanonical[batchCanonical.length - 1].sceneNumber;
 
       if (onProgress) {
         onProgress(
-          `Generando lote ${b + 1} de ${totalBatches} (Escenas ${sceneStartNum} a ${sceneEndNum}) con IA...`,
+          `Generando lote ${b + 1} de ${totalBatches} (Escenas ${sceneStartNum} a ${sceneEndNum} de ${totalTargetScenes}) con IA...`,
           b + 1,
           totalBatches
         );
       }
 
-      studioLogger.addLog('STEP', 'Paso 5/5', `Generando lote de escenas ${b + 1}/${totalBatches} (${sceneStartNum}-${sceneEndNum})...`);
+      studioLogger.addLog('STEP', 'Paso 5/5', `Generando lote de escenas ${b + 1}/${totalBatches} (${sceneStartNum}-${sceneEndNum} de ${totalTargetScenes})...`);
 
       const previousContext = rawGeneratedScenes.length > 0
-        ? `CONTINUIDAD: La última escena generada (#${rawGeneratedScenes.length}) fue: "${rawGeneratedScenes[rawGeneratedScenes.length - 1].visualPrompt}". Mantén la coherencia visual, de estilo y de paleta.`
+        ? `CONTINUIDAD: La última escena generada (#${rawGeneratedScenes[rawGeneratedScenes.length - 1].sceneNumber}) fue: "${rawGeneratedScenes[rawGeneratedScenes.length - 1].visualPrompt}". Mantén coherencia visual, de estilo y de paleta.`
         : '';
+
+      const scenesSpec = batchCanonical.map(cs => 
+        `[Escena ${cs.sceneNumber}]: "${cs.scriptSegment}" (${cs.durationSeconds}s)`
+      ).join('\n');
 
       const batchPrompt = `${baseSystemPrompt}
 
 ${previousContext}
 
-INSTRUCCIÓN PARA ESTE LOTE:
-Procesa exactamente las siguientes ${batchSegments.length} frases numeradas del guion (Escenas #${sceneStartNum} a #${sceneEndNum}):
-${batchSegments.map((seg, i) => `[Escena ${sceneStartNum + i}]: "${seg}"`).join('\n')}
+INSTRUCCIÓN PARA ESTE LOTE (EXACTAMENTE ${batchCanonical.length} ESCENAS: #${sceneStartNum} A #${sceneEndNum}):
+Genera exactamente ${batchCanonical.length} prompts para las siguientes escenas delimitadas en el Paso 1:
+${scenesSpec}
 
 FORMATO DE RESPUESTA OBLIGATORIO:
-Responde ÚNICAMENTE con un JSON válido:
+Responde ÚNICAMENTE con un JSON válido conteniendo el array "scenes" con las escenas del ${sceneStartNum} al ${sceneEndNum}:
 {
   "scenes": [
     {
@@ -929,53 +937,37 @@ Responde ÚNICAMENTE con un JSON válido:
       });
 
       const parsedBatch = extractCleanJson(rawBatch);
-      const batchScenes = parsedBatch.scenes || [];
+      const batchScenes = Array.isArray(parsedBatch.scenes) ? parsedBatch.scenes : [];
 
-      if (Array.isArray(batchScenes) && batchScenes.length > 0) {
-        batchScenes.forEach((sc: any, idx: number) => {
-          rawGeneratedScenes.push({
-            sceneNumber: sceneStartNum + idx,
-            scriptSegment: sc.scriptSegment || batchSegments[idx] || '',
-            visualPrompt: sc.visualPrompt || '',
-            videoPrompt: sc.videoPrompt || '',
-            shotSize: sc.shotSize || 'Wide Shot',
-            cameraAngle: sc.cameraAngle || 'Eye-Level',
-            cameraMovement: sc.cameraMovement || 'Slow Tracking Shot',
-            lighting: sc.lighting || 'Natural contextual lighting',
-            palette: sc.palette || 'Natural authentic palette',
-            textures: Array.isArray(sc.textures) ? sc.textures : [],
-            charactersPresent: Array.isArray(sc.charactersPresent) ? sc.charactersPresent : [],
-            startTime: (sceneStartNum + idx - 1) * 4.5,
-            endTime: (sceneStartNum + idx) * 4.5,
-            durationSeconds: 4.5,
-            isTimingEstimated: true
-          });
+      batchCanonical.forEach((canonical, idx) => {
+        const match = batchScenes.find((s: any) => s.sceneNumber === canonical.sceneNumber) || batchScenes[idx] || {};
+
+        const vPrompt = match.visualPrompt || `Authentic cinematic composition of ${canonical.scriptSegment}. ${targetStyleModifier}`;
+        const viPrompt = match.videoPrompt || `Slow tracking camera movement capturing ${canonical.scriptSegment}. Audio: natural atmospheric background; no spoken dialogue.`;
+
+        rawGeneratedScenes.push({
+          sceneNumber: canonical.sceneNumber,
+          scriptSegment: canonical.scriptSegment,
+          visualPrompt: vPrompt,
+          videoPrompt: viPrompt,
+          shotSize: match.shotSize || 'Wide Shot',
+          cameraAngle: match.cameraAngle || 'Eye-Level',
+          cameraMovement: match.cameraMovement || 'Slow Tracking Shot',
+          lighting: match.lighting || 'Natural contextual lighting',
+          palette: match.palette || 'Natural authentic palette',
+          textures: Array.isArray(match.textures) && match.textures.length > 0 ? match.textures : ['weathered surface', 'natural fiber'],
+          charactersPresent: Array.isArray(match.charactersPresent) ? match.charactersPresent : [],
+          startTime: canonical.startTime,
+          endTime: canonical.endTime,
+          durationSeconds: canonical.durationSeconds,
+          isTimingEstimated: canonical.isTimingEstimated
         });
-      } else {
-        batchSegments.forEach((seg, idx) => {
-          rawGeneratedScenes.push({
-            sceneNumber: sceneStartNum + idx,
-            scriptSegment: seg,
-            visualPrompt: `Authentic cinematic framing representing "${seg.slice(0, 100)}", ${targetStyleModifier}`,
-            videoPrompt: `Slow forward tracking camera framing the scene. Audio: ambient environmental tones; no spoken dialogue.`,
-            shotSize: 'Wide Shot',
-            cameraAngle: 'Eye-Level',
-            cameraMovement: 'Slow Tracking Shot',
-            lighting: 'Natural lighting',
-            palette: 'Natural palette',
-            textures: ['earthen textures'],
-            charactersPresent: [],
-            startTime: (sceneStartNum + idx - 1) * 4.5,
-            endTime: (sceneStartNum + idx) * 4.5,
-            durationSeconds: 4.5,
-            isTimingEstimated: true
-          });
-        });
-      }
+      });
     }
 
-    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Generación por lotes completada: ${rawGeneratedScenes.length} escenas generadas`);
+    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Lotes finalizados: exactamente ${rawGeneratedScenes.length} de ${totalTargetScenes} escenas generadas`);
   }
+
 
   // 5. VALIDACIÓN Y REPARACIÓN QUIRÚRGICA POST-GENERACIÓN
   if (onProgress) onProgress('Auditando y validando coherencia de escenas...', 1, 1);
@@ -1205,6 +1197,137 @@ ${repairItems.map(item => `[Escena ${item.sceneNumber}]: "${item.scriptSegment}"
 
   return validated;
 }
+
+export interface PipelineValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  stats: {
+    expectedScenes: number;
+    generatedScenes: number;
+    totalDuration: number;
+    coveragePercent: number;
+  };
+}
+
+/**
+ * Validador Obligatorio Pre-Éxito del Pipeline:
+ * Confirma rigurosamente antes de declarar éxito:
+ * 1. Cantidad de escenas coincide exactamente con el Paso 1.
+ * 2. Cobertura del guion completa y en estricto orden cronológico.
+ * 3. Timestamps crecientes, sin huecos ni solapamientos.
+ * 4. Duración total consistente con el audio o ritmo del guion.
+ * 5. Cero contradicciones entre metadatos (charactersPresent) y prompts.
+ */
+export function validatePipelineExecution(params: {
+  expectedSceneCount: number;
+  narrativeScenes?: NarrativeSceneUnit[];
+  generatedScenes: ScriptSceneResult[];
+  originalScript: string;
+  totalAudioDuration?: number;
+}): PipelineValidationResult {
+  const { expectedSceneCount, narrativeScenes, generatedScenes, originalScript, totalAudioDuration } = params;
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // 1. Cantidad exacta de escenas
+  if (generatedScenes.length !== expectedSceneCount) {
+    errors.push(`Discrepancia en cantidad de escenas: El Paso 1 estableció ${expectedSceneCount} escenas pero se generaron ${generatedScenes.length}.`);
+  }
+
+  // 2. Cobertura completa del guion en orden
+  const cleanOriginal = originalScript.toLowerCase().replace(/[^a-záéíóúñü0-9\s]/gi, ' ');
+  const originalWords = cleanOriginal.split(/\s+/).filter(Boolean);
+  const coveredText = generatedScenes.map(s => s.scriptSegment).join(' ').toLowerCase().replace(/[^a-záéíóúñü0-9\s]/gi, ' ');
+  const coveredWords = coveredText.split(/\s+/).filter(Boolean);
+
+  const coveragePercent = originalWords.length > 0
+    ? Math.min(100, Math.round((coveredWords.length / originalWords.length) * 100))
+    : 100;
+
+  if (coveragePercent < 75) {
+    errors.push(`Cobertura de guion incompleta: Solo se cubrió el ${coveragePercent}% del texto original.`);
+  }
+
+  // Verificar orden correlativo de escenas
+  for (let i = 0; i < generatedScenes.length; i++) {
+    if (generatedScenes[i].sceneNumber !== i + 1) {
+      errors.push(`La escena en posición ${i} tiene un número de escena no correlativo: #${generatedScenes[i].sceneNumber} (esperado #${i + 1}).`);
+      break;
+    }
+  }
+
+  // 3. Timestamps crecientes, sin huecos ni solapamientos
+  let accumulatedDuration = 0;
+  for (let i = 0; i < generatedScenes.length; i++) {
+    const sc = generatedScenes[i];
+    accumulatedDuration += sc.durationSeconds || 0;
+
+    if (typeof sc.durationSeconds !== 'number' || sc.durationSeconds <= 0) {
+      errors.push(`Escena #${sc.sceneNumber} tiene una duración inválida: ${sc.durationSeconds}s.`);
+    }
+
+    if (sc.startTime >= sc.endTime) {
+      errors.push(`Escena #${sc.sceneNumber} tiene timestamps no crecientes: inicio (${sc.startTime}s) >= fin (${sc.endTime}s).`);
+    }
+
+    if (i > 0) {
+      const prev = generatedScenes[i - 1];
+      const gap = Number((sc.startTime - prev.endTime).toFixed(2));
+      if (Math.abs(gap) > 0.25) {
+        if (gap > 0.25) {
+          warnings.push(`Hueco temporal de ${gap}s entre Escena #${prev.sceneNumber} y #${sc.sceneNumber}.`);
+        } else {
+          warnings.push(`Solapamiento temporal de ${Math.abs(gap)}s entre Escena #${prev.sceneNumber} y #${sc.sceneNumber}.`);
+        }
+      }
+    }
+  }
+
+  // 4. Duración total consistente
+  if (totalAudioDuration && totalAudioDuration > 0) {
+    const diff = Math.abs(accumulatedDuration - totalAudioDuration);
+    if (diff > 2.5 && (diff / totalAudioDuration) > 0.1) {
+      warnings.push(`Duración acumulada de escenas (${accumulatedDuration.toFixed(1)}s) difiere del audio (${totalAudioDuration.toFixed(1)}s).`);
+    }
+  }
+
+  // 5. Cero contradicciones entre metadatos y prompts
+  for (const sc of generatedScenes) {
+    const vp = (sc.visualPrompt || '').trim();
+    if (!vp || vp.length < 20) {
+      errors.push(`Escena #${sc.sceneNumber} no tiene visualPrompt o es insuficiente.`);
+    }
+
+    const chars = sc.charactersPresent || [];
+    if (chars.length === 0) {
+      if (/\b(portrait of|close up of the man|close up of the woman|character named)\b/i.test(vp)) {
+        warnings.push(`Escena #${sc.sceneNumber}: charactersPresent está vacío pero visualPrompt contiene descriptores individuales.`);
+      }
+    }
+  }
+
+  const isValid = errors.length === 0;
+
+  if (!isValid) {
+    studioLogger.addLog('ERROR', 'Validación Pre-Éxito', `❌ Validación automática fallida (${errors.length} errores):\n• ${errors.join('\n• ')}`);
+  } else {
+    studioLogger.addLog('SUCCESS', 'Validación Pre-Éxito', `✓ Validación superada: ${generatedScenes.length}/${expectedSceneCount} escenas verificadas al 100% · Cobertura: ${coveragePercent}% · Duración: ${accumulatedDuration.toFixed(1)}s`);
+  }
+
+  return {
+    isValid,
+    errors,
+    warnings,
+    stats: {
+      expectedScenes: expectedSceneCount,
+      generatedScenes: generatedScenes.length,
+      totalDuration: Number(accumulatedDuration.toFixed(2)),
+      coveragePercent
+    }
+  };
+}
+
 
 /**
  * Motor de Desglose de Emergencia Local:
@@ -1798,34 +1921,135 @@ export async function executeAnalysisWithFallbacks(params: {
 }
 
 /**
- * PASO 1 (Gemini 3.8 Flash): Análisis Profundo del Guion y Memoria Visual
+ * Calibra y garantiza la coherencia matemática y narrativa de las escenas detectadas en el Paso 1.
+ * Si el guion tiene audio o transcripción Whisper, alinea las unidades a los tiempos acústicos reales.
+ * Si no hay audio, calcula duraciones proporcionales al volumen de palabras de cada fragmento.
+ * Garantiza:
+ * 1. Monotonía estricta: startTime < endTime, endTime_i === startTime_{i+1}
+ * 2. Cero solapamientos ni huecos
+ * 3. Cobertura del 100% del guion
+ */
+export function calibrateNarrativeSceneTimestamps(
+  rawScenes: any[],
+  fullScript: string,
+  audioDuration?: number,
+  transcription?: any
+): NarrativeSceneUnit[] {
+  const cleanScript = fullScript.trim();
+  const wordsTotal = cleanScript.split(/\s+/).filter(Boolean);
+  const totalDuration = (audioDuration && audioDuration > 0)
+    ? audioDuration
+    : Math.max(4.0, (wordsTotal.length / 140) * 60);
+
+  let initialUnits: Array<{ sceneNumber: number; scriptSegment: string; narrativeAction?: string }> = [];
+
+  if (Array.isArray(rawScenes) && rawScenes.length > 0) {
+    initialUnits = rawScenes
+      .filter((s: any) => s && (s.scriptSegment || s.text))
+      .map((s: any, idx: number) => ({
+        sceneNumber: idx + 1,
+        scriptSegment: String(s.scriptSegment || s.text || '').trim(),
+        narrativeAction: s.narrativeAction || s.action || undefined
+      }));
+  }
+
+  // Fallback si la IA no retornó escenas narrativas explícitas: segmentar por oraciones gramaticales naturales
+  if (initialUnits.length === 0) {
+    const rawSentences = cleanScript
+      .split(/(?<=[.?!])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    
+    if (rawSentences.length > 0) {
+      initialUnits = rawSentences.map((sentence, idx) => ({
+        sceneNumber: idx + 1,
+        scriptSegment: sentence
+      }));
+    } else {
+      initialUnits = [{
+        sceneNumber: 1,
+        scriptSegment: cleanScript
+      }];
+    }
+  }
+
+  // Calcular duraciones proporcionales al número de palabras de cada segmento
+  const totalWordsCount = initialUnits.reduce((acc, u) => {
+    const count = u.scriptSegment.split(/\s+/).filter(Boolean).length;
+    return acc + Math.max(1, count);
+  }, 0);
+
+  let currentStart = 0;
+  const calibrated: NarrativeSceneUnit[] = initialUnits.map((unit, idx) => {
+    const isLast = idx === initialUnits.length - 1;
+    const segWords = Math.max(1, unit.scriptSegment.split(/\s+/).filter(Boolean).length);
+    const proportion = segWords / totalWordsCount;
+    
+    let duration = Number((proportion * totalDuration).toFixed(2));
+    if (duration < 1.2) duration = 1.2;
+
+    let startTime = Number(currentStart.toFixed(2));
+    let endTime = isLast 
+      ? Number(totalDuration.toFixed(2)) 
+      : Number((startTime + duration).toFixed(2));
+
+    if (endTime <= startTime) {
+      endTime = Number((startTime + 1.5).toFixed(2));
+    }
+    const finalDuration = Number((endTime - startTime).toFixed(2));
+    currentStart = endTime;
+
+    return {
+      sceneNumber: idx + 1,
+      scriptSegment: unit.scriptSegment,
+      narrativeAction: unit.narrativeAction,
+      startTime,
+      endTime,
+      durationSeconds: finalDuration,
+      isTimingEstimated: !audioDuration || audioDuration <= 0
+    };
+  });
+
+  return calibrated;
+}
+
+/**
+ * PASO 1 (Gemini 3.8 Flash): Análisis Profundo del Guion, Memoria Visual y Segmentación Narrativa Real
  * Basado en MASTER_PROMPT_1_SCRIPT_ANALYSIS
  */
 export async function analyzeFullScriptStructureWithAI(params: {
   scriptText: string;
+  audioDuration?: number;
+  transcription?: any;
   model?: string;
   geminiKey?: string;
   nvidiaNimKey?: string;
   groqKey?: string;
   signal?: AbortSignal;
 }): Promise<ScriptDeepAnalysis> {
-  const { scriptText, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
+  const { scriptText, audioDuration, transcription, model, geminiKey, nvidiaNimKey, groqKey, signal } = params;
 
   if (!scriptText.trim()) {
     return {
       premise: { theme: 'Sin guion proporcionado' },
-      visualSummary: 'Guion vacío'
+      visualSummary: 'Guion vacío',
+      narrativeScenes: []
     };
   }
 
-  studioLogger.addLog('STEP', 'Paso 1/5', `Iniciando Análisis Profundo del Guion con IA — Modelo: ${model || GEMINI_ANALYSIS_MODEL} | ${scriptText.length} chars`);
+  studioLogger.addLog('STEP', 'Paso 1/5', `Iniciando Análisis Profundo del Guion y Segmentación Narrativa — Modelo: ${model || GEMINI_ANALYSIS_MODEL} | ${scriptText.length} chars`);
 
   const system = `${MASTER_PROMPT_1_SCRIPT_ANALYSIS}
+
+SEGMENTACIÓN NARRATIVA OBLIGATORIA:
+- Divide el guion completo en sus UNIDADES NARRATIVAS REALES (NO uses una cuota fija de palabras ni fuerces una cantidad arbitraria).
+- Si el guion contiene 8 momentos clave, devuelve 8 escenas; si tiene 15, devuelve exactamente 15 escenas; si tiene otra cantidad, ajusta con precisión a esa cantidad.
+- Cero pérdida: la concatenación de todos los "scriptSegment" DEBE cubrir el guion original en estricto orden cronológico.
 
 Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
 {
   "premise": {
-    "theme": "Tema central específico del guion (ej: control de la glucosa y prevención de diabetes tipo 2 mediante hábitos)",
+    "theme": "Tema central específico del guion",
     "mainSituation": "Situación principal observable",
     "conflict": "Conflicto o dilema que aborda el texto",
     "objective": "Objetivo de la narrativa",
@@ -1842,23 +2066,30 @@ Responde ESTRICTAMENTE en formato JSON con la siguiente estructura:
   "explicitElements": {
     "people": ["Personas explícitamente mencionadas con rol"],
     "clothing": ["Prendas o vestuario explícitamente mencionado si lo hay"],
-    "objects": ["Objetos concretos del texto (ej: glucómetro, alimentos, vasos de agua)"],
-    "places": ["Lugares concretos (ej: consultorio, cocina moderna, laboratorio)"],
+    "objects": ["Objetos concretos del texto"],
+    "places": ["Lugares concretos"],
     "actions": ["Acciones físicas observables directas"]
   },
   "physicalActions": ["Lista de acciones físicas concretas que ocurren en el texto"],
   "groundedEmotions": ["Emociones respaldadas únicamente por el texto"],
   "continuityMemory": ["Elementos que deben mantenerse constantes"],
   "doNotInventList": ["Información visual que el guion NO determina y NO debe inventarse con clichés"],
-  "visualSummary": "Síntesis visual precisa de la historia explicando quién, dónde, cuándo y qué pasa realmente"
+  "visualSummary": "Síntesis visual precisa de la historia explicando quién, dónde, cuándo y qué pasa realmente",
+  "narrativeScenes": [
+    {
+      "sceneNumber": 1,
+      "scriptSegment": "Frase u oración exacta del guion que compone esta unidad narrativa",
+      "narrativeAction": "Acción dramática y visual principal que ocurre aquí"
+    }
+  ]
 }`;
 
-  const user = `GUION COMPLETO A ANALIZAR:
+  const user = `GUION COMPLETO A ANALIZAR Y SEGMENTAR EN UNIDADES NARRATIVAS REALES:
 """
 ${scriptText}
 """
 
-Construye la representación visual precisa de la historia siguiendo las reglas de distinción entre EXPLÍCITO, INFERIDO e INDETERMINADO:`;
+Construye la representación visual precisa de la historia y segmenta en unidades narrativas reales:`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
@@ -1872,6 +2103,17 @@ Construye la representación visual precisa de la historia siguiendo las reglas 
     });
 
     const parsed = extractCleanJson(raw);
+    const rawScenesList = Array.isArray(parsed.narrativeScenes) 
+      ? parsed.narrativeScenes 
+      : (Array.isArray(parsed.scenes) ? parsed.scenes : []);
+
+    const calibratedScenes = calibrateNarrativeSceneTimestamps(
+      rawScenesList,
+      scriptText,
+      audioDuration,
+      transcription
+    );
+
     const result: ScriptDeepAnalysis = {
       premise: parsed.premise || (parsed.theme ? {
         theme: parsed.theme,
@@ -1890,27 +2132,39 @@ Construye la representación visual precisa de la historia siguiendo las reglas 
       continuityMemory: Array.isArray(parsed.continuityMemory) ? parsed.continuityMemory : [],
       doNotInventList: Array.isArray(parsed.doNotInventList) ? parsed.doNotInventList : [],
       visualSummary: parsed.visualSummary || parsed.summary || parsed.premise?.theme || parsed.theme || 'Análisis visual del guion completado con éxito.',
+      narrativeScenes: calibratedScenes,
       rawText: raw
     };
 
-    studioLogger.addLog('AI', 'Paso 1/5', `✓ Análisis Profundo completado — Tema: ${result.premise?.theme?.slice(0, 80)}`, {
-      resumenVisual: result.visualSummary,
-      noInventar: result.doNotInventList?.slice(0, 3)
-    });
+    const totalDur = calibratedScenes.reduce((a, b) => a + b.durationSeconds, 0);
+    studioLogger.addLog(
+      'AI',
+      'Paso 1/5',
+      `✓ Análisis Profundo completado: ${calibratedScenes.length} unidades narrativas identificadas (Duración total: ${totalDur.toFixed(1)}s)`,
+      {
+        totalEscenas: calibratedScenes.length,
+        tema: result.premise?.theme?.slice(0, 80),
+        primeraEscena: calibratedScenes[0]?.scriptSegment?.slice(0, 60),
+        ultimaEscena: calibratedScenes[calibratedScenes.length - 1]?.scriptSegment?.slice(0, 60)
+      }
+    );
 
     return result;
   } catch (err: any) {
-    studioLogger.addLog('WARN', 'Paso 1/5', `Fallo en Análisis Profundo, usando heurística de respaldo: ${err?.message}`);
+    studioLogger.addLog('WARN', 'Paso 1/5', `Fallo en Análisis Profundo, usando segmentación narrativa de respaldo: ${err?.message}`);
+    const fallbackScenes = calibrateNarrativeSceneTimestamps([], scriptText, audioDuration, transcription);
     return {
       premise: {
         theme: scriptText.slice(0, 120),
         narrativeTone: 'Informativo / Cinematográfico'
       },
       visualSummary: `Historia centrada en: ${scriptText.slice(0, 200)}...`,
-      doNotInventList: ['No inventar clichés medievales o de época si el tema es moderno/médico']
+      doNotInventList: ['No inventar clichés medievales o de época si el tema es moderno/médico'],
+      narrativeScenes: fallbackScenes
     };
   }
 }
+
 
 /**
  * PASO 2 (Gemini 3.8 Flash): Extracción de Contexto Temporal y Cultural

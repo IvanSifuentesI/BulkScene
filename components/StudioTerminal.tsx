@@ -171,8 +171,9 @@ export const StudioTerminal: React.FC<StudioTerminalProps> = ({ initialOpen = fa
                       log.level === 'STEP' ? 'text-purple-300 font-semibold' :
                       log.level === 'WARN' ? 'text-amber-300' : 'text-slate-200'
                     }`}>
-                      {log.message}
+                      {typeof log.message === 'string' ? log.message : JSON.stringify(log.message)}
                     </span>
+
                     {log.details && (
                       <pre className="mt-1 p-2 rounded-lg bg-black/60 border border-white/[0.05] text-[10px] text-slate-400 overflow-x-auto whitespace-pre-wrap">
                         {typeof log.details === 'string' ? log.details : JSON.stringify(log.details, null, 2)}

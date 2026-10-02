@@ -20,7 +20,8 @@ import {
   Info,
   ChevronDown,
   HelpCircle,
-  Copy
+  Copy,
+  FileCode
 } from 'lucide-react';
 import { 
   SceneSlot, 
@@ -40,6 +41,7 @@ import {
   formatErrorForClipboard 
 } from '../services/errorTelemetryService';
 import { requireSubscription } from '../services/subscriptionService';
+import { parseMasterStudioHtml } from '../services/htmlProjectExportService';
 
 interface BulkSceneGeneratorProps {
   slots: SceneSlot[];
@@ -189,6 +191,62 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
     if (isBatchRunning) return;
     setRawPromptsInput('');
     setSlots([]);
+  };
+
+  const [htmlImportFeedback, setHtmlImportFeedback] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleUploadHtmlClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleHtmlFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseMasterStudioHtml(text);
+      if (!parsed.visualPrompts || parsed.visualPrompts.length === 0) {
+        alert('No se encontraron prompts en el archivo HTML seleccionado.');
+        return;
+      }
+
+      // Asignar texto de prompts al área de texto
+      const rawText = parsed.visualPrompts.join('\n\n');
+      setRawPromptsInput(rawText);
+
+      // Crear slots para el generador con numeración secuencial
+      const newSlots: SceneSlot[] = parsed.scenes.map((scene, idx) => {
+        const seq = idx + 1;
+        const padded = String(seq).padStart(3, '0');
+        const promptText = (scene.visualPrompt || '').trim();
+        return {
+          id: `slot-${padded}-${Date.now() + idx}`,
+          sequenceNumber: seq,
+          paddedNumber: padded,
+          rawPrompt: promptText,
+          compiledPrompt: compilePromptString(promptText, activeCharacter, activeStyle),
+          status: 'idle',
+          seed: 100000 + Math.floor(Math.random() * 899999),
+        };
+      });
+
+      setSlots(newSlots);
+
+      if (parsed.projectName && parsed.projectName !== 'Proyecto Importado' && setProjectName) {
+        setProjectName(parsed.projectName);
+      }
+
+      setHtmlImportFeedback(`✅ ¡${parsed.scenes.length} escenas importadas exitosamente desde ${file.name}!`);
+      setTimeout(() => setHtmlImportFeedback(null), 5000);
+    } catch (err: any) {
+      console.error('Error importando HTML:', err);
+      alert(`Error al importar el archivo HTML: ${err?.message || 'Formato no reconocido'}`);
+    }
   };
 
   const handleCharacterChange = (newCharId?: string) => {
@@ -601,11 +659,31 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Input oculto para cargar archivo HTML */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleHtmlFileSelected}
+              accept=".html,text/html"
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={handleUploadHtmlClick}
+              disabled={isBatchRunning}
+              className="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center gap-1.5 border border-cyan-500/30 transition-all cursor-pointer shadow-sm"
+              title="Cargar y autocompletar prompts desde un archivo HTML exportado por Estudio Master"
+            >
+              <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+              <span>📂 Cargar HTML</span>
+            </button>
+
             <button
               type="button"
               onClick={handleLoadSamplePrompts}
               disabled={isBatchRunning}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center gap-1.5 border border-emerald-500/30 transition-all"
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center gap-1.5 border border-emerald-500/30 transition-all cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
               <span>Cargar Ejemplo (10 Escenas)</span>
@@ -632,6 +710,13 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
             </button>
           </div>
         </div>
+
+        {htmlImportFeedback && (
+          <div className="bg-cyan-950/40 border border-cyan-500/40 rounded-xl px-3.5 py-2 text-xs font-mono text-cyan-200 flex items-center gap-2 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>{htmlImportFeedback}</span>
+          </div>
+        )}
 
         <textarea
           value={rawPromptsInput}

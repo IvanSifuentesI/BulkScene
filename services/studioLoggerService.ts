@@ -29,9 +29,13 @@ class StudioLoggerService {
   public addLog(level: LogLevel, stageOrMessage: string, messageOrDetails?: any, details?: any) {
     let stage = 'Sistema';
     let message = '';
-    let finalDetails = details;
+    let finalDetails: any = undefined;
 
-    if (messageOrDetails === undefined) {
+    if (typeof stageOrMessage === 'object' && stageOrMessage !== null) {
+      stage = 'Sistema';
+      message = JSON.stringify(stageOrMessage);
+      finalDetails = messageOrDetails;
+    } else if (messageOrDetails === undefined) {
       // Llamado como addLog(level, message)
       stage = 'Sistema';
       message = String(stageOrMessage || '');
@@ -39,7 +43,7 @@ class StudioLoggerService {
     } else if (typeof messageOrDetails === 'string') {
       // Llamado como addLog(level, stage, message, details)
       stage = String(stageOrMessage || 'Sistema');
-      message = String(messageOrDetails || '');
+      message = messageOrDetails;
       finalDetails = details;
     } else {
       // Llamado como addLog(level, message, detailsObject)
@@ -48,9 +52,10 @@ class StudioLoggerService {
       finalDetails = messageOrDetails;
     }
 
-    if (!message) {
-      message = String(stageOrMessage || 'Sin mensaje especificado');
+    if (!message || typeof message !== 'string') {
+      message = typeof message === 'object' ? JSON.stringify(message) : String(stageOrMessage || 'Sin mensaje especificado');
     }
+
 
     const now = new Date();
     const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');

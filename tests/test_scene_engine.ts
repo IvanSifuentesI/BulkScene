@@ -143,8 +143,118 @@ async function runTests() {
   }
   console.log('✓ TEST 4 PASSED: HTML generated successfully with dual prompt architecture and 0 undefined');
 
+  console.log('\n--- TEST 5: calibrateNarrativeSceneTimestamps proportional timing & non-overlapping ---');
+  const { calibrateNarrativeSceneTimestamps, validatePipelineExecution } = await import('../services/llmDirectorService');
+  const { parseMasterStudioHtml } = await import('../services/htmlProjectExportService');
+  const { isIgnorableBrowserNoise } = await import('../services/errorTelemetryService');
+
+  const testScript = 'En el silencio de la tundra ártica, los pinos crujen bajo la helada. Una cabaña de madera desprende una fina columna de humo grisáceo. En el interior, brasas incandescentes crepitan en la chimenea.';
+  const calibrated = calibrateNarrativeSceneTimestamps(
+    [
+      { sceneNumber: 1, scriptSegment: 'En el silencio de la tundra ártica, los pinos crujen bajo la helada.' },
+      { sceneNumber: 2, scriptSegment: 'Una cabaña de madera desprende una fina columna de humo grisáceo.' },
+      { sceneNumber: 3, scriptSegment: 'En el interior, brasas incandescentes crepitan en la chimenea.' }
+    ],
+    testScript,
+    18.0 // Audio de 18 segundos
+  );
+
+  if (calibrated.length !== 3) {
+    throw new Error(`FAILED: Expected 3 calibrated scenes, got ${calibrated.length}`);
+  }
+  let prevEnd = 0;
+  for (const cs of calibrated) {
+    if (cs.startTime < prevEnd - 0.05) throw new Error(`FAILED: Scene ${cs.sceneNumber} overlaps previous`);
+    if (cs.startTime >= cs.endTime) throw new Error(`FAILED: Scene ${cs.sceneNumber} non-increasing timestamps`);
+    if (cs.durationSeconds <= 0) throw new Error(`FAILED: Scene ${cs.sceneNumber} duration <= 0`);
+    prevEnd = cs.endTime;
+  }
+  console.log(`✓ TEST 5 PASSED: ${calibrated.length} scenes calibrated proportionally (0s to ${prevEnd}s)`);
+
+  console.log('\n--- TEST 6: validatePipelineExecution pass & fail cases ---');
+  // Pass case
+  const validScenes: ScriptSceneResult[] = calibrated.map(c => ({
+    sceneNumber: c.sceneNumber,
+    scriptSegment: c.scriptSegment,
+    visualPrompt: `Authentic atmospheric shot of ${c.scriptSegment}, natural diffused overcast light, rough pine bark texture, slate blue tones.`,
+    videoPrompt: 'Slow cinematic push-in. Audio: subtle wind through frosted needles; no spoken dialogue.',
+    durationSeconds: c.durationSeconds,
+    startTime: c.startTime,
+    endTime: c.endTime,
+    charactersPresent: []
+  }));
+
+  const passValidation = validatePipelineExecution({
+    expectedSceneCount: 3,
+    narrativeScenes: calibrated,
+    generatedScenes: validScenes,
+    originalScript: testScript,
+    totalAudioDuration: 18.0
+  });
+
+  if (!passValidation.isValid) {
+    throw new Error(`FAILED: Expected validation to pass but got errors: ${passValidation.errors.join(', ')}`);
+  }
+
+  // Fail case 1: Scene count mismatch
+  const failValidationCount = validatePipelineExecution({
+    expectedSceneCount: 4, // expects 4 but has 3
+    narrativeScenes: calibrated,
+    generatedScenes: validScenes,
+    originalScript: testScript,
+    totalAudioDuration: 18.0
+  });
+  if (failValidationCount.isValid) {
+    throw new Error('FAILED: Expected validation to fail when scene count mismatches!');
+  }
+
+  // Fail case 2: Timestamp inversion
+  const invertedScenes = JSON.parse(JSON.stringify(validScenes));
+  invertedScenes[1].startTime = 10;
+  invertedScenes[1].endTime = 5; // End before start
+  const failValidationTime = validatePipelineExecution({
+    expectedSceneCount: 3,
+    narrativeScenes: calibrated,
+    generatedScenes: invertedScenes,
+    originalScript: testScript,
+    totalAudioDuration: 18.0
+  });
+  if (failValidationTime.isValid) {
+    throw new Error('FAILED: Expected validation to fail when timestamps are inverted!');
+  }
+  console.log('✓ TEST 6 PASSED: Pre-success validation strictly enforces exact count and chronological integrity');
+
+  console.log('\n--- TEST 7: parseMasterStudioHtml re-importing prompts ---');
+  const parsedHtml = parseMasterStudioHtml(html);
+  if (!parsedHtml.scenes || parsedHtml.scenes.length !== cleaned.length) {
+    throw new Error(`FAILED: parseMasterStudioHtml returned ${parsedHtml.scenes?.length} scenes, expected ${cleaned.length}`);
+  }
+  if (!parsedHtml.visualPrompts || parsedHtml.visualPrompts.length !== cleaned.length) {
+    throw new Error('FAILED: parseMasterStudioHtml visualPrompts missing or count mismatch');
+  }
+  if (!parsedHtml.projectName || !parsedHtml.projectName.includes('finlandia')) {
+    throw new Error(`FAILED: parseMasterStudioHtml projectName incorrect: ${parsedHtml.projectName}`);
+  }
+  console.log(`✓ TEST 7 PASSED: ${parsedHtml.scenes.length} scenes and prompts accurately parsed from HTML export`);
+
+  console.log('\n--- TEST 8: isIgnorableBrowserNoise telemetry filter ---');
+  const noisyError1 = new Error('Could not establish connection. Receiving end does not exist.');
+  const noisyError2 = 'Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received';
+  const realError = new Error('Groq API rate limit exceeded 429');
+
+  if (!isIgnorableBrowserNoise(noisyError1)) {
+    throw new Error('FAILED: isIgnorableBrowserNoise failed to filter "receiving end does not exist"');
+  }
+  if (!isIgnorableBrowserNoise(noisyError2)) {
+    throw new Error('FAILED: isIgnorableBrowserNoise failed to filter message channel closed');
+  }
+  if (isIgnorableBrowserNoise(realError)) {
+    throw new Error('FAILED: isIgnorableBrowserNoise falsely suppressed a genuine application error');
+  }
+  console.log('✓ TEST 8 PASSED: Browser extension noise filtered while genuine errors are preserved');
+
   console.log('\n======================================');
-  console.log('🎉 ALL 4 REGRESSION TESTS PASSED 100%!');
+  console.log('🎉 ALL 8 PIPELINE TESTS PASSED 100%!');
   console.log('======================================');
 }
 

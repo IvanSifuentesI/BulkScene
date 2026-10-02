@@ -59,7 +59,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
-      const errorMessage = this.state.error?.message || 'Error inesperado en la interfaz.';
+      const rawMsg = this.state.error?.message;
+      const errorMessage = typeof rawMsg === 'string'
+        ? rawMsg
+        : (rawMsg ? JSON.stringify(rawMsg) : 'Error inesperado en la interfaz.');
 
       return (
         <div className="min-h-screen bg-[#06070a] text-white flex items-center justify-center p-4">
@@ -82,7 +85,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 Detalle del Error:
               </span>
               <p className="text-xs font-mono text-slate-300 break-words">
-                {errorMessage}
+                {typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage)}
               </p>
             </div>
 

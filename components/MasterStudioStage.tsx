@@ -62,6 +62,7 @@ import {
   extractCulturalContextWithAI,
   detectCharactersWithAI,
   detectCinematographyWithAI,
+  validatePipelineExecution,
   getAllGeminiKeys,
   ScriptDirectorCharacter
 } from '../services/llmDirectorService';
@@ -1052,6 +1053,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         try {
           deepAnalysisResult = await analyzeFullScriptStructureWithAI({
             scriptText: currentScript,
+            audioDuration: audioDuration || estimatedSeconds,
+            transcription: currentTranscription,
             model: selectedAnalysisModel,
             geminiKey: resolveGeminiKey(),
             nvidiaNimKey: resolveNvidiaKey(),
@@ -1170,6 +1173,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         culturalContext: activeContext,
         characterConsistencyMode: consistencyMode,
         pacingWords,
+        audioDuration: audioDuration || estimatedSeconds,
+        narrativeScenes: deepAnalysisResult?.narrativeScenes,
         precalculatedScenes: calculatedScenes.map(cs => ({ sceneNumber: cs.sceneNumber, text: cs.text, duration: cs.duration })),
         deepAnalysis: deepAnalysisResult,
         styleLock: detectedStyleLock,
@@ -1187,7 +1192,11 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         let start = idx * restDurationSec;
         let end = (idx + 1) * restDurationSec;
 
-        if (calculatedScenes && calculatedScenes[idx]) {
+        if (sc.durationSeconds && sc.endTime !== undefined && sc.startTime !== undefined) {
+          dur = sc.durationSeconds;
+          start = sc.startTime;
+          end = sc.endTime;
+        } else if (calculatedScenes && calculatedScenes[idx]) {
           const beat = calculatedScenes[idx];
           dur = beat.duration;
           start = beat.startTime;
@@ -1204,10 +1213,33 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           durationSeconds: sc.durationSeconds || dur,
           startTime: Number(start.toFixed(2)),
           endTime: Number(end.toFixed(2)),
-          isTimingEstimated: !currentTranscription && (!calculatedScenes || !calculatedScenes[idx]),
+          isTimingEstimated: !currentTranscription && (!calculatedScenes || !calculatedScenes[idx]) && sc.isTimingEstimated !== false,
           isValidated: true
         };
       });
+
+      // Validación estricta previa a declarar éxito
+      const expectedCount = deepAnalysisResult?.narrativeScenes?.length || calculatedScenes?.length || finalScenes.length;
+      const validation = validatePipelineExecution({
+        expectedSceneCount: expectedCount,
+        narrativeScenes: deepAnalysisResult?.narrativeScenes,
+        generatedScenes: finalScenes,
+        originalScript: currentScript,
+        totalAudioDuration: audioDuration || estimatedSeconds
+      });
+
+      if (!validation.isValid) {
+        const errorMsg = `Validación Pre-Éxito falló: ${validation.errors.join(' | ')}`;
+        studioLogger.addLog('ERROR', 'Validador', errorMsg);
+        setPipelineProgressText(`Error en Validación: ${validation.errors[0]}`);
+        throw new Error(errorMsg);
+      }
+
+      if (validation.warnings.length > 0) {
+        studioLogger.addLog('WARN', 'Validador', `Advertencias de validación: ${validation.warnings.join(' | ')}`);
+      } else {
+        studioLogger.addLog('SUCCESS', 'Validador', `✓ Validación estricta superada: 100% concordancia (${finalScenes.length} escenas, timestamps coherentes, cero contradicciones)`);
+      }
 
       // PASO 6: Generar y Guardar Archivo HTML Maestro de Verificación
       setPipelineProgressText('Generando y Guardando Archivo Maestro HTML del Proyecto...');

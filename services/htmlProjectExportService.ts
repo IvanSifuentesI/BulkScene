@@ -730,6 +730,10 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
       doClipboardCopy(formatted, btn, '✅ ¡' + videoPromptsList.length + ' Prompts de Video Copiados!');
     }
   </script>
+  <!-- BulkScene Project Data Payload for Re-import -->
+  <script id="bulkscene-project-data" type="application/json">
+${JSON.stringify(data).replace(/<\/script>/gi, '<\\/script>')}
+  </script>
 </body>
 </html>`;
 }
@@ -814,5 +818,130 @@ export async function saveMasterStudioHtmlFile(params: {
   }
 
   return { savedToDir, filename };
+}
+
+export interface ParsedMasterStudioHtml {
+  projectName: string;
+  scenes: MasterStudioExportScene[];
+  visualPrompts: string[];
+  videoPrompts: string[];
+  scriptText?: string;
+  characters?: Array<{
+    name: string;
+    role?: string;
+    anchorDescription?: string;
+    clothingAnchor?: string;
+    characterLock?: string;
+    defaultSeed?: number;
+  }>;
+}
+
+/**
+ * Parsea un archivo HTML exportado por Estudio Master para reimportar sus prompts y escenas.
+ * Compatible tanto con archivos que incluyen el tag JSON 'bulkscene-project-data'
+ * como con versiones previas parseadas mediante regex / DOM.
+ */
+export function parseMasterStudioHtml(htmlContent: string): ParsedMasterStudioHtml {
+  if (!htmlContent || typeof htmlContent !== 'string') {
+    throw new Error('El contenido del archivo HTML es inválido o está vacío.');
+  }
+
+  // 1. Intentar extracción directa desde el tag JSON embebido
+  const jsonMatch = htmlContent.match(/<script\s+id=["']bulkscene-project-data["']\s+type=["']application\/json["']>([\s\S]*?)<\/script>/i);
+  if (jsonMatch && jsonMatch[1]) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed && Array.isArray(parsed.scenes) && parsed.scenes.length > 0) {
+        return {
+          projectName: parsed.projectName || 'Proyecto Importado',
+          scenes: parsed.scenes,
+          visualPrompts: parsed.scenes.map((s: any) => (s.visualPrompt || '').trim()).filter(Boolean),
+          videoPrompts: parsed.scenes.map((s: any) => (s.videoPrompt || '').trim()).filter(Boolean),
+          scriptText: parsed.scriptText || '',
+          characters: parsed.characters || []
+        };
+      }
+    } catch (e) {
+      console.warn('[parseMasterStudioHtml] Aviso al parsear script JSON embebido, usando fallback:', e);
+    }
+  }
+
+  // 2. Fallback: Parseo por listas de prompts serializadas en JavaScript
+  let imagePrompts: string[] = [];
+  let videoPrompts: string[] = [];
+  let projectName = 'Proyecto Importado';
+
+  const titleMatch = htmlContent.match(/<title>([^<]+)<\/title>/i);
+  if (titleMatch && titleMatch[1]) {
+    projectName = titleMatch[1].replace(/\s*·\s*BulkScene.*$/i, '').trim();
+  }
+
+  const imgMatch = htmlContent.match(/const\s+imagePromptsList\s*=\s*(\[[\s\S]*?\]);/);
+  if (imgMatch && imgMatch[1]) {
+    try {
+      imagePrompts = JSON.parse(imgMatch[1]);
+    } catch (_) {}
+  }
+
+  const vidMatch = htmlContent.match(/const\s+videoPromptsList\s*=\s*(\[[\s\S]*?\]);/);
+  if (vidMatch && vidMatch[1]) {
+    try {
+      videoPrompts = JSON.parse(vidMatch[1]);
+    } catch (_) {}
+  }
+
+  // 3. Fallback: Parseo por DOM (en navegador)
+  if (imagePrompts.length === 0 && typeof DOMParser !== 'undefined') {
+    try {
+      const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
+      const cards = doc.querySelectorAll('.scene-card');
+      const parsedScenes: MasterStudioExportScene[] = [];
+      cards.forEach((card, idx) => {
+        const scriptEl = card.querySelector('.scene-script-quote');
+        const scriptSegment = scriptEl?.textContent?.replace(/^["“]|["”]$/g, '').trim() || '';
+        const prompts = card.querySelectorAll('.prompt-text-block');
+        const visualPrompt = prompts[0]?.textContent?.trim() || '';
+        const videoPrompt = prompts[1]?.textContent?.trim() || '';
+        if (visualPrompt) {
+          imagePrompts.push(visualPrompt);
+          if (videoPrompt) videoPrompts.push(videoPrompt);
+          parsedScenes.push({
+            sceneNumber: idx + 1,
+            scriptSegment,
+            visualPrompt,
+            videoPrompt
+          });
+        }
+      });
+
+      if (parsedScenes.length > 0) {
+        return {
+          projectName,
+          scenes: parsedScenes,
+          visualPrompts: imagePrompts,
+          videoPrompts,
+          scriptText: parsedScenes.map(s => s.scriptSegment).join(' ')
+        };
+      }
+    } catch (_) {}
+  }
+
+  if (imagePrompts.length === 0) {
+    throw new Error('No se encontraron escenas ni prompts en el archivo HTML suministrado.');
+  }
+
+  const constructedScenes: MasterStudioExportScene[] = imagePrompts.map((vp, i) => ({
+    sceneNumber: i + 1,
+    scriptSegment: `Escena ${i + 1}`,
+    visualPrompt: vp,
+    videoPrompt: videoPrompts[i] || ''
+  }));
+
+  return {
+    projectName,
+    scenes: constructedScenes,
+    visualPrompts: imagePrompts,
+    videoPrompts
+  };
 }
 

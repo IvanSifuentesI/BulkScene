@@ -229,44 +229,69 @@ Navegador/SO: ${report.userAgent || 'Desconocido'}
 }
 
 /**
+ * Determina si el error proviene de extensiones de navegador de terceros o ruidos no relacionados con la app
+ */
+export function isIgnorableBrowserNoise(errorOrMsg: any): boolean {
+  if (!errorOrMsg) return true;
+  const msg = typeof errorOrMsg === 'string'
+    ? errorOrMsg
+    : String(errorOrMsg?.message || errorOrMsg?.reason || errorOrMsg || '');
+  if (!msg) return true;
+  const m = msg.toLowerCase();
+  return (
+    m.includes('could not establish connection') ||
+    m.includes('receiving end does not exist') ||
+    m.includes('message port closed') ||
+    m.includes('message channel closed') ||
+    m.includes('extension context invalidated') ||
+    m.includes('resizeobserver') ||
+    m.includes('script error') ||
+    m.includes('chrome-extension://') ||
+    m.includes('moz-extension://') ||
+    m.includes('safari-extension://')
+  );
+}
+
+/**
  * Inicializa escuchadores globales de excepciones no capturadas
  */
 export function initGlobalErrorTelemetry(): void {
   if (typeof window === 'undefined') return;
 
   window.addEventListener('error', (event) => {
+    const msg = String(event.error?.message || event.message || '');
+    if (isIgnorableBrowserNoise(msg)) return;
+
     reportTelemetryError({
       error: event.error || event.message,
       stage: 'Sistema'
     });
 
-    const msg = String(event.error?.message || event.message || '');
-    if (!msg.includes('ResizeObserver') && !msg.includes('Script error')) {
-      triggerGlobalErrorModal({
-        title: 'Excepción No Capturada en el Sistema',
-        stage: 'Sistema / Scripts',
-        errorCode: 'UNHANDLED_ERROR',
-        errorMessage: msg,
-        technicalDetails: { stack: event.error?.stack }
-      });
-    }
+    triggerGlobalErrorModal({
+      title: 'Excepción No Capturada en el Sistema',
+      stage: 'Sistema / Scripts',
+      errorCode: 'UNHANDLED_ERROR',
+      errorMessage: msg,
+      technicalDetails: { stack: event.error?.stack }
+    });
   });
 
   window.addEventListener('unhandledrejection', (event) => {
+    const msg = String(event.reason?.message || event.reason || '');
+    if (isIgnorableBrowserNoise(msg)) return;
+
     reportTelemetryError({
       error: event.reason,
       stage: 'Sistema'
     });
 
-    const msg = String(event.reason?.message || event.reason || '');
-    if (!msg.includes('ResizeObserver')) {
-      triggerGlobalErrorModal({
-        title: 'Fallo Asíncrono no Controlado',
-        stage: 'Sistema / Conexión',
-        errorCode: 'UNHANDLED_REJECTION',
-        errorMessage: msg,
-        technicalDetails: { reason: String(event.reason) }
-      });
-    }
+    triggerGlobalErrorModal({
+      title: 'Fallo Asíncrono no Controlado',
+      stage: 'Sistema / Conexión',
+      errorCode: 'UNHANDLED_REJECTION',
+      errorMessage: msg,
+      technicalDetails: { reason: String(event.reason) }
+    });
   });
 }
+

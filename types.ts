@@ -265,8 +265,20 @@ export interface ScriptDeepAnalysis {
   continuityMemory?: string[];
   doNotInventList?: string[];
   visualSummary?: string;
+  narrativeScenes?: NarrativeSceneUnit[];
   rawText?: string;
 }
+
+export interface NarrativeSceneUnit {
+  sceneNumber: number;
+  scriptSegment: string;
+  narrativeAction?: string;
+  startTime: number;
+  endTime: number;
+  durationSeconds: number;
+  isTimingEstimated?: boolean;
+}
+
 
 export type CharacterConsistencyMode = 
   | 'deteccion_rapida' 
