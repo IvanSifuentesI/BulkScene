@@ -251,23 +251,34 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   const [folderName, setFolderName] = useState<string>(() => {
     return savedSession?.folderName || localStorage.getItem('bulkscene_selected_folder_name') || '';
   });
-  const [activeDirHandle, setActiveDirHandle] = useState<any>(() => {
-    const saved = savedSession?.folderName || localStorage.getItem('bulkscene_selected_folder_name') || '';
-    if (saved) {
-      const clean = saved.replace(/^Carpeta:\s*/, '').trim();
-      if (clean) return { name: clean, isFallback: true };
-    }
-    return null;
-  });
+  const [activeDirHandle, setActiveDirHandle] = useState<any>(null);
   const [currentProjectName, setCurrentProjectName] = useState<string>(() => {
     return savedSession?.projectName || projectName || '';
   });
   const [lastGeneratedHtml, setLastGeneratedHtml] = useState<string | null>(null);
   const [savedHtmlFilename, setSavedHtmlFilename] = useState<string | null>(null);
 
+  // Restaurar el FileSystemDirectoryHandle nativo de IndexedDB al cargar el componente
+  useEffect(() => {
+    let isMounted = true;
+    async function restoreRealHandle() {
+      try {
+        const stored = await getLocalDirHandle();
+        if (isMounted && stored && typeof stored.getFileHandle === 'function') {
+          setActiveDirHandle(stored);
+          setFolderName(`Carpeta: ${stored.name}`);
+        }
+      } catch (err) {
+        console.warn('Aviso al recuperar handle de carpeta de IndexedDB:', err);
+      }
+    }
+    restoreRealHandle();
+    return () => { isMounted = false; };
+  }, []);
+
   // Validaciones obligatorias:
   const isProjectNameValid = Boolean(currentProjectName && currentProjectName.trim());
-  const isFolderSelected = Boolean(activeDirHandle);
+  const isFolderSelected = Boolean(activeDirHandle && typeof activeDirHandle.getFileHandle === 'function');
   const isReadyToGenerate = isProjectNameValid && isFolderSelected;
 
   // 5. Pacing & Smart Beats Construction (Multi-Rango Inteligente)
@@ -588,15 +599,22 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
   };
 
   // Pick Directory Handler (File System Access API con fallback obligatorio)
-  const handlePickDirectory = async () => {
+  const handlePickDirectory = async (): Promise<any | null> => {
     try {
       if ('showDirectoryPicker' in window) {
         const dirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
         if (dirHandle && dirHandle.name) {
+          if (typeof dirHandle.requestPermission === 'function') {
+            try {
+              await dirHandle.requestPermission({ mode: 'readwrite' });
+            } catch {}
+          }
           setActiveDirHandle(dirHandle);
           setFolderName(`Carpeta: ${dirHandle.name}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${dirHandle.name}`);
           await saveLocalDirHandle(dirHandle);
+          studioLogger.addLog('SUCCESS', 'FileSystem', `Carpeta autorizada y conectada: ${dirHandle.name}`);
+          return dirHandle;
         }
       } else {
         const fallbackName = prompt('Ingresa el nombre de la carpeta de tu computadora donde organizarás los archivos de este proyecto:');
@@ -606,6 +624,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           setFolderName(`Carpeta: ${fallbackName.trim()}`);
           localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${fallbackName.trim()}`);
           await saveLocalDirHandle(fallbackHandle);
+          return fallbackHandle;
         }
       }
     } catch (e: any) {
@@ -613,7 +632,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         console.warn('Aviso al seleccionar carpeta:', e);
       }
     }
+    return null;
   };
+
 
   // Sample Scripts
   const handleLoadSample = (genre: 'scifi' | 'history' | 'motivation') => {
@@ -921,10 +942,54 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
     }
 
     // 2. VALIDACIÓN OBLIGATORIA: Carpeta de Guardado / Destino (Estricto)
-    if (!activeDirHandle) {
+    let dirHandleToUse = activeDirHandle;
+    if (!dirHandleToUse || typeof dirHandleToUse.getFileHandle !== 'function') {
+      try {
+        const stored = await getLocalDirHandle();
+        if (stored && typeof stored.getFileHandle === 'function') {
+          dirHandleToUse = stored;
+          setActiveDirHandle(stored);
+        }
+      } catch {}
+    }
+
+    if (!dirHandleToUse || typeof dirHandleToUse.getFileHandle !== 'function') {
+      if ('showDirectoryPicker' in window) {
+        try {
+          const picked = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+          if (picked && picked.name) {
+            dirHandleToUse = picked;
+            setActiveDirHandle(picked);
+            setFolderName(`Carpeta: ${picked.name}`);
+            localStorage.setItem('bulkscene_selected_folder_name', `Carpeta: ${picked.name}`);
+            await saveLocalDirHandle(picked);
+          }
+        } catch (e: any) {
+          if (e?.name === 'AbortError') return;
+        }
+      }
+    }
+
+    if (!dirHandleToUse || typeof dirHandleToUse.getFileHandle !== 'function') {
       alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta de Destino donde se guardarán los resultados antes de iniciar.');
       handlePickDirectory();
       return;
+    }
+
+    // Solicitar / verificar permisos de lectura/escritura INMEDIATAMENTE durante el gesto de clic del usuario
+    if (typeof dirHandleToUse.queryPermission === 'function') {
+      try {
+        let perm = await dirHandleToUse.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted' && typeof dirHandleToUse.requestPermission === 'function') {
+          perm = await dirHandleToUse.requestPermission({ mode: 'readwrite' });
+        }
+        if (perm !== 'granted') {
+          alert('⚠️ Permiso denegado:\nDebes conceder permisos de escritura en la carpeta para guardar automáticamente los archivos del proyecto.');
+          return;
+        }
+      } catch (permErr) {
+        console.warn('Error al verificar permisos de carpeta en gesto de usuario:', permErr);
+      }
     }
 
     setIsProcessingPipeline(true);
@@ -975,6 +1040,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       let activeContext = { ...culturalContext };
       let styleNameToUse = detectedStyleName || 'Estilo Cinemático Personalizado';
       let styleModifierToUse = customStyleInstructions.trim();
+      let detectedStyleLock: string | undefined = undefined;
+      let detectedStyleAvoid: string | undefined = undefined;
       let activeCharactersList = detectedCharacters;
 
       studioLogger.addLog('STEP', 'Pipeline', `▶ Iniciando Pipeline de Dirección (${mode === 'full_auto' ? 'Modo Automático Total' : 'Solo Prompts'}) · Análisis: ${selectedAnalysisModel} · Prompts: ${selectedPromptModel} · ${currentScript.length} chars`);
@@ -1030,6 +1097,8 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           });
           styleNameToUse = styleRes.styleName;
           styleModifierToUse = styleRes.customInstructions;
+          detectedStyleLock = styleRes.styleLock;
+          detectedStyleAvoid = styleRes.styleAvoid;
           setDetectedStyleName(styleRes.styleName);
           setCustomStyleInstructions(styleRes.customInstructions);
           setDetectedStyleReason(styleRes.reason);
@@ -1102,6 +1171,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         characterConsistencyMode: consistencyMode,
         pacingWords,
         precalculatedScenes: calculatedScenes.map(cs => ({ sceneNumber: cs.sceneNumber, text: cs.text, duration: cs.duration })),
+        deepAnalysis: deepAnalysisResult,
+        styleLock: detectedStyleLock,
+        styleAvoid: detectedStyleAvoid,
         onProgress: (text) => setPipelineProgressText(text)
       });
 
@@ -1131,7 +1203,9 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
           ...sc,
           durationSeconds: sc.durationSeconds || dur,
           startTime: Number(start.toFixed(2)),
-          endTime: Number(end.toFixed(2))
+          endTime: Number(end.toFixed(2)),
+          isTimingEstimated: !currentTranscription && (!calculatedScenes || !calculatedScenes[idx]),
+          isValidated: true
         };
       });
 
@@ -1146,13 +1220,16 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
         visualStyle: {
           name: styleNameToUse,
           modifier: styleModifierToUse,
-          reason: detectedStyleReason || undefined
+          reason: detectedStyleReason || undefined,
+          styleLock: detectedStyleLock,
+          styleAvoid: detectedStyleAvoid
         },
         characters: activeCharactersList.map(c => ({
           name: c.name,
           role: c.role,
           anchorDescription: c.anchorDescription,
           clothingAnchor: c.clothingAnchor,
+          characterLock: c.characterLock,
           defaultSeed: c.defaultSeed
         })),
         scenes: finalScenes
@@ -1161,7 +1238,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
       setLastGeneratedHtml(htmlContent);
 
       const saveRes = await saveMasterStudioHtmlFile({
-        dirHandle: activeDirHandle,
+        dirHandle: dirHandleToUse,
         projectName: currentProjectName,
         htmlContent
       });
@@ -2899,7 +2976,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   return;
                 }
-                if (!activeDirHandle) {
+                if (!isFolderSelected) {
                   alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta donde se guardarán los resultados antes de continuar.');
                   handlePickDirectory();
                   return;
@@ -2928,7 +3005,7 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
                   el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   return;
                 }
-                if (!activeDirHandle) {
+                if (!isFolderSelected) {
                   alert('⚠️ Campo Obligatorio:\nDebes seleccionar la Carpeta donde se guardarán los resultados antes de iniciar el Modo Automático.');
                   handlePickDirectory();
                   return;
@@ -2976,21 +3053,44 @@ export const MasterStudioStage: React.FC<MasterStudioStageProps> = ({
             {lastGeneratedHtml && (
               <button
                 type="button"
-                onClick={() => {
-                  saveMasterStudioHtmlFile({
-                    dirHandle: activeDirHandle,
+                onClick={async () => {
+                  let handleToUse = activeDirHandle;
+                  if (!handleToUse || typeof handleToUse.getFileHandle !== 'function') {
+                    try {
+                      handleToUse = await getLocalDirHandle();
+                    } catch {}
+                  }
+                  if (!handleToUse || typeof handleToUse.getFileHandle !== 'function') {
+                    if ('showDirectoryPicker' in window) {
+                      try {
+                        handleToUse = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+                        if (handleToUse && handleToUse.name) {
+                          setActiveDirHandle(handleToUse);
+                          setFolderName(`Carpeta: ${handleToUse.name}`);
+                          await saveLocalDirHandle(handleToUse);
+                        }
+                      } catch {}
+                    }
+                  }
+                  const saveRes = await saveMasterStudioHtmlFile({
+                    dirHandle: handleToUse,
                     projectName: currentProjectName,
                     htmlContent: lastGeneratedHtml
                   });
+                  if (saveRes.savedToDir) {
+                    studioLogger.addLog('SUCCESS', 'HTML Export', `✅ HTML guardado directamente en la carpeta: ${saveRes.filename}`);
+                    alert(`✅ HTML guardado exitosamente en tu carpeta de proyecto:\n${saveRes.filename}`);
+                  }
                 }}
                 className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Descargar Copia HTML</span>
+                <span>Guardar / Descargar HTML</span>
               </button>
             )}
           </div>
         )}
+
 
         {/* Progress Text Banner */}
         {isProcessingPipeline && (

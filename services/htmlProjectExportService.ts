@@ -3,15 +3,35 @@
  * 
  * Genera un documento HTML standalone, moderno y autónomo con:
  * - Guion completo de locución
- * - Contexto temporal, cultural y ambiental
- * - Estilo visual cinematográfico generado
- * - Fichas biométricas y de vestuario de personajes
- * - Tabla y tarjetas de escenas con timestamps, encuadres y prompts completos
- * - Botón interactivo "Copiar todos los prompts de imágenes (1 por línea)"
- * - Botones individuales de copiado por escena y personaje
+ * - Contexto temporal, cultural y ambiental (CULTURAL_LOCK / CULTURAL_AVOID)
+ * - Estilo visual cinematográfico generado (STYLE_LOCK / STYLE_AVOID)
+ * - Análisis profundo y lista de elementos que NO deben inventarse
+ * - Bóveda de personajes con continuidad biométrica (solo si existen personajes)
+ * - Tarjetas de escena duales: Visual Prompt (Midjourney/FLUX) + Video Prompt (Kling/Luma/Gen-3)
+ * - Botones maestros superiores: "🖼️ Copiar prompts de imagen" y "🎬 Copiar prompts de video"
+ * - Botones individuales de copiado por prompt, tags ortogonales y tiempo fonético
  */
 
 import { ScriptDeepAnalysis } from '../types';
+import { getLocalDirHandle } from './localStudioSessionService';
+
+export interface MasterStudioExportScene {
+  sceneNumber: number;
+  scriptSegment: string;
+  visualPrompt: string;
+  videoPrompt?: string;
+  shotSize?: string;
+  cameraAngle?: string;
+  cameraMovement?: string;
+  lighting?: string;
+  palette?: string;
+  textures?: string[];
+  charactersPresent?: string[];
+  durationSeconds?: number;
+  startTime?: number;
+  endTime?: number;
+  isTimingEstimated?: boolean;
+}
 
 export interface MasterStudioExportData {
   projectName: string;
@@ -42,17 +62,16 @@ export interface MasterStudioExportData {
     characterLock?: string;
     defaultSeed?: number;
   }>;
-  scenes: Array<{
-    sceneNumber: number;
-    scriptSegment: string;
-    visualPrompt: string;
-    cameraAngle?: string;
-    lighting?: string;
-    charactersPresent?: string[];
-    durationSeconds?: number;
-    startTime?: number;
-    endTime?: number;
-  }>;
+  scenes: MasterStudioExportScene[];
+}
+
+function formatSrtTime(seconds: number): string {
+  const s = Math.max(0, seconds || 0);
+  const hrs = Math.floor(s / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  const secs = Math.floor(s % 60);
+  const millis = Math.floor((s % 1) * 1000);
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(millis).padStart(3, '0')}`;
 }
 
 export function generateMasterStudioHtml(data: MasterStudioExportData): string {
@@ -71,9 +90,12 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
   const totalDuration = scenes.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
   const totalWords = scriptText.trim() ? scriptText.trim().split(/\s+/).length : 0;
 
-  // Prompts crudos serializados en JSON para el script del botón de copiar
-  const promptsArray = scenes.map(s => s.visualPrompt.trim());
-  const promptsJson = JSON.stringify(promptsArray);
+  // Prompts serializados para el copiado masivo
+  const imagePromptsArray = scenes.map(s => (s.visualPrompt || '').trim());
+  const videoPromptsArray = scenes.map(s => (s.videoPrompt || '').trim());
+
+  const imagePromptsJson = JSON.stringify(imagePromptsArray);
+  const videoPromptsJson = JSON.stringify(videoPromptsArray);
 
   const cleanProjectName = projectName || 'BulkScene_Proyecto_Master';
 
@@ -82,272 +104,316 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(cleanProjectName)} · Plan de Rodaje & Prompts Master</title>
+  <title>${escapeHtml(cleanProjectName)} · Plan de Producción & Prompts Master</title>
   <style>
     :root {
-      --bg: #07090e;
-      --card-bg: #0d111a;
-      --card-border: rgba(255, 255, 255, 0.08);
-      --accent: #10b981;
-      --cyan: #06b6d4;
-      --purple: #a855f7;
-      --amber: #f59e0b;
+      --bg-dark: #070d18;
+      --bg-card: #0f172a;
+      --border: rgba(255, 255, 255, 0.08);
+      --cyan: #38bdf8;
+      --purple: #c084fc;
+      --amber: #fbbf24;
+      --emerald: #34d399;
+      --rose: #f43f5e;
       --text: #f1f5f9;
       --text-muted: #94a3b8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: var(--bg);
-      color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
       line-height: 1.6;
-      padding: 24px;
+      padding: 32px 24px;
     }
     .container {
-      max-width: 1200px;
+      max-width: 1300px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 28px;
     }
-    header {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.08));
-      border: 1px solid var(--card-border);
-      border-radius: 20px;
-      padding: 24px 32px;
+
+    /* HEADER */
+    .header {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
       justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      flex-wrap: wrap;
       gap: 20px;
     }
-    .header-title h1 {
+    .header h1 {
+      margin: 0;
+      color: var(--cyan);
       font-size: 24px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header p {
+      margin: 6px 0 0 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .btn-copy-prompts {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-copy-prompts:hover {
+      transform: translateY(-1px);
+    }
+    .btn-copy-image {
+      border-color: rgba(56, 189, 248, 0.5);
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .btn-copy-image:hover {
+      background: rgba(56, 189, 248, 0.18);
+      box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+    }
+    .btn-copy-video {
+      border-color: rgba(192, 132, 252, 0.5);
+      color: #c084fc;
+      background: rgba(192, 132, 252, 0.08);
+    }
+    .btn-copy-video:hover {
+      background: rgba(192, 132, 252, 0.18);
+      box-shadow: 0 4px 12px rgba(192, 132, 252, 0.25);
+    }
+
+    .btn-mini {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-mini:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    /* STATS ROW */
+    .stats-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .stat-pill {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-pill strong { font-size: 16px; color: #fff; }
+    .stat-pill span { font-size: 10px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px; }
+
+    /* METADATA CARDS */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    .card-title {
+      font-size: 13px;
       font-weight: 800;
       color: #fff;
       display: flex;
       align-items: center;
-      gap: 12px;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
     }
-    .header-title p {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
+
+    /* BADGES */
     .badge {
       display: inline-block;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 4px 10px;
+      padding: 3px 8px;
       border-radius: 9999px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .badge-emerald { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-cyan { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
-    .badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
-    .badge-amber { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-cyan { background: rgba(56, 189, 248, 0.15); color: var(--cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge-purple { background: rgba(192, 132, 252, 0.15); color: var(--purple); border: 1px solid rgba(192, 132, 252, 0.3); }
+    .badge-amber { background: rgba(251, 191, 36, 0.15); color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.3); }
+    .badge-emerald { background: rgba(52, 211, 153, 0.15); color: var(--emerald); border: 1px solid rgba(52, 211, 153, 0.3); }
+    .badge-rose { background: rgba(244, 63, 94, 0.15); color: var(--rose); border: 1px solid rgba(244, 63, 94, 0.3); }
 
-    .header-stats {
-      display: flex;
+    /* SCENE CARDS GRID */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
       gap: 20px;
-      flex-wrap: wrap;
     }
-    .stat-box {
-      background: rgba(0, 0, 0, 0.3);
-      padding: 10px 16px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      text-align: center;
-    }
-    .stat-val { font-size: 18px; font-weight: 800; color: #fff; }
-    .stat-lbl { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
-
-    /* ACTION BAR CON BOTON PRINCIPAL */
-    .action-bar {
-      background: var(--card-bg);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+    .scene-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 16px 24px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
-    }
-    .action-text {
+      padding: 20px;
       display: flex;
       flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s, border-color 0.2s;
     }
-    .action-text strong { font-size: 14px; color: #fff; }
-    .action-text span { font-size: 12px; color: var(--text-muted); }
-    
-    .btn-main {
-      background: linear-gradient(135deg, #10b981, #06b6d4);
-      color: #000;
-      font-weight: 800;
-      font-size: 13px;
-      padding: 12px 24px;
-      border-radius: 12px;
-      border: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.2s ease;
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+    .scene-card:hover {
+      border-color: rgba(56, 189, 248, 0.3);
     }
-    .btn-main:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 0 25px rgba(16, 185, 129, 0.5);
-    }
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
-      font-weight: 600;
-      font-size: 11px;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: background 0.2s;
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    /* CARDS */
-    .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 18px;
-      padding: 24px;
-    }
-    .card-title {
-      font-size: 14px;
-      font-weight: 800;
-      color: #fff;
+    .card-top {
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      margin-bottom: 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
       padding-bottom: 10px;
+      align-items: center;
+    }
+    .card-scene { color: var(--cyan); font-weight: 800; font-family: monospace; font-size: 12px; }
+    .narration {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border-left: 3px solid var(--cyan);
+      font-style: italic;
     }
 
-    /* GRID COLUMNS FOR METADATA */
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 20px;
+    .scene-characters-block {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 8px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .scene-chars-heading {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .scene-char-item {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.4;
     }
 
-    /* GUION DISPLAY */
+    .prompt-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .prompt-label-image {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .prompt-label-video {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--purple);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .prompt-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px;
+      line-height: 1.6;
+      color: #bae6fd;
+      background: #030712;
+      padding: 12px;
+      border-radius: 10px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid rgba(56, 189, 248, 0.15);
+    }
+    .prompt-box-video {
+      border-color: rgba(192, 132, 252, 0.25);
+      color: #f3e8ff;
+      background: #0c0a1a;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 10px;
+      margin-top: 4px;
+    }
+    .tag {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .tag-cyan { color: var(--cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .tag-purple { color: var(--purple); border: 1px solid rgba(192, 132, 252, 0.3); }
+    .tag-amber { color: var(--amber); border: 1px solid rgba(251, 191, 36, 0.3); }
+    .tag-emerald { color: var(--emerald); border: 1px solid rgba(52, 211, 153, 0.3); }
+
+    /* SCRIPT BOX */
     .script-box {
       background: #05070a;
       border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 10px;
+      padding: 14px;
       font-size: 12px;
       line-height: 1.7;
       color: #cbd5e1;
-      max-height: 280px;
+      max-height: 250px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
 
-    /* PERSONAJES */
-    .chars-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 16px;
-    }
-    .char-card {
-      background: rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(168, 85, 247, 0.25);
-      border-radius: 14px;
-      padding: 16px;
-    }
-    .char-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .char-name { font-size: 14px; font-weight: 800; color: #fff; }
-    .char-detail { font-size: 11px; color: #cbd5e1; margin-bottom: 8px; }
-    .char-detail strong { color: #c084fc; }
-
-    /* ESCENAS TABLE & CARDS */
-    .scenes-container {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .scene-row {
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid var(--card-border);
-      border-left: 4px solid var(--cyan);
-      border-radius: 14px;
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      transition: border-color 0.2s;
-    }
-    .scene-row:hover {
-      border-color: rgba(6, 182, 212, 0.4);
-      background: rgba(6, 182, 212, 0.02);
-    }
-    .scene-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .scene-num {
-      font-size: 13px;
-      font-weight: 800;
-      color: var(--cyan);
-      font-family: monospace;
-    }
-    .scene-timing {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-family: monospace;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 2px 8px;
-      border-radius: 6px;
-    }
-    .scene-segment {
-      font-size: 12px;
-      color: #e2e8f0;
-      font-style: italic;
-      border-left: 2px solid rgba(255, 255, 255, 0.1);
-      padding-left: 10px;
-    }
-    .scene-prompt {
-      background: #05070a;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 10px;
-      padding: 12px;
-      font-size: 11px;
-      color: #67e8f9;
-      font-family: "SF Mono", Consolas, Monaco, monospace;
-      line-height: 1.5;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-    }
-    .scene-prompt span { flex: 1; word-break: break-word; }
-
-    /* TOAST ALERT */
+    /* TOAST */
     #copy-toast {
       position: fixed;
       bottom: 24px;
@@ -356,14 +422,14 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
       color: #000;
       font-weight: 800;
       font-size: 13px;
-      padding: 14px 24px;
-      border-radius: 12px;
+      padding: 12px 20px;
+      border-radius: 10px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
       opacity: 0;
       transform: translateY(20px);
-      transition: all 0.3s ease;
+      transition: all 0.25s ease;
       pointer-events: none;
-      z-index: 1000;
+      z-index: 9999;
     }
     #copy-toast.show {
       opacity: 1;
@@ -373,67 +439,72 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
 </head>
 <body>
 
-  <div id="copy-toast">✅ ¡Prompts copiados al portapapeles!</div>
+  <div id="copy-toast">✅ Copiado al portapapeles</div>
 
   <div class="container">
 
-    <!-- HEADER DEL PROYECTO -->
-    <header>
-      <div class="header-title">
-        <h1>
-          <span>🎬 ${escapeHtml(cleanProjectName)}</span>
-          <span class="badge badge-emerald">Master Studio</span>
-        </h1>
-        <p>Generado el ${escapeHtml(generatedAt)} · Modo de Dirección: <strong>${escapeHtml(narrativeMode)}</strong></p>
+    <!-- HEADER PRINCIPAL -->
+    <div class="header">
+      <div>
+        <h1>🎬 ${escapeHtml(cleanProjectName)} · Prompts de Producción</h1>
+        <p>
+          Total Escenas: <strong>${scenes.length}</strong> · Duración Total: <strong>${formatSrtTime(totalDuration)}</strong> · Modo: <strong>${escapeHtml(narrativeMode)}</strong> · Idioma Prompts: <strong>100% English</strong>
+        </p>
       </div>
-
-      <div class="header-stats">
-        <div class="stat-box">
-          <div class="stat-val">${scenes.length}</div>
-          <div class="stat-lbl">Escenas</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-val">${totalDuration.toFixed(1)}s</div>
-          <div class="stat-lbl">Duración Est.</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-val">${totalWords}</div>
-          <div class="stat-lbl">Palabras</div>
-        </div>
+      <div class="header-actions">
+        <button type="button" class="btn-copy-prompts btn-copy-image" id="btn-copy-image-prompts" onclick="copyImagePrompts()">
+          🖼️ Copiar prompts de imagen
+        </button>
+        <button type="button" class="btn-copy-prompts btn-copy-video" id="btn-copy-video-prompts" onclick="copyVideoPrompts()">
+          🎬 Copiar prompts de video
+        </button>
       </div>
-    </header>
-
-    <!-- BARRA PRINCIPAL DE ACCIÓN: COPIAR TODOS LOS PROMPTS -->
-    <div class="action-bar">
-      <div class="action-text">
-        <strong>📋 Exportación Masiva de Prompts para Generación de Imágenes</strong>
-        <span>Copia todos los prompts ordenados consecutivamente (uno por línea: 1. Prompt...) listos para Midjourney, FLUX o generación masiva.</span>
-      </div>
-      <button class="btn-main" onclick="copyAllPromptsNumbered()">
-        <span>📋 COPIAR TODOS LOS PROMPTS DE IMÁGENES</span>
-      </button>
     </div>
 
-    <!-- SECCIÓN METADATOS: CONTEXTO TEMPORAL & ESTILO VISUAL -->
+    <!-- METRICAS DE PRODUCCION -->
+    <div class="stats-row">
+      <div class="stat-pill">
+        <strong>${scenes.length}</strong>
+        <span>Escenas / Tomas</span>
+      </div>
+      <div class="stat-pill">
+        <strong>${totalDuration.toFixed(1)}s</strong>
+        <span>Duración Estimada</span>
+      </div>
+      <div class="stat-pill">
+        <strong>${totalWords}</strong>
+        <span>Palabras Guion</span>
+      </div>
+      <div class="stat-pill">
+        <strong>${escapeHtml(visualStyle.name || 'Personalizado')}</strong>
+        <span>Estilo Visual Activo</span>
+      </div>
+      <div class="stat-pill">
+        <strong>${escapeHtml(culturalContext.epoch || 'Contemporáneo')}</strong>
+        <span>Contexto Temporal</span>
+      </div>
+    </div>
+
+    <!-- METADATOS Y BÓVEDA DE DIRECCIÓN -->
     <div class="meta-grid">
       <!-- CONTEXTO TEMPORAL Y CULTURAL -->
       <div class="card">
         <div class="card-title">
-          <span>🏛️ Contexto Temporal y Cultural</span>
-          <span class="badge badge-cyan">${escapeHtml(culturalContext.certaintyLevel || 'Inferencia IA')}</span>
+          <span>🏛️ Contexto Temporal & Cultural</span>
+          <span class="badge badge-cyan">${escapeHtml(culturalContext.certaintyLevel || 'Inferencia')}</span>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px;">
+        <div style="font-size: 12px; display: flex; flex-direction: column; gap: 6px;">
           <div><strong style="color: var(--cyan);">Época:</strong> ${escapeHtml(culturalContext.epoch || 'Contemporánea / Actual')}</div>
           <div><strong style="color: var(--cyan);">Cultura:</strong> ${escapeHtml(culturalContext.culture || 'Universal')}</div>
-          <div><strong style="color: var(--cyan);">Entorno:</strong> ${escapeHtml(culturalContext.environment || 'Atmosférico')}</div>
+          <div><strong style="color: var(--cyan);">Entorno:</strong> ${escapeHtml(culturalContext.environment || 'Realista')}</div>
           ${culturalContext.culturalLock ? `
-          <div style="margin-top: 6px; padding: 8px; background: rgba(16, 185, 129, 0.08); border-left: 3px solid #10b981; border-radius: 6px;">
-            <strong style="color: #34d399; font-size: 11px;">🔒 CULTURAL_LOCK:</strong>
+          <div style="margin-top: 4px; padding: 8px; background: rgba(56, 189, 248, 0.08); border-left: 3px solid var(--cyan); border-radius: 6px;">
+            <strong style="color: var(--cyan); font-size: 10px;">🔒 CULTURAL_LOCK:</strong>
             <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(culturalContext.culturalLock)}</p>
           </div>` : ''}
           ${culturalContext.culturalAvoid ? `
-          <div style="margin-top: 4px; padding: 8px; background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; border-radius: 6px;">
-            <strong style="color: #f87171; font-size: 11px;">⛔ CULTURAL_AVOID:</strong>
+          <div style="margin-top: 2px; padding: 8px; background: rgba(244, 63, 94, 0.08); border-left: 3px solid var(--rose); border-radius: 6px;">
+            <strong style="color: var(--rose); font-size: 10px;">⛔ CULTURAL_AVOID:</strong>
             <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(culturalContext.culturalAvoid)}</p>
           </div>` : ''}
         </div>
@@ -442,142 +513,139 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
       <!-- ESTILO VISUAL CINEMATOGRÁFICO -->
       <div class="card">
         <div class="card-title">
-          <span>🎨 Estilo Visual Personalizado</span>
+          <span>🎨 Estilo Visual (STYLE_LOCK)</span>
           <span class="badge badge-amber">${escapeHtml(visualStyle.name || 'Personalizado')}</span>
         </div>
         <div style="font-size: 11px; font-family: monospace; color: #fde68a; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; line-height: 1.5;">
           ${escapeHtml(visualStyle.modifier || 'Visual style custom tailored to script')}
         </div>
-        ${visualStyle.reason ? `<p style="font-size: 11px; color: var(--text-muted); margin-top: 8px; font-style: italic;">${escapeHtml(visualStyle.reason)}</p>` : ''}
+        ${visualStyle.reason ? `<p style="font-size: 11px; color: var(--text-muted); font-style: italic;">${escapeHtml(visualStyle.reason)}</p>` : ''}
         ${visualStyle.styleLock ? `
-        <div style="margin-top: 8px; padding: 8px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; border-radius: 6px;">
-          <strong style="color: #fbbf24; font-size: 11px;">🔒 STYLE_LOCK:</strong>
-          <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(visualStyle.styleLock)}</p>
-        </div>` : ''}
-        ${visualStyle.styleAvoid ? `
-        <div style="margin-top: 4px; padding: 8px; background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; border-radius: 6px;">
-          <strong style="color: #f87171; font-size: 11px;">⛔ STYLE_AVOID:</strong>
-          <p style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(visualStyle.styleAvoid)}</p>
+        <div style="padding: 6px 8px; background: rgba(251, 191, 36, 0.08); border-left: 3px solid var(--amber); border-radius: 6px;">
+          <strong style="color: var(--amber); font-size: 10px;">🔒 STYLE_LOCK:</strong>
+          <p style="font-size: 11px; color: #cbd5e1;">${escapeHtml(visualStyle.styleLock)}</p>
         </div>` : ''}
       </div>
-    </div>
 
-    <!-- ANÁLISIS PROFUNDO DEL GUION (PASO 1) -->
-    ${deepAnalysis ? `
-    <div class="card">
-      <div class="card-title">
-        <span>🧠 Análisis Profundo del Guion (Paso 1 · Memoria Visual)</span>
-        <span class="badge badge-purple">Especificidad Garantizada</span>
+      <!-- MEMORIA VISUAL & NO INVENTAR -->
+      ${deepAnalysis ? `
+      <div class="card">
+        <div class="card-title">
+          <span>🧠 Memoria Visual & Causalidad</span>
+          <span class="badge badge-purple">Paso 1/5</span>
+        </div>
+        <div style="font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+          ${deepAnalysis.premise?.theme ? `<div><strong style="color: var(--purple);">Tema Central:</strong> <span style="color: #cbd5e1;">${escapeHtml(deepAnalysis.premise.theme)}</span></div>` : ''}
+          ${deepAnalysis.visualSummary ? `<div><strong style="color: var(--cyan);">Resumen Visual:</strong> <span style="color: #cbd5e1;">${escapeHtml(deepAnalysis.visualSummary)}</span></div>` : ''}
+          ${deepAnalysis.doNotInventList && deepAnalysis.doNotInventList.length > 0 ? `
+          <div style="padding: 6px 8px; background: rgba(244, 63, 94, 0.08); border-left: 3px solid var(--rose); border-radius: 6px;">
+            <strong style="color: var(--rose); font-size: 10px;">🚫 NO INVENTAR:</strong>
+            <p style="font-size: 10.5px; color: #cbd5e1;">${escapeHtml(deepAnalysis.doNotInventList.slice(0, 4).join('; '))}</p>
+          </div>` : ''}
+        </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; font-size: 12px;">
-        ${deepAnalysis.premise ? `
-        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
-          <strong style="color: #c084fc;">📖 Premisa & Tema Central:</strong>
-          <p style="margin-top: 4px; color: #e2e8f0;">${escapeHtml(deepAnalysis.premise.theme || deepAnalysis.premise.mainSituation || '')}</p>
-          ${deepAnalysis.premise.narrativeTone ? `<p style="margin-top: 4px; color: var(--text-muted);"><strong>Tono:</strong> ${escapeHtml(deepAnalysis.premise.narrativeTone)}</p>` : ''}
-        </div>` : ''}
-        ${deepAnalysis.visualSummary ? `
-        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05);">
-          <strong style="color: #38bdf8;">🎬 Resumen Visual:</strong>
-          <p style="margin-top: 4px; color: #e2e8f0;">${escapeHtml(deepAnalysis.visualSummary)}</p>
-        </div>` : ''}
-        ${deepAnalysis.doNotInventList && deepAnalysis.doNotInventList.length > 0 ? `
-        <div style="background: rgba(239,68,68,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(239,68,68,0.2);">
-          <strong style="color: #f87171;">🚫 NO Inventar (Indeterminado en Guion):</strong>
-          <ul style="margin-top: 4px; padding-left: 18px; color: #cbd5e1; font-size: 11px;">
-            ${deepAnalysis.doNotInventList.slice(0, 5).map(item => `<li>${escapeHtml(item)}</li>`).join('')}
-          </ul>
-        </div>` : ''}
-      </div>
+      ` : ''}
     </div>
-    ` : ''}
 
     <!-- GUION COMPLETO DE LOCUCIÓN -->
     <div class="card">
       <div class="card-title">
         <span>📜 Guion Completo de Locución</span>
-        <button class="btn-secondary" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(scriptText)}\`, 'Guion completo copiado')">
-          <span>Copiar Guion</span>
+        <button class="btn-mini" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(scriptText)}\`, 'Guion completo copiado')">
+          Copiar Guion
         </button>
       </div>
       <div class="script-box">${escapeHtml(scriptText)}</div>
     </div>
 
-    <!-- BÓVEDA DE PERSONAJES -->
-    ${characters.length > 0 ? `
+    <!-- BÓVEDA DE PERSONAJES (Solo si existen) -->
+    ${characters && characters.length > 0 ? `
     <div class="card">
       <div class="card-title">
-        <span>👤 Bóveda de Personajes & Continuidad Biométrica (${characters.length})</span>
-        <span class="badge badge-purple">Invarianza Facial</span>
+        <span>👤 Bóveda de Personajes (${characters.length})</span>
+        <span class="badge badge-purple">CHARACTER_LOCK</span>
       </div>
-      <div class="chars-grid">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
         ${characters.map((c, i) => `
-        <div class="char-card">
-          <div class="char-header">
-            <span class="char-name">#${i + 1} ${escapeHtml(c.name)}</span>
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(192, 132, 252, 0.2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong style="color: #fff; font-size: 13px;">#${i + 1} ${escapeHtml(c.name)}</strong>
             <span class="badge badge-purple">${escapeHtml(c.role || 'PROTAGONIST')}</span>
           </div>
-          <div class="char-detail"><strong>Aspecto Físico:</strong> ${escapeHtml(c.anchorDescription || 'Photorealistic consistent subject')}</div>
-          <div class="char-detail"><strong>Vestimenta:</strong> ${escapeHtml(c.clothingAnchor || 'Contextual wardrobe')}</div>
-          ${c.characterLock ? `<div class="char-detail" style="color: #c084fc;"><strong>CHARACTER_LOCK:</strong> ${escapeHtml(c.characterLock)}</div>` : ''}
-          ${c.defaultSeed ? `<div class="char-detail"><strong>Seed:</strong> #${c.defaultSeed}</div>` : ''}
-          <div style="margin-top: 10px;">
-            <button class="btn-secondary" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(`${c.name}: ${c.anchorDescription}, ${c.clothingAnchor}`)}\`, 'Biometría de ${escapeJs(c.name)} copiada')">
-              <span>Copiar Ficha</span>
-            </button>
-          </div>
+          <div style="font-size: 11px; color: #cbd5e1;"><strong style="color: var(--purple);">Biometría:</strong> ${escapeHtml(c.anchorDescription || '')}</div>
+          <div style="font-size: 11px; color: #cbd5e1;"><strong style="color: var(--purple);">Vestuario:</strong> ${escapeHtml(c.clothingAnchor || '')}</div>
+          ${c.defaultSeed ? `<div style="font-size: 10px; color: var(--text-muted); font-family: monospace;">Seed: #${c.defaultSeed}</div>` : ''}
         </div>
         `).join('')}
       </div>
     </div>
     ` : ''}
 
-    <!-- DESGLOSE DE ESCENAS & PROMPTS -->
-    <div class="card">
-      <div class="card-title">
-        <span>🎬 Desglose Escena por Escena (${scenes.length} Tomas)</span>
-        <button class="btn-main" onclick="copyAllPromptsNumbered()">
-          <span>📋 Copiar Todos los Prompts</span>
-        </button>
-      </div>
+    <!-- DESGLOSE DE ESCENAS & PROMPTS EN GRID -->
+    <div class="grid">
+      ${scenes.map(s => {
+        const numStr = String(s.sceneNumber).padStart(2, '0');
+        const startSec = typeof s.startTime === 'number' ? s.startTime : (s.sceneNumber - 1) * 4.5;
+        const endSec = typeof s.endTime === 'number' ? s.endTime : startSec + (s.durationSeconds || 4.5);
+        const durationSec = typeof s.durationSeconds === 'number' ? s.durationSeconds : (endSec - startSec);
+        const timeRangeStr = `${formatSrtTime(startSec)} → ${formatSrtTime(endSec)} (${durationSec.toFixed(3)}s)`;
 
-      <div class="scenes-container">
-        ${scenes.map(s => {
-          const numStr = String(s.sceneNumber).padStart(3, '0');
-          const timeStr = typeof s.startTime === 'number' && typeof s.endTime === 'number'
-            ? `${s.startTime.toFixed(1)}s - ${s.endTime.toFixed(1)}s (${(s.durationSeconds || (s.endTime - s.startTime)).toFixed(1)}s)`
-            : `${(s.durationSeconds || 2.5).toFixed(1)}s`;
+        const hasCharacters = Array.isArray(s.charactersPresent) && s.charactersPresent.length > 0;
 
-          return `
-          <div class="scene-row">
-            <div class="scene-header">
-              <span class="scene-num">TOMA #${numStr}</span>
-              <span class="scene-timing">⏱️ ${timeStr}</span>
-              ${s.cameraAngle ? `<span class="badge badge-cyan">🎥 ${escapeHtml(s.cameraAngle)}</span>` : ''}
-              ${s.lighting ? `<span class="badge badge-amber">💡 ${escapeHtml(s.lighting)}</span>` : ''}
-              ${s.charactersPresent && s.charactersPresent.length > 0 ? `<span class="badge badge-purple">👤 ${escapeHtml(s.charactersPresent.join(', '))}</span>` : ''}
-            </div>
-
-            <div class="scene-segment">
-              "${escapeHtml(s.scriptSegment)}"
-            </div>
-
-            <div class="scene-prompt">
-              <span>${escapeHtml(s.visualPrompt)}</span>
-              <button class="btn-secondary" style="flex-shrink: 0;" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(s.visualPrompt)}\`, 'Prompt #${numStr} copiado')">
-                <span>Copiar</span>
-              </button>
-            </div>
+        return `
+        <div class="scene-card">
+          <div class="card-top">
+            <span class="card-scene">Escena #${numStr}</span>
+            <span>${timeRangeStr}</span>
           </div>
-          `;
-        }).join('')}
-      </div>
+
+          <div class="narration">${escapeHtml(s.scriptSegment)}</div>
+
+          ${hasCharacters ? `
+          <div class="scene-characters-block">
+            <span class="scene-chars-heading">PERSONAJES PRESENTES:</span>
+            <span class="scene-char-item">${escapeHtml(s.charactersPresent!.join(', '))}</span>
+          </div>
+          ` : `
+          <div class="scene-characters-block" style="border-color: rgba(255,255,255,0.06); background: rgba(0,0,0,0.2);">
+            <span style="color: #64748b; font-size: 11px;">Plano de entorno / Sin personajes físicos presentes</span>
+          </div>
+          `}
+
+          <!-- PROMPT DE IMAGEN -->
+          <div class="prompt-label-row">
+            <span class="prompt-label-image">🖼️ Visual Prompt (100% English):</span>
+            <button class="btn-mini" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(s.visualPrompt)}\`, 'Prompt de Imagen #${numStr} copiado')">Copiar</button>
+          </div>
+          <div class="prompt-box prompt-box-image">${escapeHtml(s.visualPrompt)}</div>
+
+          <!-- PROMPT DE VIDEO -->
+          ${s.videoPrompt ? `
+          <div class="prompt-label-row">
+            <span class="prompt-label-video">🎬 Video Prompt (Dynamic Motion):</span>
+            <button class="btn-mini" onclick="copyTextToClipboard(\`${escapeForTemplateLiteral(s.videoPrompt)}\`, 'Prompt de Video #${numStr} copiado')">Copiar</button>
+          </div>
+          <div class="prompt-box prompt-box-video">${escapeHtml(s.videoPrompt)}</div>
+          ` : ''}
+
+          <!-- METADATOS Y TEXTURAS -->
+          <div class="meta-row">
+            ${s.cameraMovement ? `<span class="tag tag-cyan">🎥 ${escapeHtml(s.cameraMovement)}</span>` : (s.cameraAngle ? `<span class="tag tag-cyan">🎥 ${escapeHtml(s.cameraAngle)}</span>` : '')}
+            ${s.shotSize ? `<span class="tag tag-purple">📐 ${escapeHtml(s.shotSize)}</span>` : ''}
+            ${s.lighting ? `<span class="tag tag-amber">💡 ${escapeHtml(s.lighting)}</span>` : ''}
+            ${s.palette ? `<span class="tag tag-emerald">🎨 ${escapeHtml(s.palette)}</span>` : ''}
+            ${s.textures && s.textures.length > 0 ? `<span class="tag">🧵 ${escapeHtml(s.textures.join(', '))}</span>` : ''}
+          </div>
+        </div>
+        `;
+      }).join('')}
     </div>
 
   </div>
 
   <script>
-    const promptsList = ${promptsJson};
+    const imagePromptsList = ${imagePromptsJson};
+    const videoPromptsList = ${videoPromptsJson};
 
     function showToast(msg) {
       const toast = document.getElementById('copy-toast');
@@ -589,41 +657,77 @@ export function generateMasterStudioHtml(data: MasterStudioExportData): string {
       }, 2500);
     }
 
-    function copyTextToClipboard(text, successMsg) {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+    function doClipboardCopy(text, btnElement, successMsg) {
+      if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(() => {
-          showToast(successMsg || 'Copiado al portapapeles');
-        }).catch(() => {
-          fallbackCopy(text, successMsg);
-        });
+          showButtonFeedback(btnElement, successMsg);
+          showToast(successMsg);
+        }).catch(() => fallbackExecCopy(text, btnElement, successMsg));
       } else {
-        fallbackCopy(text, successMsg);
+        fallbackExecCopy(text, btnElement, successMsg);
       }
     }
 
-    function fallbackCopy(text, successMsg) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
+    function fallbackExecCopy(text, btnElement, successMsg) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      textArea.style.top = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
       try {
-        document.execCommand('copy');
-        showToast(successMsg || 'Copiado al portapapeles');
-      } catch (e) {
-        alert('No se pudo copiar automáticamente. Por favor selecciónalo manualmente.');
+        const ok = document.execCommand('copy');
+        if (ok) {
+          showButtonFeedback(btnElement, successMsg);
+          showToast(successMsg);
+        } else {
+          prompt('Copia manualmente con Ctrl+C:', text);
+        }
+      } catch (err) {
+        prompt('Copia manualmente con Ctrl+C:', text);
       }
-      document.body.removeChild(ta);
+      document.body.removeChild(textArea);
     }
 
-    function copyAllPromptsNumbered() {
-      if (!promptsList || promptsList.length === 0) {
-        alert('No hay prompts para copiar.');
+    function showButtonFeedback(btn, message) {
+      if (!btn) return;
+      const original = btn.innerHTML;
+      btn.innerHTML = message;
+      btn.style.background = '#10b981';
+      btn.style.borderColor = '#059669';
+      btn.style.color = '#ffffff';
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
+      }, 2200);
+    }
+
+    function copyTextToClipboard(text, successMsg) {
+      doClipboardCopy(text, null, successMsg || 'Copiado al portapapeles');
+    }
+
+    function copyImagePrompts() {
+      if (!imagePromptsList || imagePromptsList.length === 0) {
+        showToast('No hay prompts de imagen disponibles');
         return;
       }
-      const formatted = promptsList.map((p, idx) => (idx + 1) + '. ' + p).join('\\n\\n');
-      copyTextToClipboard(formatted, '✅ ¡Copiados ' + promptsList.length + ' prompts (1 por línea) con éxito!');
+      const formatted = imagePromptsList.join('\\n\\n');
+      const btn = document.getElementById('btn-copy-image-prompts');
+      doClipboardCopy(formatted, btn, '✅ ¡' + imagePromptsList.length + ' Prompts de Imagen Copiados!');
+    }
+
+    function copyVideoPrompts() {
+      if (!videoPromptsList || videoPromptsList.length === 0) {
+        showToast('No hay prompts de video disponibles');
+        return;
+      }
+      const formatted = videoPromptsList.filter(Boolean).join('\\n\\n');
+      const btn = document.getElementById('btn-copy-video-prompts');
+      doClipboardCopy(formatted, btn, '✅ ¡' + videoPromptsList.length + ' Prompts de Video Copiados!');
     }
   </script>
 </body>
@@ -638,11 +742,6 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function escapeJs(str: string): string {
-  if (!str) return '';
-  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
 
 function escapeForTemplateLiteral(str: string): string {
@@ -663,22 +762,34 @@ export async function saveMasterStudioHtmlFile(params: {
     .replace(/[^a-zA-Z0-9_\-]/g, '_');
   const filename = `${cleanName}_escenas_master.html`;
 
-  let savedToDir = false;
-  if (params.dirHandle && typeof params.dirHandle.getFileHandle === 'function') {
+  let handleToUse = params.dirHandle;
+  if (!handleToUse || typeof handleToUse.getFileHandle !== 'function') {
     try {
-      // Verificar y solicitar permisos de lectura/escritura si el navegador lo requiere
-      if (typeof params.dirHandle.queryPermission === 'function') {
-        let perm = await params.dirHandle.queryPermission({ mode: 'readwrite' });
-        if (perm !== 'granted' && typeof params.dirHandle.requestPermission === 'function') {
-          perm = await params.dirHandle.requestPermission({ mode: 'readwrite' });
+      const stored = await getLocalDirHandle();
+      if (stored && typeof stored.getFileHandle === 'function') {
+        handleToUse = stored;
+      }
+    } catch (err) {
+      console.warn('[saveMasterStudioHtmlFile] Aviso al leer IndexedDB handle:', err);
+    }
+  }
+
+  let savedToDir = false;
+  if (handleToUse && typeof handleToUse.getFileHandle === 'function') {
+    try {
+      if (typeof handleToUse.queryPermission === 'function') {
+        let perm = await handleToUse.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted' && typeof handleToUse.requestPermission === 'function') {
+          perm = await handleToUse.requestPermission({ mode: 'readwrite' });
         }
       }
 
-      const fileHandle = await params.dirHandle.getFileHandle(filename, { create: true });
-      const writable = await fileHandle.createWritable();
+      const fileHandle = await handleToUse.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable({ keepExistingData: false });
       await writable.write(params.htmlContent);
       await writable.close();
       savedToDir = true;
+      console.log(`[saveMasterStudioHtmlFile] ✅ HTML escrito exitosamente en la carpeta de destino: ${filename}`);
     } catch (e) {
       console.warn('[saveMasterStudioHtmlFile] Falló escritura directa en dirHandle:', e);
     }
@@ -696,6 +807,7 @@ export async function saveMasterStudioHtmlFile(params: {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
+      console.log(`[saveMasterStudioHtmlFile] 📥 Guardado mediante descarga de navegador de respaldo: ${filename}`);
     } catch (err) {
       console.warn('[saveMasterStudioHtmlFile] Error en descarga de respaldo:', err);
     }
@@ -703,3 +815,4 @@ export async function saveMasterStudioHtmlFile(params: {
 
   return { savedToDir, filename };
 }
+

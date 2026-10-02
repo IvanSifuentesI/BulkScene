@@ -26,7 +26,32 @@ class StudioLoggerService {
     this.addLog('INFO', 'Sistema', 'Terminal de Diagnóstico de Estudio Master inicializada.');
   }
 
-  public addLog(level: LogLevel, stage: string, message: string, details?: any) {
+  public addLog(level: LogLevel, stageOrMessage: string, messageOrDetails?: any, details?: any) {
+    let stage = 'Sistema';
+    let message = '';
+    let finalDetails = details;
+
+    if (messageOrDetails === undefined) {
+      // Llamado como addLog(level, message)
+      stage = 'Sistema';
+      message = String(stageOrMessage || '');
+      finalDetails = undefined;
+    } else if (typeof messageOrDetails === 'string') {
+      // Llamado como addLog(level, stage, message, details)
+      stage = String(stageOrMessage || 'Sistema');
+      message = String(messageOrDetails || '');
+      finalDetails = details;
+    } else {
+      // Llamado como addLog(level, message, detailsObject)
+      stage = 'Sistema';
+      message = String(stageOrMessage || '');
+      finalDetails = messageOrDetails;
+    }
+
+    if (!message) {
+      message = String(stageOrMessage || 'Sin mensaje especificado');
+    }
+
     const now = new Date();
     const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
     
@@ -36,7 +61,7 @@ class StudioLoggerService {
       level,
       stage,
       message,
-      details
+      details: finalDetails
     };
 
     this.logs.push(entry);
@@ -49,9 +74,9 @@ class StudioLoggerService {
 
     // Echo en consola dev
     const prefix = `[${entry.timestamp}] [${entry.stage}] [${entry.level}]`;
-    if (level === 'ERROR') console.error(prefix, message, details || '');
-    else if (level === 'WARN') console.warn(prefix, message, details || '');
-    else console.log(prefix, message, details || '');
+    if (level === 'ERROR') console.error(prefix, message, finalDetails || '');
+    else if (level === 'WARN') console.warn(prefix, message, finalDetails || '');
+    else console.log(prefix, message, finalDetails || '');
   }
 
   public getLogs(): StudioLogEntry[] {

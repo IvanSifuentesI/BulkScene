@@ -15,8 +15,8 @@
  *   a la siguiente clave del pool. Cuando todo el pool se agota, reintenta
  *   desde la primera (round-robin). Si ninguna funciona → fallback NVIDIA → Groq.
  */
-import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter, ScriptDeepAnalysis } from '../types';
-export type { ScriptDirectorCharacter, ScriptDeepAnalysis };
+import { StylePreset, CulturalTemporalContext, ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult } from '../types';
+export type { ScriptDirectorCharacter, ScriptDeepAnalysis, ScriptSceneResult };
 import { isSubscriptionActive, triggerSubscriptionModal } from './subscriptionService';
 import { studioLogger } from './studioLoggerService';
 
@@ -112,54 +112,41 @@ Para cada personaje identifica:
 9. EVOLUCIÓN: si cambia físicamente, emocionalmente o en vestuario.
 10. REGLA FUNDAMENTAL: En cada escena donde aparezca, usar CHARACTER_LOCK como identidad base sin copiar toda la ficha literalmente, integrando solo lo necesario para esa escena.`;
 
-export const MASTER_PROMPT_5_SCENE_GENERATOR = `Genera las escenas visuales utilizando EXCLUSIVAMENTE la información obtenida de:
-1. ANALISIS_GUION
-2. STYLE_LOCK
-3. CHARACTER_LOCK
-4. CULTURAL_LOCK
-5. CONTEXT_LOCK
+export const MASTER_PROMPT_5_SCENE_GENERATOR = `Eres un Director de Cine y Diseñador de Prompts Cinematográficos de élite para generadores de imagen (Midjourney v6 / FLUX.1) y video (Runway Gen-3 Alpha, Kling AI, Luma Dream Machine).
 
-REGLA PRINCIPAL:
-Cada escena debe representar visualmente el contenido específico de su fragmento de guion.
-NO generes una escena genérica que simplemente "represente la idea".
-NO repitas la misma acción con diferentes encuadres.
-NO introduzcas objetos, lugares, personajes o acciones que no tengan relación con el fragmento.
+REGLAS DE ORO DE DIRECCIÓN CINEMATOGRÁFICA:
 
-NO utilices automáticamente:
-* cinematic 35mm
-* 8k
-* dramatic atmospheric lighting
-* golden hour
-* volumetric lighting
-* shallow depth of field
-* rustic room
-* wooden table
-* vintage laboratory
-* parchment
-* botanical charts
-Estos elementos solo pueden aparecer si los análisis previos los justifican.
+1. CONTENIDO VISUAL CONCRETO (visualPrompt para Midjourney / FLUX):
+   - Cada escena DEBE incluir: Sujeto o entorno específico, acción física observable, composición (shotSize + cameraAngle), iluminación contextual, paleta cromática precisa y 2–3 TEXTURAS OBSERVABLES relevantes a la escala del encuadre.
+   - Describe materiales tangibles y observables: fibras de lana rústica, veta de madera envejecida, rugosidad de granito húmedo, pátina de hierro forjado, gotas de condensación, escarcha cristalina, vapor saliendo de la respiración, barro helado, etc.
+   - PALABRAS Y CLICHÉS ESTRICTAMENTE PROHIBIDOS: NUNCA uses "realistic", "clean", "hyper-detailed", "ultra-realistic", "photorealistic", "8k", "unreal engine", "cinematic 35mm". En su lugar, describe los materiales, iluminación física y la atmósfera observable.
+   - ESCALA DE TEXTURAS: En planos muy lejanos (Extreme Wide Shot), enfócate en la orografía, bruma, capas geológicas o formaciones atmosféricas; NUNCA fuerces microtexturas que la óptica de la cámara no podría percibir a esa distancia.
 
-PARA CADA ESCENA determina:
-A. QUÉ ESTÁ DICIENDO EL GUION
-B. QUÉ INFORMACIÓN VISUAL PUEDE REPRESENTARLO
-C. QUÉ PERSONAJE O PERSONAJES PARTICIPAN
-D. QUÉ ESTÁ HACIENDO CADA PERSONAJE (ACCIÓN FÍSICA OBSERVABLE)
-E. DÓNDE ESTÁ OCURRIENDO
-F. QUÉ OBJETOS SON IMPORTANTES
-G. QUÉ EMOCIÓN DEBE TRANSMITIR
-H. QUÉ TIPO DE PLANO ES MÁS APROPIADO
-I. QUÉ ILUMINACIÓN ES COHERENTE CON EL ENTORNO
-J. QUÉ ELEMENTOS DEL STYLE_LOCK DEBEN APLICARSE
-K. QUÉ ELEMENTOS DEL CHARACTER_LOCK DEBEN APLICARSE
-L. QUÉ ELEMENTOS DEL CULTURAL_LOCK DEBEN APLICARSE
+2. GENERACIÓN PARALELA DE VIDEO (videoPrompt para Gen-3 / Kling / Luma):
+   - Cada escena DEBE contar simultáneamente con un videoPrompt (100% en inglés).
+   - Comparte exactamente los mismos sujetos, vestimentas, paleta e iluminación que visualPrompt.
+   - Describe cinemática de cámara realista y fluida: movimiento de cámara (ej. "The camera begins on a close track before slowly pulling back and elevating into a wide vista", "Slow forward tracking shot through parting mist", "Subtle rotational arc around the subject", "Lateral slider alongside the terrace wall").
+   - Describe dinámicas físicas visibles del sujeto y del entorno: telas azotadas por ráfagas de viento, aliento visible condensándose en vapor, polvo mineral o nieve desprendiéndose en el aire, agua fluyendo sobre cantos rodados, etc.
+   - Incluye al final una pista de audio foley/acústico fidedigno y sincronizado con la escena:
+     "Audio: [descripción de sonidos acústicos físicos: viento aullando entre riscos, crujido rítmico de grava bajo el calzado, murmullo distante de río o crepitar de brasas]; no spoken dialogue."
 
-REGLA DE VARIACIÓN: Las escenas pueden variar en plano, composición, distancia, perspectiva, pero NO variar arbitrariamente la identidad visual del proyecto.
-REGLA DE CONTINUIDAD: Conservar identidad de personajes, rasgos, vestuario, objetos, época y cultura.
-REGLA DE CAUSALIDAD: La escena debe ser consecuencia directa del texto. Si el texto dice "El hombre abre la puerta y entra", la imagen muestra al hombre abriendo o entrando por una puerta. NO mostrarlo mirando un documento o caminando por un bosque.
-REGLA DE ESPECIFICIDAD: Cada prompt debe responder claramente: ¿QUIÉN? ¿QUÉ HACE? ¿DÓNDE? ¿CUÁNDO? ¿CON QUÉ? ¿CÓMO? ¿POR QUÉ VISUALMENTE?
-COMPROBACIÓN INTERNA OBLIGATORIA ANTES DE ENTREGAR CADA PROMPT:
-"Si elimino el fragmento del guion, ¿el prompt todavía podría pertenecer a cualquier video genérico?"
-Si la respuesta es SÍ, el prompt es demasiado genérico y DEBES REHACERLO.`;
+3. VARIEDAD NARRATIVA Y ERRADICACIÓN DEL "BUSTO PARLANTE":
+   - Diseña cada escena según la acción concreta de su fragmento de guion.
+   - ALTERNA rigurosamente entre:
+     * Planos generales de paisaje y atmósfera (Extreme Wide Shot / Wide Shot)
+     * Arquitectura, espacios y entorno físico
+     * Planos de detalle y objetos tangibles (Macro / Close-Up)
+     * Acciones humanas y procesos físicos concretos
+   - PROHIBIDO repetir una y otra vez a un protagonista gesticulando o hablando a cámara. Si el fragmento habla de herramientas o documentos, muestra los objetos en detalle. Si habla de geografía, muestra el relieve.
+
+4. COHERENCIA DE METADATOS Y PERSONAJES:
+   - Si una escena representa personas o figuras humanas, 'charactersPresent' DEBE contener sus nombres o roles (ej. ["Highland Scout"] o ["Stonemasons"]).
+   - Si 'charactersPresent' es un array vacío ([]), el prompt NO DEBE contener personas individuales (debe ser un plano de entorno, naturaleza, paisaje, arquitectura u objetos). CERO CONTRADICCIONES.
+   - Ortogonalidad de cámara: separa explícitamente 'shotSize' (tamaño de plano), 'cameraAngle' (ángulo vertical/horizontal) y 'cameraMovement' (movimiento de cámara).
+
+5. AUTONOMÍA Y PROPAGACIÓN DE LOCKS:
+   - Cada prompt debe ser autosuficiente para ser copiado y pegado directamente en Midjourney o FLUX.
+   - Aplica rigurosamente el CULTURAL_LOCK (elementos obligatorios de la época/cultura), STYLE_LOCK (consistencia de óptica e iluminación) y CULTURAL_AVOID (anacronismos vetados).`;
 
 
 // ─── ROTACIÓN DE CLAVES GEMINI ─────────────────────────────────────────────────
@@ -297,16 +284,6 @@ export async function callGeminiWithRotation(params: {
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────────
-
-export interface ScriptSceneResult {
-  sceneNumber: number;
-  scriptSegment: string;
-  visualPrompt: string;
-  cameraAngle?: string;
-  lighting?: string;
-  charactersPresent?: string[];
-  durationSeconds?: number;
-}
 
 export interface DirectorAnalysisResponse {
   storyBible?: {
@@ -492,12 +469,15 @@ export interface AnalyzeScriptParams {
   targetStyleModifier?: string;
   characterAnchor?: string;
   narrativeMode?: 'documental_secuencial' | 'motivacional_conceptual' | 'storytelling_cinematico' | 'educativo_viral';
-  culturalContext?: { epoch?: string; culture?: string; environment?: string };
+  culturalContext?: { epoch?: string; culture?: string; environment?: string; culturalLock?: string; culturalAvoid?: string };
   characterConsistencyMode?: 'deteccion_rapida' | 'referencia_imagen' | 'nombre_en_prompt' | 'detectar_muertes_salidas';
   pacingWords?: number;
   hookMinSeconds?: number;
   hookMaxSeconds?: number;
   precalculatedScenes?: Array<{ sceneNumber: number; text: string; duration: number }>;
+  deepAnalysis?: ScriptDeepAnalysis;
+  styleLock?: string;
+  styleAvoid?: string;
   onProgress?: (progressText: string, currentStep: number, totalSteps: number) => void;
   signal?: AbortSignal;
 }
@@ -704,13 +684,16 @@ export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise
     nvidiaNimKey = DEFAULT_NVIDIA_NIM_API_KEY,
     geminiKey = '',
     targetStyleName = 'Estilo Específico del Guion',
-    targetStyleModifier = 'clean documentary photography, natural contextual lighting, sharp realistic textures',
+    targetStyleModifier = 'authentic tactile textures, natural contextual lighting, nuanced color palette',
     characterAnchor = '',
     narrativeMode = 'documental_secuencial',
     culturalContext,
     characterConsistencyMode = 'nombre_en_prompt',
     pacingWords = 8,
     precalculatedScenes,
+    deepAnalysis,
+    styleLock,
+    styleAvoid,
     onProgress,
     signal
   } = params;
@@ -720,18 +703,42 @@ export async function analyzeScriptWithLLM(params: AnalyzeScriptParams): Promise
   const minWords = Math.max(4, pacingWords - 3);
   const maxWords = pacingWords + 5;
 
-  // Directriz del Contexto Cultural y Temporal
+  // 1. Directriz de Análisis Profundo previo (Propagación total sin truncar)
+  let deepAnalysisDirective = '';
+  if (deepAnalysis) {
+    const parts: string[] = [];
+    if (deepAnalysis.premise?.theme) parts.push(`- TEMA CENTRAL: ${deepAnalysis.premise.theme}`);
+    if (deepAnalysis.visualSummary) parts.push(`- MEMORIA VISUAL GLOBAL: ${deepAnalysis.visualSummary}`);
+    if (deepAnalysis.doNotInventList && deepAnalysis.doNotInventList.length > 0) {
+      parts.push(`- ELEMENTOS QUE NO DEBEN INVENTARSE (CERO CLICHÉS INDETERMINADOS): ${deepAnalysis.doNotInventList.join('; ')}`);
+    }
+    if (deepAnalysis.continuityMemory && deepAnalysis.continuityMemory.length > 0) {
+      parts.push(`- CONTINUIDAD INMUTABLE: ${deepAnalysis.continuityMemory.join('; ')}`);
+    }
+    if (parts.length > 0) {
+      deepAnalysisDirective = `\nMEMORIA Y ANÁLISIS PROFUNDO DEL GUION:\n${parts.join('\n')}`;
+    }
+  }
+
+  // 2. Directriz del Contexto Cultural y Temporal
   let culturalDirective = '';
   if (culturalContext) {
     culturalDirective = `\nCONTEXTO TEMPORAL Y CULTURAL OBLIGATORIO:
 - Época: ${culturalContext.epoch || 'Contemporánea'}
 - Cultura: ${culturalContext.culture || 'Universal'}
 - Entorno: ${culturalContext.environment || 'Realista'}
-${culturalContext.culturalLock ? `- CULTURAL_LOCK: ${culturalContext.culturalLock}` : ''}
-${culturalContext.culturalAvoid ? `- CULTURAL_AVOID: ${culturalContext.culturalAvoid}` : ''}`;
+${culturalContext.culturalLock ? `- CULTURAL_LOCK (Obligatorio en cada escena): ${culturalContext.culturalLock}` : ''}
+${culturalContext.culturalAvoid ? `- CULTURAL_AVOID (Estrictamente Prohibido): ${culturalContext.culturalAvoid}` : ''}`;
   }
 
-  // Directriz de Consistencia de Personajes
+  // 3. Directriz de Estilo Visual
+  let styleDirective = `\nDIRECTRIZ DE ESTILO VISUAL:
+- Estilo: "${targetStyleName}".
+- Modificador: "${targetStyleModifier}".`;
+  if (styleLock) styleDirective += `\n- STYLE_LOCK: ${styleLock}`;
+  if (styleAvoid) styleDirective += `\n- STYLE_AVOID: ${styleAvoid}`;
+
+  // 4. Directriz de Consistencia de Personajes (Solo personajes recurrentes)
   let consistencyDirective = '';
   if (characterAnchor) {
     consistencyDirective = `\nREGLA DE CONTINUIDAD (CHARACTER_LOCK):\n${characterAnchor}`;
@@ -741,19 +748,17 @@ ${culturalContext.culturalAvoid ? `- CULTURAL_AVOID: ${culturalContext.culturalA
 
 MODO DE DIRECCIÓN Y CONTINUIDAD: ${narrativeMode}.
 Las escenas deben ser estrictamente consecutivas y conectadas por una relación de causa-efecto física clara.
-
-DIRECTRIZ DE ESTILO VISUAL:
-- Estilo: "${targetStyleName}".
-- Modificador: "${targetStyleModifier}".
-
+${deepAnalysisDirective}
 ${culturalDirective}
+${styleDirective}
 ${consistencyDirective}
 
-REGLAS DE ORO PARA CADA PROMPT VISUAL (visualPrompt):
-1. REGLA DE CAUSALIDAD: La imagen debe ser consecuencia DIRECTA del texto. Si el texto habla de niveles de glucosa o un vaso de agua, la imagen debe mostrar eso. NUNCA inventes una habitación rústica o un laboratorio vintage si no está en el guion.
-2. REGLA DE ESPECIFICIDAD: Cada prompt debe responder: ¿QUIÉN? ¿QUÉ HACE? ¿DÓNDE? ¿CON QUÉ? ¿CÓMO?
-3. EXTENSIÓN: Entre 200 y 480 caracteres en inglés. Sin clichés prohibidos ("rustic room", "vintage laboratory", "parchment", "golden hour", "cinematic 35mm", "8k").
-4. COMPROBACIÓN INTERNA: Si quitas el texto del guion y el prompt parece de cualquier video genérico, está mal concebido y debes rehacerlo para que sea 100% específico a esta escena.`;
+REGLAS DE ORO DE ESPECIFICIDAD VISUAL:
+1. REGLA DE CAUSALIDAD: La imagen debe ser consecuencia DIRECTA del fragmento de guion. NUNCA inventes una habitación rústica, laboratorio vintage ni pergaminos si no están explícitos en el texto.
+2. REGLA DE ESPECIFICIDAD: Cada prompt visual debe responder: ¿QUIÉN? ¿QUÉ ACCIÓN FÍSICA HACE? ¿DÓNDE? ¿CON QUÉ? ¿QUÉ 2-3 TEXTURAS SE APRECIAN?
+3. PALABRAS PROHIBIDAS: Cero palabras vacías ("realistic", "clean", "hyper-detailed", "ultra-realistic", "photorealistic", "8k", "cinematic 35mm").
+4. CERO CONTRADICCIONES: Si charactersPresent es vacío [], el prompt NO DEBE describir humanos individuales. Si describes personas, pon sus nombres o roles en charactersPresent.
+5. PROMPT DE VIDEO: Genera siempre el videoPrompt con cinemática de cámara, dinámicas físicas y audio foley ("Audio: ...; no spoken dialogue.").`;
 
   // Segmentación base en oraciones / frases
   const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
@@ -777,10 +782,11 @@ REGLAS DE ORO PARA CADA PROMPT VISUAL (visualPrompt):
   }
 
   const isLongScript = textSegments.length > 16;
+  const rawGeneratedScenes: ScriptSceneResult[] = [];
 
   // CASO 1: Guion corto a moderado (<= 16 escenas)
   if (!isLongScript) {
-    if (onProgress) onProgress('Generando desglose de escenas con IA (Paso 5)...', 1, 1);
+    if (onProgress) onProgress('Generando desglose de escenas cinematográficas con IA (Paso 5)...', 1, 1);
 
     const promptUser = `${baseSystemPrompt}
 
@@ -789,10 +795,10 @@ SEGMENTACIÓN Y CERO PÉRDIDA DE DATOS:
 - La unión de todos los campos "scriptSegment" DEBE reconstruir la totalidad del guion original sin omitir palabras.
 
 FORMATO DE RESPUESTA OBLIGATORIO:
-Responde ÚNICAMENTE con un objeto JSON válido:
+Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura exacta:
 {
   "storyBible": {
-    "summary": "Resumen conciso",
+    "summary": "Resumen conciso del universo del guion",
     "genreAndTone": "Tono visual específico",
     "culturalContext": "${culturalContext?.epoch || 'Contemporáneo'}"
   },
@@ -801,19 +807,26 @@ Responde ÚNICAMENTE con un objeto JSON válido:
     {
       "sceneNumber": 1,
       "scriptSegment": "Frase exacta del guion",
-      "visualPrompt": "Detailed English prompt strictly answering Who, What physical action, Where, and With what, matching the exact script segment without generic clichés",
-      "cameraAngle": "Medium observational shot | Extreme close-up on detail | Eye-level shot",
-      "lighting": "Natural daylight | Clean interior lighting | Clinical soft light",
+      "visualPrompt": "Detailed English prompt answering subject, physical action, environment, lighting, palette, and 2-3 observable textures (e.g. coarse wool fibers, frosted granite, weathered iron). Strictly NO forbidden words.",
+      "videoPrompt": "Dynamic English video prompt describing realistic camera motion, subject action, environment dynamics, ending with 'Audio: [specific physical acoustic sounds]; no spoken dialogue.'",
+      "shotSize": "Extreme Wide Shot | Wide Shot | Medium Shot | Close-Up | Macro",
+      "cameraAngle": "Eye-Level | Low-Angle | High-Angle | Overhead | Dutch Angle",
+      "cameraMovement": "Dynamic Push-In | Slow Tracking Shot | Macro Depth of Field | Slow Zoom In | Static Hold",
+      "lighting": "Natural lighting reflecting setting and atmosphere",
+      "palette": "Exact color palette (e.g., slate grey, deep ochre, muted forest teal)",
+      "textures": ["texture 1", "texture 2"],
       "charactersPresent": []
     }
   ]
 }
 
-Analiza y genera las escenas visuales específicas para este guion:
-${scriptText}`;
+GUION COMPLETO A DESGLOSAR EN ESCENAS:
+"""
+${scriptText}
+"""`;
 
     const rawResponse = await callLLMDirectorRaw({
-      systemPrompt: 'Eres un director de cine documental y publicitario experto en prompts visuales específicos basados en guiones reales.',
+      systemPrompt: 'Eres un Director de Cine de élite experto en desglose de guiones y prompts para Midjourney/FLUX y Kling/Luma.',
       userPrompt: promptUser,
       model,
       geminiKey,
@@ -827,46 +840,57 @@ ${scriptText}`;
       throw new Error('La IA respondió pero no incluyó la lista de escenas en el JSON.');
     }
 
-    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Paso 5 completado: ${parsed.scenes.length} escenas generadas con causalidad estricta`, {
-      primeraEscena: parsed.scenes[0]?.visualPrompt?.slice(0, 100),
-      ultimaEscena: parsed.scenes[parsed.scenes.length - 1]?.visualPrompt?.slice(0, 100)
+    parsed.scenes.forEach((sc: any, idx: number) => {
+      rawGeneratedScenes.push({
+        sceneNumber: sc.sceneNumber || (idx + 1),
+        scriptSegment: sc.scriptSegment || textSegments[idx] || '',
+        visualPrompt: sc.visualPrompt || '',
+        videoPrompt: sc.videoPrompt || '',
+        shotSize: sc.shotSize || 'Wide Shot',
+        cameraAngle: sc.cameraAngle || 'Eye-Level',
+        cameraMovement: sc.cameraMovement || 'Slow Tracking Shot',
+        lighting: sc.lighting || 'Natural contextual lighting',
+        palette: sc.palette || 'Natural authentic palette',
+        textures: Array.isArray(sc.textures) ? sc.textures : [],
+        charactersPresent: Array.isArray(sc.charactersPresent) ? sc.charactersPresent : [],
+        startTime: idx * 4.5,
+        endTime: (idx + 1) * 4.5,
+        durationSeconds: 4.5,
+        isTimingEstimated: true
+      });
     });
 
-    return parsed as DirectorAnalysisResponse;
-  }
+    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Paso 5 completado: ${rawGeneratedScenes.length} escenas generadas con causalidad estricta`, {
+      primeraEscena: rawGeneratedScenes[0]?.visualPrompt?.slice(0, 100),
+      ultimaEscena: rawGeneratedScenes[rawGeneratedScenes.length - 1]?.visualPrompt?.slice(0, 100)
+    });
+  } else {
+    // CASO 2: Guion largo por lotes de 10-12 escenas
+    const BATCH_SIZE = 12;
+    const totalBatches = Math.ceil(textSegments.length / BATCH_SIZE);
 
-  // CASO 2: Guion largo por lotes de 10-12 escenas
-  const BATCH_SIZE = 12;
-  const totalBatches = Math.ceil(textSegments.length / BATCH_SIZE);
-  const allScenes: ScriptSceneResult[] = [];
-  let globalStoryBible = {
-    summary: scriptText.slice(0, 200) + '...',
-    genreAndTone: targetStyleName,
-    culturalContext: culturalContext?.epoch || 'Contemporánea'
-  };
+    for (let b = 0; b < totalBatches; b++) {
+      const startIdx = b * BATCH_SIZE;
+      const endIdx = Math.min(startIdx + BATCH_SIZE, textSegments.length);
+      const batchSegments = textSegments.slice(startIdx, endIdx);
+      const sceneStartNum = startIdx + 1;
+      const sceneEndNum = endIdx;
 
-  for (let b = 0; b < totalBatches; b++) {
-    const startIdx = b * BATCH_SIZE;
-    const endIdx = Math.min(startIdx + BATCH_SIZE, textSegments.length);
-    const batchSegments = textSegments.slice(startIdx, endIdx);
-    const sceneStartNum = startIdx + 1;
-    const sceneEndNum = endIdx;
+      if (onProgress) {
+        onProgress(
+          `Generando lote ${b + 1} de ${totalBatches} (Escenas ${sceneStartNum} a ${sceneEndNum}) con IA...`,
+          b + 1,
+          totalBatches
+        );
+      }
 
-    if (onProgress) {
-      onProgress(
-        `Generando lote ${b + 1} de ${totalBatches} (Escenas ${sceneStartNum} a ${sceneEndNum}) con IA...`,
-        b + 1,
-        totalBatches
-      );
-    }
+      studioLogger.addLog('STEP', 'Paso 5/5', `Generando lote de escenas ${b + 1}/${totalBatches} (${sceneStartNum}-${sceneEndNum})...`);
 
-    studioLogger.addLog('STEP', `Generando lote de escenas ${b + 1}/${totalBatches} (${sceneStartNum}-${sceneEndNum})...`);
+      const previousContext = rawGeneratedScenes.length > 0
+        ? `CONTINUIDAD: La última escena generada (#${rawGeneratedScenes.length}) fue: "${rawGeneratedScenes[rawGeneratedScenes.length - 1].visualPrompt}". Mantén la coherencia visual, de estilo y de paleta.`
+        : '';
 
-    const previousContext = allScenes.length > 0
-      ? `CONTINUIDAD: La última escena generada (#${allScenes.length}) fue: "${allScenes[allScenes.length - 1].visualPrompt}". Mantén la coherencia visual.`
-      : '';
-
-    const batchPrompt = `${baseSystemPrompt}
+      const batchPrompt = `${baseSystemPrompt}
 
 ${previousContext}
 
@@ -874,72 +898,318 @@ INSTRUCCIÓN PARA ESTE LOTE:
 Procesa exactamente las siguientes ${batchSegments.length} frases numeradas del guion (Escenas #${sceneStartNum} a #${sceneEndNum}):
 ${batchSegments.map((seg, i) => `[Escena ${sceneStartNum + i}]: "${seg}"`).join('\n')}
 
-FORMATO DE RESPUESTA:
+FORMATO DE RESPUESTA OBLIGATORIO:
 Responde ÚNICAMENTE con un JSON válido:
 {
   "scenes": [
     {
       "sceneNumber": ${sceneStartNum},
       "scriptSegment": "Frase exacta del guion",
-      "visualPrompt": "Prompt en inglés específico respetando la acción física del fragmento sin clichés genéricos",
-      "cameraAngle": "Medium observational shot | Close-up | Eye-level shot",
+      "visualPrompt": "Detailed English prompt answering subject, physical action, environment, lighting, palette, and 2-3 observable textures. Strictly NO forbidden words.",
+      "videoPrompt": "Dynamic English video prompt describing realistic camera motion, subject action, environment dynamics, ending with 'Audio: [specific physical acoustic sounds]; no spoken dialogue.'",
+      "shotSize": "Extreme Wide Shot | Wide Shot | Medium Shot | Close-Up | Macro",
+      "cameraAngle": "Eye-Level | Low-Angle | High-Angle | Overhead | Dutch Angle",
+      "cameraMovement": "Dynamic Push-In | Slow Tracking Shot | Macro Depth of Field | Slow Zoom In | Static Hold",
       "lighting": "Natural contextual lighting",
+      "palette": "Palette description",
+      "textures": ["texture 1", "texture 2"],
       "charactersPresent": []
     }
   ]
 }`;
 
-    const rawBatch = await callLLMDirectorRaw({
-      systemPrompt: 'Eres un director de cine documental y publicitario experto en prompts visuales específicos basados en guiones reales.',
-      userPrompt: batchPrompt,
-      model,
-      geminiKey,
-      nvidiaNimKey,
-      groqKey,
-      signal
-    });
-
-    const parsedBatch = extractCleanJson(rawBatch);
-    const batchScenes = parsedBatch.scenes || [];
-
-    if (Array.isArray(batchScenes) && batchScenes.length > 0) {
-      batchScenes.forEach((sc: any, idx: number) => {
-        allScenes.push({
-          sceneNumber: sceneStartNum + idx,
-          scriptSegment: sc.scriptSegment || batchSegments[idx] || '',
-          visualPrompt: sc.visualPrompt || `Detailed realistic scene showing ${batchSegments[idx]}, ${targetStyleModifier}`,
-          cameraAngle: sc.cameraAngle || 'Medium observational shot',
-          lighting: sc.lighting || 'Natural contextual lighting',
-          charactersPresent: sc.charactersPresent || []
-        });
+      const rawBatch = await callLLMDirectorRaw({
+        systemPrompt: 'Eres un Director de Cine de élite experto en desglose de guiones y prompts cinematográficos para Midjourney/FLUX y Kling/Luma.',
+        userPrompt: batchPrompt,
+        model,
+        geminiKey,
+        nvidiaNimKey,
+        groqKey,
+        signal
       });
-    } else {
-      batchSegments.forEach((seg, idx) => {
-        allScenes.push({
-          sceneNumber: sceneStartNum + idx,
-          scriptSegment: seg,
-          visualPrompt: `Realistic documentary framing showing ${seg.slice(0, 100)}, ${targetStyleModifier}`,
-          cameraAngle: 'Eye-level observational shot',
-          lighting: 'Natural lighting',
-          charactersPresent: []
+
+      const parsedBatch = extractCleanJson(rawBatch);
+      const batchScenes = parsedBatch.scenes || [];
+
+      if (Array.isArray(batchScenes) && batchScenes.length > 0) {
+        batchScenes.forEach((sc: any, idx: number) => {
+          rawGeneratedScenes.push({
+            sceneNumber: sceneStartNum + idx,
+            scriptSegment: sc.scriptSegment || batchSegments[idx] || '',
+            visualPrompt: sc.visualPrompt || '',
+            videoPrompt: sc.videoPrompt || '',
+            shotSize: sc.shotSize || 'Wide Shot',
+            cameraAngle: sc.cameraAngle || 'Eye-Level',
+            cameraMovement: sc.cameraMovement || 'Slow Tracking Shot',
+            lighting: sc.lighting || 'Natural contextual lighting',
+            palette: sc.palette || 'Natural authentic palette',
+            textures: Array.isArray(sc.textures) ? sc.textures : [],
+            charactersPresent: Array.isArray(sc.charactersPresent) ? sc.charactersPresent : [],
+            startTime: (sceneStartNum + idx - 1) * 4.5,
+            endTime: (sceneStartNum + idx) * 4.5,
+            durationSeconds: 4.5,
+            isTimingEstimated: true
+          });
         });
-      });
+      } else {
+        batchSegments.forEach((seg, idx) => {
+          rawGeneratedScenes.push({
+            sceneNumber: sceneStartNum + idx,
+            scriptSegment: seg,
+            visualPrompt: `Authentic cinematic framing representing "${seg.slice(0, 100)}", ${targetStyleModifier}`,
+            videoPrompt: `Slow forward tracking camera framing the scene. Audio: ambient environmental tones; no spoken dialogue.`,
+            shotSize: 'Wide Shot',
+            cameraAngle: 'Eye-Level',
+            cameraMovement: 'Slow Tracking Shot',
+            lighting: 'Natural lighting',
+            palette: 'Natural palette',
+            textures: ['earthen textures'],
+            charactersPresent: [],
+            startTime: (sceneStartNum + idx - 1) * 4.5,
+            endTime: (sceneStartNum + idx) * 4.5,
+            durationSeconds: 4.5,
+            isTimingEstimated: true
+          });
+        });
+      }
     }
+
+    studioLogger.addLog('SUCCESS', 'Paso 5/5', `✓ Generación por lotes completada: ${rawGeneratedScenes.length} escenas generadas`);
   }
 
-  studioLogger.addLog('SUCCESS', `✓ Generación por lotes completada: ${allScenes.length} escenas generadas`);
+  // 5. VALIDACIÓN Y REPARACIÓN QUIRÚRGICA POST-GENERACIÓN
+  if (onProgress) onProgress('Auditando y validando coherencia de escenas...', 1, 1);
+  const finalValidatedScenes = await validateAndRepairScenes({
+    scenes: rawGeneratedScenes,
+    scriptText,
+    culturalContext,
+    visualStyle: {
+      name: targetStyleName,
+      modifier: targetStyleModifier,
+      styleLock,
+      styleAvoid
+    },
+    characterAnchor,
+    deepAnalysis,
+    model,
+    geminiKey,
+    nvidiaNimKey,
+    groqKey,
+    signal
+  });
 
   return {
-    storyBible: globalStoryBible,
+    storyBible: {
+      summary: scriptText.slice(0, 200) + '...',
+      genreAndTone: targetStyleName,
+      culturalContext: culturalContext?.epoch || 'Contemporánea'
+    },
     characters: [],
-    scenes: allScenes
+    scenes: finalValidatedScenes
   };
 }
 
 /**
+ * Validador y Reparador Quirúrgico Post-Generación:
+ * - Chequea consistencia entre charactersPresent y el texto de visualPrompt/videoPrompt.
+ * - Detecta y remueve clichés prohibidos ("hyper-detailed", "photorealistic", "8k", "ultra-realistic").
+ * - Garantiza presencia de videoPrompt dinámico con pista foley/acústica.
+ * - Verifica tiempos monótonos y sin traslapes.
+ * - Si existen escenas severamente defectuosas (prompts vacíos o corruptos), repara ÚNICAMENTE esas escenas mediante LLM.
+ */
+export async function validateAndRepairScenes(params: {
+  scenes: ScriptSceneResult[];
+  scriptText: string;
+  culturalContext?: CulturalTemporalContext;
+  visualStyle?: { name?: string; modifier?: string; styleLock?: string; styleAvoid?: string };
+  characterAnchor?: string;
+  deepAnalysis?: ScriptDeepAnalysis;
+  model?: string;
+  geminiKey?: string;
+  nvidiaNimKey?: string;
+  groqKey?: string;
+  signal?: AbortSignal;
+}): Promise<ScriptSceneResult[]> {
+  const {
+    scenes,
+    scriptText,
+    culturalContext,
+    visualStyle,
+    characterAnchor,
+    deepAnalysis,
+    model = GEMINI_LITE_MODEL,
+    geminiKey,
+    nvidiaNimKey,
+    groqKey,
+    signal
+  } = params;
+
+  if (!scenes || scenes.length === 0) return [];
+
+  const forbiddenBuzzwords = /\b(hyper-detailed|hyper detailed|ultra-detailed|ultra realistic|photorealistic|photo-realistic|8k resolution|8k|unreal engine|cinematic 35mm)\b/gi;
+  const humanKeywords = /\b(man|woman|person|scout|farmer|artisan|child|elder|boy|girl|priest|stonemason|worker|traveler|runner|doctor|patient|face|hands)\b/i;
+
+  const flawedSceneIndices: number[] = [];
+
+  const validated: ScriptSceneResult[] = scenes.map((sc, idx) => {
+    let visual = (sc.visualPrompt || '').replace(forbiddenBuzzwords, 'rich material textures');
+    let video = sc.videoPrompt || '';
+    let chars = Array.isArray(sc.charactersPresent) ? [...sc.charactersPresent] : [];
+    let shotSize = sc.shotSize || 'Wide Shot';
+    let cameraAngle = sc.cameraAngle || 'Eye-Level';
+    let cameraMovement = sc.cameraMovement || 'Slow Tracking Shot';
+    let lighting = sc.lighting || 'Natural contextual lighting';
+    let palette = sc.palette || 'Authentic natural color palette';
+    let textures = Array.isArray(sc.textures) && sc.textures.length > 0
+      ? sc.textures
+      : ['earthen textures', 'ambient surface grain'];
+
+    // 1. Detección y corrección de contradicciones Personajes vs Sin personajes
+    const mentionsHuman = humanKeywords.test(visual);
+    if (chars.length === 0 && mentionsHuman) {
+      const roleMatch = visual.match(/\b(scout|farmer|artisan|elder|priest|stonemason|traveler|runner|doctor|patient|worker|craftsman)\b/i);
+      if (roleMatch && roleMatch[1]) {
+        const capitalized = roleMatch[1].charAt(0).toUpperCase() + roleMatch[1].slice(1).toLowerCase();
+        chars = [capitalized];
+      } else {
+        chars = ['Sujeto Contextual'];
+      }
+    } else if (chars.length > 0 && !mentionsHuman) {
+      chars = [];
+    }
+
+    // 2. Garantizar videoPrompt dinámico con pista foley
+    if (!video || video.length < 50) {
+      const motionType = cameraMovement || 'Slow forward tracking shot';
+      video = `The camera executes a ${motionType.toLowerCase()} across the scene, framing ${sc.scriptSegment.slice(0, 80)}. Atmospheric particles and environmental movement shift subtly in natural light. Audio: ambient environmental atmosphere and gentle natural resonance; no spoken dialogue.`;
+    } else if (!/audio:/i.test(video)) {
+      video = `${video.trim()} Audio: natural environmental atmosphere and subtle motion resonance; no spoken dialogue.`;
+    }
+
+    // Chequeo de calidad severa
+    if (!visual || visual.trim().length < 40) {
+      flawedSceneIndices.push(idx);
+    }
+
+    const duration = sc.durationSeconds || Math.max(2.0, Number(((sc.scriptSegment.split(/\s+/).length) / 2.5).toFixed(2)));
+    const start = typeof sc.startTime === 'number' ? sc.startTime : idx * duration;
+    const end = typeof sc.endTime === 'number' ? sc.endTime : start + duration;
+
+    return {
+      ...sc,
+      visualPrompt: visual.trim(),
+      videoPrompt: video.trim(),
+      shotSize,
+      cameraAngle,
+      cameraMovement,
+      lighting,
+      palette,
+      textures,
+      charactersPresent: chars,
+      startTime: Number(start.toFixed(2)),
+      endTime: Number(end.toFixed(2)),
+      durationSeconds: Number(duration.toFixed(2)),
+      isTimingEstimated: sc.isTimingEstimated ?? true,
+      isValidated: true
+    };
+  });
+
+  // Asegurar tiempos estrictamente monótonos y sin traslapes
+  for (let i = 1; i < validated.length; i++) {
+    if (validated[i].startTime < validated[i - 1].endTime) {
+      validated[i].startTime = validated[i - 1].endTime;
+      validated[i].endTime = Number((validated[i].startTime + validated[i].durationSeconds).toFixed(2));
+    }
+  }
+
+  // 3. Reparación Quirúrgica con IA ÚNICAMENTE para escenas fallidas
+  if (flawedSceneIndices.length > 0) {
+    studioLogger.addLog('WARN', 'Validación', `Detectadas ${flawedSceneIndices.length} escenas con fallas en prompt; ejecutando reparación focalizada con IA...`, {
+      escenas: flawedSceneIndices.map(i => validated[i].sceneNumber)
+    });
+
+    try {
+      const repairItems = flawedSceneIndices.map(i => ({
+        sceneNumber: validated[i].sceneNumber,
+        scriptSegment: validated[i].scriptSegment
+      }));
+
+      const repairPrompt = `Eres un Director de Cine corrigiendo exclusivamente ${repairItems.length} escenas que quedaron incompletas o genéricas.
+Contexto:
+- Estilo: "${visualStyle?.name || 'Realista'}" (${visualStyle?.modifier || ''})
+- Época/Cultura: ${culturalContext?.epoch || 'Contemporánea'} | ${culturalContext?.culture || 'Universal'}
+${culturalContext?.culturalLock ? `- CULTURAL_LOCK: ${culturalContext.culturalLock}` : ''}
+${characterAnchor ? `- CHARACTER_LOCK: ${characterAnchor}` : ''}
+${deepAnalysis?.doNotInventList ? `- NO INVENTAR: ${deepAnalysis.doNotInventList.join(', ')}` : ''}
+
+REGLAS:
+- Genera prompts con texturas observables concretas (fibras, piedra, metal, madera, humedad).
+- NUNCA uses "realistic", "clean", "hyper-detailed", "8k".
+- Genera visualPrompt (100% English) y videoPrompt (100% English con Audio foley).
+- Responde ÚNICAMENTE en JSON:
+{
+  "scenes": [
+    {
+      "sceneNumber": 1,
+      "visualPrompt": "Concrete Midjourney prompt...",
+      "videoPrompt": "Cinematic Kling prompt... Audio: ...; no spoken dialogue.",
+      "shotSize": "Medium Shot",
+      "cameraAngle": "Eye-Level",
+      "cameraMovement": "Slow Tracking Shot",
+      "lighting": "Natural daylight",
+      "palette": "Earthen tones",
+      "textures": ["coarse wool", "granite stone"],
+      "charactersPresent": []
+    }
+  ]
+}
+
+ESCENAS A REPARAR:
+${repairItems.map(item => `[Escena ${item.sceneNumber}]: "${item.scriptSegment}"`).join('\n')}`;
+
+      const rawRepair = await callLLMDirectorRaw({
+        systemPrompt: 'Director de Cine experto en reparación de escenas cinematográficas.',
+        userPrompt: repairPrompt,
+        model,
+        geminiKey,
+        nvidiaNimKey,
+        groqKey,
+        signal
+      });
+
+      const parsedRepair = extractCleanJson(rawRepair);
+      if (parsedRepair && Array.isArray(parsedRepair.scenes)) {
+        for (const rep of parsedRepair.scenes) {
+          const targetIdx = validated.findIndex(s => s.sceneNumber === rep.sceneNumber);
+          if (targetIdx !== -1 && rep.visualPrompt) {
+            validated[targetIdx].visualPrompt = rep.visualPrompt;
+            if (rep.videoPrompt) validated[targetIdx].videoPrompt = rep.videoPrompt;
+            if (rep.shotSize) validated[targetIdx].shotSize = rep.shotSize;
+            if (rep.cameraAngle) validated[targetIdx].cameraAngle = rep.cameraAngle;
+            if (rep.cameraMovement) validated[targetIdx].cameraMovement = rep.cameraMovement;
+            if (rep.lighting) validated[targetIdx].lighting = rep.lighting;
+            if (rep.palette) validated[targetIdx].palette = rep.palette;
+            if (Array.isArray(rep.textures)) validated[targetIdx].textures = rep.textures;
+            if (Array.isArray(rep.charactersPresent)) validated[targetIdx].charactersPresent = rep.charactersPresent;
+            validated[targetIdx].validationNotes = ['Reparado quirúrgicamente por auditoría de calidad'];
+          }
+        }
+        studioLogger.addLog('SUCCESS', 'Validación', `✓ Reparación quirúrgica completada: ${parsedRepair.scenes.length} escena(s) restaurada(s)`);
+      }
+    } catch (repErr: any) {
+      studioLogger.addLog('WARN', 'Validación', `No se pudo completar reparación de IA, se mantendrán las correcciones heurísticas: ${repErr.message}`);
+    }
+  } else {
+    studioLogger.addLog('SUCCESS', 'Validación', `✓ Auditoría completada: 100% de las ${validated.length} escenas superaron los controles de calidad`);
+  }
+
+  return validated;
+}
+
+/**
  * Motor de Desglose de Emergencia Local:
- * Genera prompts limpios y neutros directamente de cada fragmento del guion,
- * sin inventar clichés medievales ni cuero envejecido.
+ * Genera prompts limpios, ricos y neutros directamente de cada fragmento del guion,
+ * con prompt de imagen, prompt de video, metadatos ortogonales y sin clichés medievales ni cuero envejecido.
  */
 export function createLocalFallbackScenes(params: {
   scriptText: string;
@@ -951,12 +1221,12 @@ export function createLocalFallbackScenes(params: {
   const {
     scriptText,
     targetStyleName = 'Fotografía Realista',
-    targetStyleModifier = 'clean realistic photography, natural lighting, high detail',
+    targetStyleModifier = 'authentic material textures, natural daylight, atmospheric depth',
     characterAnchor = '',
     pacingWords = 8
   } = params;
 
-  studioLogger.addLog('WARN', 'Iniciando generación local algorítmica de respaldo para escenas');
+  studioLogger.addLog('WARN', 'Fallback', 'Iniciando generación local algorítmica de respaldo para escenas');
 
   const cleanText = scriptText.trim().replace(/\r\n/g, '\n');
   const sentences = cleanText.split(/(?<=[.?!])\s+/).filter(s => s.trim().length > 0);
@@ -975,35 +1245,58 @@ export function createLocalFallbackScenes(params: {
     }
   });
 
-  const angles = [
-    'Observational medium shot',
-    'Clear close-up perspective',
-    'Eye-level realistic framing',
-    'Detailed macro focus on subject',
-    'Contextual wide angle establishing view'
-  ];
+  const shotSizes = ['Wide Shot', 'Medium Shot', 'Close-Up', 'Extreme Wide Shot', 'Macro'];
+  const cameraAngles = ['Eye-Level', 'Low-Angle', 'High-Angle', 'Eye-Level', 'Overhead'];
+  const cameraMovements = ['Dynamic Push-In', 'Slow Tracking Shot', 'Macro Depth of Field', 'Slow Zoom In', 'Static Hold'];
 
   const lightings = [
-    'natural ambient daylight',
-    'clean soft interior illumination',
-    'balanced realistic lighting',
-    'clear direct contextual light'
+    'natural ambient daylight breaking through light mist',
+    'soft diffused morning daylight',
+    'balanced directional natural lighting',
+    'atmospheric overcast daylight with soft shadows'
   ];
 
+  const textureSets = [
+    ['weathered granite', 'mossy rock fissure', 'coarse woven fibers'],
+    ['carved timber grain', 'frosted surface moisture', 'aged bronze patina'],
+    ['dark fertile loam', 'dew droplets on vegetation', 'layered stone masonry'],
+    ['rough wool weave', 'fine mineral dust', 'sunlit mist particles']
+  ];
+
+  let currentTime = 0;
+
   const scenes: ScriptSceneResult[] = rawChunks.map((segment, idx) => {
-    const angle = angles[idx % angles.length];
+    const shotSize = shotSizes[idx % shotSizes.length];
+    const cameraAngle = cameraAngles[idx % cameraAngles.length];
+    const cameraMovement = cameraMovements[idx % cameraMovements.length];
     const lighting = lightings[idx % lightings.length];
+    const textures = textureSets[idx % textureSets.length];
     const charPart = characterAnchor ? `${characterAnchor}, ` : '';
-    
-    const visualPrompt = `${angle} capturing "${segment.slice(0, 120)}", ${charPart}${targetStyleModifier}, ${lighting}`.slice(0, 360);
+    const duration = Math.max(2.5, Number((segment.split(/\s+/).length / 2.5).toFixed(2)));
+    const startTime = Number(currentTime.toFixed(2));
+    const endTime = Number((currentTime + duration).toFixed(2));
+    currentTime = endTime;
+
+    const visualPrompt = `${shotSize}, ${cameraAngle} framing "${segment.slice(0, 110)}". ${charPart}${targetStyleModifier}. Lighting: ${lighting}. Observable textures of ${textures.join(', ')}. Natural atmospheric color palette.`;
+    const videoPrompt = `The camera executes a ${cameraMovement.toLowerCase()} across the scene framing "${segment.slice(0, 80)}". Subtle atmospheric dynamics and environmental movement drift naturally under ${lighting}. Audio: ambient environmental resonance and subtle atmospheric winds; no spoken dialogue.`;
 
     return {
       sceneNumber: idx + 1,
       scriptSegment: segment,
       visualPrompt,
-      cameraAngle: angle,
+      videoPrompt,
+      shotSize,
+      cameraAngle,
+      cameraMovement,
       lighting,
-      charactersPresent: characterAnchor ? ['Sujeto'] : []
+      palette: 'Natural atmospheric palette',
+      textures,
+      charactersPresent: characterAnchor ? ['Sujeto'] : [],
+      startTime,
+      endTime,
+      durationSeconds: duration,
+      isTimingEstimated: true,
+      isValidated: true
     };
   });
 
@@ -1851,10 +2144,11 @@ export async function detectCharactersWithAI(params: {
   const system = `${MASTER_PROMPT_4_CHARACTERS}
 
 REGLAS ESTRICTAS DE RESPUESTA:
-1. Si el guion es histórico, geográfico o documental sobre pueblos, civilizaciones o lugares extremos (ej: constructores andinos de Machu Picchu, agricultores de terrazas, habitantes árticos o exploradores de Finlandia), DEFINE las figuras humanas representativas clave (ej: "Constructor Andino Quechua", "Habitante del Ártico en Invierno") con su biometría facial auténtica y vestuario de la cultura y clima real.
-2. Si el guion es expositivo/educativo y no tiene personajes ficticios, define arquetipos contextuales reales según el tema (ej: médico, paciente, científico).
-3. VESTUARIO CONTEXTUAL: El vestuario DEBE pertenecer a la cultura y clima real (${contextStr || 'contexto del guion'}).
-4. Solo incluye figuras humanas que tengan presencia física observable en las escenas.
+1. DISTINCIÓN EXPLÍCITA VS INFERIDA: Solo define personajes si el guion contiene personajes específicos o roles individuales recurrentes explícitamente necesarios.
+2. NO CONVIERTAS MENCIONES COLECTIVAS O CULTURALES ("los finlandeses", "la civilización andina", "los científicos", "la población") en un protagonista recurrente con nombre ficticio arbitrario.
+3. Si el guion es documental, geográfico, de naturaleza, arquitectura o puramente conceptual, DEVUELVE LISTA VACÍA ("characters": []). Esto es COMPLETAMENTE NORMAL y deseable para permitir planos puros de entorno sin personajes humanos forzados.
+4. NUNCA inventes credenciales, cargos no mencionados ni evidencia médica no respaldada.
+5. Solo aplica CHARACTER_LOCK si existen personajes recurrentes con nombre o rol continuo a lo largo de varias escenas.
 
 Responde ÚNICAMENTE en formato JSON:
 {
@@ -1880,7 +2174,7 @@ GUION COMPLETO:
 ${scriptText}
 """
 
-Extrae los personajes o figuras humanas representativas y define su CHARACTER_LOCK:`;
+Extrae los personajes o figuras humanas representativas y define su CHARACTER_LOCK (o devuelve lista vacía si es documental/entorno):`;
 
   try {
     const raw = await executeAnalysisWithFallbacks({
@@ -1920,8 +2214,8 @@ Extrae los personajes o figuras humanas representativas y define su CHARACTER_LO
     studioLogger.addLog('WARN', 'Paso 4/5', `Sin personajes explícitos detectados o fallo de IA: ${err?.message}`);
   }
 
-  // Fallback neutral contextual: NO forzar ropa de cuero medieval
-  studioLogger.addLog('INFO', 'Paso 4: Guion sin personajes ficticios obligatorios; se usarán sujetos contextuales limpios');
+  // Fallback neutral contextual: NO forzar ropa de cuero medieval ni personajes falsos
+  studioLogger.addLog('INFO', 'Paso 4/5', 'Guion sin personajes ficticios obligatorios; se usarán planos de entorno y sujetos contextuales limpios.');
   return [];
 }
 

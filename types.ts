@@ -171,17 +171,27 @@ export interface CharacterPersona {
 
 export interface ScriptSceneResult {
   sceneNumber: number;
+  scriptSegment: string;
   scriptText?: string;
-  scriptSegment?: string;
   narrationSegment?: string;
+  visualPrompt: string;       // Prompt de imagen para Midjourney / FLUX (100% English, texturas concretas, iluminación, composición)
+  videoPrompt: string;        // Prompt de video para Gen-3 / Kling / Luma (100% English, movimiento de cámara, dinámica física, foley)
+  shotSize: 'Extreme Wide Shot' | 'Wide Shot' | 'Medium Shot' | 'Close-Up' | 'Macro' | 'Extreme Close-Up' | string;
+  cameraAngle: 'Eye-Level' | 'Low-Angle' | 'High-Angle' | 'Overhead' | 'Dutch Angle' | "Bird's-Eye" | string;
+  cameraMovement: string;     // e.g., 'Dynamic Push-In', 'Slow Tracking Shot', 'Static Hold', 'Orbit Arc'
+  lighting: string;           // e.g., 'Golden Hour Rim Light', 'Diffuse Subarctic Overcast'
+  palette?: string;           // e.g., 'Muted subarctic teal, deep ochre, slate gray'
+  textures?: string[];        // 2-3 texturas observables clave: ['coarse wool weave', 'frosted birch bark', 'weathered iron']
+  charactersPresent: string[]; // Personajes visibles o array vacío [] para planos de entorno/objetos
+  startTime: number;          // Segundo de inicio en la línea de tiempo
+  endTime: number;            // Segundo de fin en la línea de tiempo
+  durationSeconds: number;    // Duración exacta del segmento
   estimatedDurationSec?: number;
-  durationSeconds?: number;
-  charactersPresent?: string[];
-  promptEn?: string;
-  visualPrompt?: string;
-  visualPromptEn?: string;
-  cameraAngle?: string;
-  lighting?: string;
+  isTimingEstimated: boolean; // true si es inferido por palabras/lectura, false si viene de audio maestro
+  isValidated?: boolean;      // true si pasó el chequeo de consistencia
+  validationNotes?: string[]; // Observaciones de auditoría o reparaciones aplicadas
+  promptEn?: string;          // Alias retrocompatible
+  visualPromptEn?: string;    // Alias retrocompatible
   continuityNote?: string;
 }
 
