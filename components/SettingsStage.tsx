@@ -51,8 +51,7 @@ import {
   formatErrorForClipboard, 
   TelemetryErrorReport 
 } from '../services/errorTelemetryService';
-import { copyAllErrorsForAntigravityAndPurge } from '../services/adminReportingService';
-import { isSubscriptionActive } from '../services/subscriptionService';
+import { isSubscriptionActive, isAdminModeActive } from '../services/subscriptionService';
 
 interface SettingsStageProps {
   nvidiaKeys: string[];
@@ -95,7 +94,24 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
   onAddStyle,
   onDeleteStyle,
 }) => {
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => isAdminModeActive());
   const [activeSubTab, setActiveSubTab] = useState<'apis' | 'stt' | 'characters' | 'styles' | 'telemetria'>('apis');
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      setIsAdmin(isAdminModeActive());
+    };
+    checkAdmin();
+    window.addEventListener('storage', checkAdmin);
+    return () => window.removeEventListener('storage', checkAdmin);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin && activeSubTab === 'telemetria') {
+      setActiveSubTab('apis');
+    }
+  }, [isAdmin, activeSubTab]);
+
   const [selectedAnalysisModel, setSelectedAnalysisModel] = useState<string>(() => {
     return localStorage.getItem('bulkscene_selected_analysis_model') || 'gemini-3.8-flash';
   });
@@ -422,23 +438,25 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
             <span>Centro de Estilos ({styles.length})</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('telemetria')}
-            className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
-              activeSubTab === 'telemetria'
-                ? 'bg-red-500 text-white shadow-md font-extrabold shadow-red-500/25'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 text-red-400" />
-            <span>Telemetría & Precios Skool</span>
-            {errorReports.length > 0 && (
-              <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full font-bold">
-                {errorReports.length}
-              </span>
-            )}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('telemetria')}
+              className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shrink-0 ${
+                activeSubTab === 'telemetria'
+                  ? 'bg-red-500 text-white shadow-md font-extrabold shadow-red-500/25'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-red-400" />
+              <span>Telemetría & Precios Skool</span>
+              {errorReports.length > 0 && (
+                <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded-full font-bold">
+                  {errorReports.length}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {saveNotification && (
@@ -1256,8 +1274,8 @@ export const SettingsStage: React.FC<SettingsStageProps> = ({
         />
       )}
 
-      {/* Sub-tab 4: Telemetría de Errores & Precios Skool */}
-      {activeSubTab === 'telemetria' && (
+      {/* Sub-tab 4: Telemetría de Errores & Precios Skool (Modo Administrador Exclusivo) */}
+      {isAdmin && activeSubTab === 'telemetria' && (
         <div className="space-y-6 animate-fade-in">
           {/* SECCIÓN 1: CONTROL DE PRECIOS SKOOL EN TIEMPO REAL */}
           <div className="bg-[#0e111a] rounded-2xl p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] border border-emerald-500/20">

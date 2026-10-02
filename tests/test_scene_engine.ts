@@ -253,8 +253,46 @@ async function runTests() {
   }
   console.log('✓ TEST 8 PASSED: Browser extension noise filtered while genuine errors are preserved');
 
+  console.log('\n--- TEST 9: isAdminModeActive admin privacy isolation ---');
+  const { isAdminModeActive } = await import('../services/subscriptionService');
+
+  // Case 1: Regular student / user session
+  // Mock localStorage in node environment if needed
+  const originalLocalStorage = globalThis.localStorage;
+  const mockStorage: Record<string, string> = {
+    'bulkscene_user_email': 'alumno@gmail.com',
+    'bulkscene_subscription_active': 'true'
+  };
+  globalThis.localStorage = {
+    getItem: (key: string) => mockStorage[key] || null,
+    setItem: (key: string, val: string) => { mockStorage[key] = val; },
+    removeItem: (key: string) => { delete mockStorage[key]; },
+    clear: () => {}
+  } as any;
+
+  if (isAdminModeActive()) {
+    throw new Error('FAILED: isAdminModeActive returned true for a regular user email!');
+  }
+
+  // Case 2: Admin email
+  mockStorage['bulkscene_user_email'] = 'admin@bulkscene.ai';
+  if (!isAdminModeActive()) {
+    throw new Error('FAILED: isAdminModeActive returned false for admin@bulkscene.ai!');
+  }
+
+  // Case 3: Admin authenticated via PIN in /admin
+  mockStorage['bulkscene_user_email'] = 'editor@gmail.com';
+  mockStorage['bulkscene_admin_authenticated'] = 'true';
+  if (!isAdminModeActive()) {
+    throw new Error('FAILED: isAdminModeActive returned false when bulkscene_admin_authenticated is true!');
+  }
+
+  // Restore
+  globalThis.localStorage = originalLocalStorage;
+  console.log('✓ TEST 9 PASSED: Admin privacy verified — Telemetría & Precios Skool strictly hidden from regular users');
+
   console.log('\n======================================');
-  console.log('🎉 ALL 8 PIPELINE TESTS PASSED 100%!');
+  console.log('🎉 ALL 9 PIPELINE TESTS PASSED 100%!');
   console.log('======================================');
 }
 

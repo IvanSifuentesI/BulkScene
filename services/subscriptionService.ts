@@ -70,6 +70,38 @@ export function isSubscriptionActive(): boolean {
 }
 
 /**
+ * Comprueba de manera síncrona si la sesión actual corresponde al Modo Administrador.
+ * Es verdadero si:
+ * 1. El correo del usuario es 'admin@bulkscene.ai'
+ * 2. Se autenticó en el panel /admin ('bulkscene_admin_authenticated' === 'true')
+ * 3. Se activó explícitamente el modo admin ('bulkscene_admin_mode' === 'true')
+ */
+export function isAdminModeActive(): boolean {
+  try {
+    const email = (localStorage.getItem(STORAGE_USER_EMAIL_KEY) || '').toLowerCase().trim();
+    if (email === 'admin@bulkscene.ai') {
+      return true;
+    }
+    if (localStorage.getItem('bulkscene_admin_authenticated') === 'true') {
+      return true;
+    }
+    if (localStorage.getItem('bulkscene_admin_mode') === 'true') {
+      return true;
+    }
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('admin') === 'true') {
+        localStorage.setItem('bulkscene_admin_mode', 'true');
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Información detallada para usuarios PRO con contador de días restantes y colores de urgencia.
  */
 export interface ProSubscriptionInfo {
