@@ -38,168 +38,19 @@ export interface MarketingLeadRecord {
  * Guarda a todos los usuarios que no cuentan con suscripción activa (nuevos o expirados)
  * para realizar campañas de email marketing.
  */
-export async function registrarLeadMarketing(lead: MarketingLeadRecord): Promise<void> {
-  const emailLower = lead.email.toLowerCase().trim();
-  if (!emailLower || emailLower === 'admin@bulkscene.ai') return;
-
-  const nowIso = new Date().toISOString();
-
-  // 1. Guardar en respaldo local para el panel admin (caché offline)
-  try {
-    const raw = localStorage.getItem('bulkscene_local_leads_backup');
-    const backupList: MarketingLeadRecord[] = raw ? JSON.parse(raw) : [];
-    const existingIdx = backupList.findIndex(b => b.email.toLowerCase() === emailLower);
-    
-    if (existingIdx >= 0) {
-      backupList[existingIdx] = {
-        ...backupList[existingIdx],
-        tipo_lead: lead.tipo_lead,
-        estado_suscripcion: lead.estado_suscripcion,
-        fecha_expiracion_anterior: lead.fecha_expiracion_anterior || backupList[existingIdx].fecha_expiracion_anterior,
-        intentos_acceso: (backupList[existingIdx].intentos_acceso || 1) + 1,
-        ultimo_intento: nowIso,
-        origen: lead.origen || backupList[existingIdx].origen || 'bulkscene_login'
-      };
-    } else {
-      backupList.unshift({
-        email: emailLower,
-        tipo_lead: lead.tipo_lead,
-        estado_suscripcion: lead.estado_suscripcion,
-        fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
-        intentos_acceso: 1,
-        primer_intento: nowIso,
-        ultimo_intento: nowIso,
-        created_at: nowIso,
-        origen: lead.origen || 'bulkscene_login'
-      });
-    }
-    localStorage.setItem('bulkscene_local_leads_backup', JSON.stringify(backupList.slice(0, 500)));
-  } catch (localErr) {
-    console.warn('[LEADS BACKUP] Error guardando respaldo local:', localErr);
-  }
-
-  // 2. Insertar o actualizar directamente en Supabase (tabla leads_marketing)
-  try {
-    const { data: existing, error: searchError } = await supabase
-      .from('leads_marketing')
-      .select('id, intentos_acceso')
-      .eq('email', emailLower)
-      .maybeSingle();
-
-    if (searchError) {
-      console.warn('[LEADS MARKETING] Aviso al buscar en Supabase:', searchError.message);
-    }
-
-    if (existing) {
-      const nextCount = (existing.intentos_acceso || 1) + 1;
-      const { error: updErr } = await supabase
-        .from('leads_marketing')
-        .update({
-          tipo_lead: lead.tipo_lead,
-          estado_suscripcion: lead.estado_suscripcion,
-          fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
-          intentos_acceso: nextCount,
-          ultimo_intento: nowIso,
-          origen: lead.origen || 'bulkscene_login'
-        })
-        .eq('email', emailLower);
-
-      if (updErr) {
-        console.error('[LEADS MARKETING] Error al actualizar lead en Supabase:', updErr.message || updErr);
-      } else {
-        console.log(`[LEADS MARKETING] ✅ Lead ${emailLower} actualizado en Supabase (intento #${nextCount})`);
-      }
-    } else {
-      const { error: insErr } = await supabase
-        .from('leads_marketing')
-        .insert({
-          email: emailLower,
-          tipo_lead: lead.tipo_lead,
-          estado_suscripcion: lead.estado_suscripcion,
-          fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
-          intentos_acceso: 1,
-          primer_intento: nowIso,
-          ultimo_intento: nowIso,
-          origen: lead.origen || 'bulkscene_login'
-        });
-
-      if (insErr) {
-        console.error('[LEADS MARKETING] Error al insertar lead en Supabase:', insErr.message || insErr);
-      } else {
-        console.log(`[LEADS MARKETING] ✅ Lead ${emailLower} guardado exitosamente en Supabase`);
-      }
-    }
-  } catch (err: any) {
-    console.error('[LEADS MARKETING] Excepción al registrar en Supabase:', err);
-  }
+export async function registrarLeadMarketing(_lead: MarketingLeadRecord): Promise<void> {
+  // Función desactivada: la tabla leads_marketing fue eliminada
+  return;
 }
 
-/**
- * Sincroniza leads locales pendientes a Supabase si no fueron enviados previamente.
- */
 export async function syncPendingLocalLeadsToSupabase(): Promise<void> {
-  try {
-    const raw = localStorage.getItem('bulkscene_local_leads_backup');
-    if (!raw) return;
-    const backupList: MarketingLeadRecord[] = JSON.parse(raw);
-    for (const lead of backupList) {
-      if (lead.email && lead.email !== 'admin@bulkscene.ai') {
-        const { data: existing } = await supabase
-          .from('leads_marketing')
-          .select('id')
-          .eq('email', lead.email.toLowerCase().trim())
-          .maybeSingle();
-
-        if (!existing) {
-          await supabase.from('leads_marketing').insert({
-            email: lead.email.toLowerCase().trim(),
-            tipo_lead: lead.tipo_lead || 'nuevo_prospecto',
-            estado_suscripcion: lead.estado_suscripcion || 'sin_suscripcion',
-            fecha_expiracion_anterior: lead.fecha_expiracion_anterior || null,
-            intentos_acceso: lead.intentos_acceso || 1,
-            primer_intento: lead.primer_intento || lead.ultimo_intento || new Date().toISOString(),
-            ultimo_intento: lead.ultimo_intento || new Date().toISOString(),
-            origen: lead.origen || 'bulkscene_sync'
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[LEADS SYNC] Error sincronizando leads locales:', e);
-  }
+  // Función desactivada: la tabla leads_marketing fue eliminada
+  return;
 }
 
-/**
- * Consulta la lista de leads de marketing directamente desde Supabase.
- * Devuelve siempre la data real de Supabase si la consulta tiene éxito.
- */
 export async function fetchMarketingLeads(): Promise<MarketingLeadRecord[]> {
-  try {
-    // Intentar sincronizar antes de consultar para garantizar que ningún lead quede atrás
-    await syncPendingLocalLeadsToSupabase();
-
-    const { data, error } = await supabase
-      .from('leads_marketing')
-      .select('*')
-      .order('ultimo_intento', { ascending: false });
-
-    if (!error && Array.isArray(data)) {
-      return data;
-    }
-    if (error) {
-      console.warn('[LEADS MARKETING] Supabase query notice:', error.message);
-    }
-  } catch (e) {
-    console.warn('[LEADS MARKETING] Fallback por error de conexión:', e);
-  }
-
-  // Fallback al almacenamiento local SOLO si falló la conexión con Supabase
-  try {
-    const raw = localStorage.getItem('bulkscene_local_leads_backup');
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  // Función desactivada: la tabla leads_marketing fue eliminada
+  return [];
 }
 
 /**
@@ -463,16 +314,8 @@ export async function validateUserSubscription(email: string): Promise<Subscript
       console.warn('[SUBSCRIPTION SERVICE] Aviso de consulta Supabase:', queryError.message);
     }
 
-    // Caso 1: El correo NO existe en Supabase -> Registrar en tabla leads_marketing
+    // Caso 1: El correo NO existe en la base de datos de usuarios autorizados
     if (!userData) {
-      await registrarLeadMarketing({
-        email: emailLower,
-        tipo_lead: 'nuevo_prospecto',
-        estado_suscripcion: 'sin_suscripcion',
-        fecha_expiracion_anterior: null,
-        origen: 'login_prospecto_nuevo'
-      });
-
       localStorage.setItem(STORAGE_SUBSCRIPTION_ACTIVE_KEY, 'false');
       localStorage.removeItem(STORAGE_EXPIRATION_DATE_KEY);
 
@@ -502,7 +345,7 @@ export async function validateUserSubscription(email: string): Promise<Subscript
       };
     }
 
-    // Caso 3: Inactivo o expirado -> Registrar en tabla leads_marketing para reactivación
+    // Caso 3: Inactivo o expirado
     localStorage.setItem(STORAGE_SUBSCRIPTION_ACTIVE_KEY, 'false');
     if (expDateStr) {
       localStorage.setItem(STORAGE_EXPIRATION_DATE_KEY, expDateStr);
@@ -511,14 +354,6 @@ export async function validateUserSubscription(email: string): Promise<Subscript
     }
 
     if (!isActivo) {
-      await registrarLeadMarketing({
-        email: emailLower,
-        tipo_lead: 'cuenta_inactiva',
-        estado_suscripcion: 'inactivo',
-        fecha_expiracion_anterior: expDateStr,
-        origen: 'login_cuenta_inactiva'
-      });
-
       return {
         isSubscribed: false,
         reason: 'inactive',
@@ -527,15 +362,7 @@ export async function validateUserSubscription(email: string): Promise<Subscript
       };
     }
 
-    // Expirado (fue alumno anterior pero ya no está al día)
-    await registrarLeadMarketing({
-      email: emailLower,
-      tipo_lead: 'suscripcion_expirada',
-      estado_suscripcion: 'expirado',
-      fecha_expiracion_anterior: expDateStr,
-      origen: 'login_alumno_vencido'
-    });
-
+    // Expirado (la fecha ya venció)
     return {
       isSubscribed: false,
       reason: 'expired',

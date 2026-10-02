@@ -10,12 +10,15 @@ import {
   Lock,
   ExternalLink
 } from 'lucide-react';
-import { validateUserSubscription } from '../services/subscriptionService';
+import { supabase } from '../config/supabaseClient';
+import MensajeAcceso from './MensajeAcceso';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [viewState, setViewState] = useState<'login' | 'no_suscrito' | 'expired' | 'cuenta_desactivada'>('login');
+  const [expirationDate, setExpirationDate] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -23,6 +26,7 @@ export const Login: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setExpirationDate(null);
 
     const emailLower = email.toLowerCase().trim();
     if (!emailLower) {
@@ -30,27 +34,74 @@ export const Login: React.FC = () => {
       return;
     }
 
-    try {
-      // 1. Validar suscripción en Supabase (o registrar lead si no existe)
-      const result = await validateUserSubscription(emailLower);
-
-      // 2. Establecer sesión autenticada para permitir entrada a la interfaz completa
+    // Excepción de administración
+    if (emailLower === 'admin@bulkscene.ai') {
       localStorage.setItem('bulkscene_auth_session', 'active');
       localStorage.setItem('bulkscene_user_email', emailLower);
+      localStorage.setItem('bulkscene_subscription_active', 'true');
+      navigate('/app');
+      return;
+    }
 
-      // 3. Redirigir siempre al Estudio para que todos puedan explorar la app
+    try {
+      // 1. Consultar estado en Supabase (tabla usuarios_autorizados)
+      const { data: userData, error: queryError } = await supabase
+        .from('usuarios_autorizados')
+        .select('fecha_expiracion, activo')
+        .eq('email', emailLower)
+        .maybeSingle();
+
+      if (queryError) {
+        console.warn('[LOGIN QUERY NOTICE]:', queryError.message);
+      }
+
+      // Caso A: El correo NO existe en la base de datos de usuarios autorizados
+      if (!userData) {
+        setViewState('no_suscrito');
+        setLoading(false);
+        return;
+      }
+
+      // Caso B: El usuario está desactivado
+      if (!userData.activo) {
+        setViewState('cuenta_desactivada');
+        setLoading(false);
+        return;
+      }
+
+      // Caso C: El usuario existe pero su suscripción ya venció
+      if (userData.fecha_expiracion && new Date(userData.fecha_expiracion).getTime() < Date.now()) {
+        setExpirationDate(userData.fecha_expiracion);
+        setViewState('expired');
+        setLoading(false);
+        return;
+      }
+
+      // Caso D: Alumno autorizado, activo y con suscripción vigente
+      localStorage.setItem('bulkscene_auth_session', 'active');
+      localStorage.setItem('bulkscene_user_email', emailLower);
+      localStorage.setItem('bulkscene_subscription_active', 'true');
+      if (userData.fecha_expiracion) {
+        localStorage.setItem('bulkscene_expiration_date', userData.fecha_expiracion);
+      }
       navigate('/app');
     } catch (err: any) {
       console.warn('[LOGIN NOTICE]:', err);
-      // Fallback: permitir entrada en modo explorador
-      localStorage.setItem('bulkscene_auth_session', 'active');
-      localStorage.setItem('bulkscene_user_email', emailLower);
-      localStorage.setItem('bulkscene_subscription_active', 'false');
-      navigate('/app');
+      setViewState('no_suscrito');
     } finally {
       setLoading(false);
     }
   };
+
+  if (viewState === 'no_suscrito') {
+    return <MensajeAcceso tipo="no_suscrito" onBack={() => setViewState('login')} />;
+  }
+  if (viewState === 'expired') {
+    return <MensajeAcceso tipo="expirado" onBack={() => setViewState('login')} expirationDate={expirationDate} />;
+  }
+  if (viewState === 'cuenta_desactivada') {
+    return <MensajeAcceso tipo="cuenta_desactivada" onBack={() => setViewState('login')} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#06080d] text-slate-100 flex flex-col justify-between font-sans selection:bg-emerald-500 selection:text-black">

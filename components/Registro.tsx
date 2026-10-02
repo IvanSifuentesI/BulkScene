@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../config/supabaseClient';
 import { getPricingConfig, PricingConfig, DEFAULT_PRICING_CONFIG } from '../services/pricingService';
-import { validateUserSubscription, registrarLeadMarketing } from '../services/subscriptionService';
+import { validateUserSubscription } from '../services/subscriptionService';
 
 export const Registro: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -49,36 +49,30 @@ export const Registro: React.FC = () => {
         .maybeSingle();
 
       if (existing) {
-        setSuccessMessage('¡Tu cuenta ya está registrada y autorizada! Redirigiendo al login...');
+        if (!existing.activo) {
+          setError('Tu cuenta se encuentra pausada o desactivada.');
+          setLoading(false);
+          return;
+        }
+
+        if (existing.fecha_expiracion && new Date(existing.fecha_expiracion).getTime() < Date.now()) {
+          setError(`Tu suscripción finalizó el ${new Date(existing.fecha_expiracion).toLocaleDateString()}. Debes reactivarla en Skool para continuar.`);
+          setLoading(false);
+          return;
+        }
+
+        setSuccessMessage('¡Tu cuenta está activa y autorizada! Redirigiendo al login...');
         setTimeout(() => {
           navigate('/login');
-        }, 1500);
+        }, 1200);
         return;
       }
 
-      // 2. Registrar inmediatamente en leads_marketing de Supabase
-      await registrarLeadMarketing({
-        email: emailLower,
-        tipo_lead: 'nuevo_prospecto',
-        estado_suscripcion: 'sin_suscripcion',
-        origen: 'formulario_registro'
-      });
-
-      // 3. Validar estado (establece sesión bloqueada si no es suscriptor)
-      await validateUserSubscription(emailLower);
-
-      localStorage.setItem('bulkscene_auth_session', 'active');
-      localStorage.setItem('bulkscene_user_email', emailLower);
-      setSuccessMessage('¡Ingreso completado! Abriendo el Estudio...');
-      setTimeout(() => {
-        navigate('/app');
-      }, 1000);
+      // 2. Si NO existe en la base de datos de usuarios autorizados, NO dar acceso
+      setError('Este correo no cuenta con membresía activa en Skool. Únete a la comunidad ($14/mes) para activar tu acceso.');
     } catch (err: any) {
-      console.warn('[REGISTRO] Fallback local:', err);
-      localStorage.setItem('bulkscene_auth_session', 'active');
-      localStorage.setItem('bulkscene_user_email', emailLower);
-      localStorage.setItem('bulkscene_subscription_active', 'false');
-      navigate('/app');
+      console.warn('[REGISTRO] Error:', err);
+      setError('Ocurrió un error al verificar la cuenta. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }

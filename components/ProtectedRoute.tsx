@@ -7,10 +7,30 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const session = localStorage.getItem('bulkscene_auth_session');
+  const isSubscribed = localStorage.getItem('bulkscene_subscription_active');
+  const email = (localStorage.getItem('bulkscene_user_email') || '').toLowerCase().trim();
 
-  // Si no hay sesión activa, redirige de forma inmediata y síncrona al login
-  if (session !== 'active') {
+  // Excepción administrativa
+  if (email === 'admin@bulkscene.ai' && session === 'active') {
+    return <>{children}</>;
+  }
+
+  // Si no hay sesión activa o la suscripción no está activa, expulsar inmediatamente al login
+  if (session !== 'active' || isSubscribed !== 'true') {
+    localStorage.removeItem('bulkscene_auth_session');
+    localStorage.removeItem('bulkscene_subscription_active');
     return <Navigate to="/login" replace />;
+  }
+
+  // Verificar si la fecha de expiración guardada ya venció
+  const expDateStr = localStorage.getItem('bulkscene_expiration_date');
+  if (expDateStr) {
+    const expDate = new Date(expDateStr).getTime();
+    if (!isNaN(expDate) && expDate < Date.now()) {
+      localStorage.removeItem('bulkscene_auth_session');
+      localStorage.removeItem('bulkscene_subscription_active');
+      return <Navigate to="/login" replace />;
+    }
   }
 
   return <>{children}</>;

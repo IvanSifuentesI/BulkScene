@@ -193,8 +193,19 @@ export const MensajeAcceso: React.FC<MensajeAccesoProps> = ({ tipo, onBack, expi
                 </>
               )}
 
-              <div className="pt-4 border-t border-white/5">
-                {tipo === 'no_suscrito' ? (
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="w-full py-2.5 px-4 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-all border border-white/10 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Probar con otro correo</span>
+                </button>
+              )}
+
+              <div className="pt-3 border-t border-white/5">
+                {tipo === 'no_suscrito' || tipo === 'no_autorizado' ? (
                   <p className="text-xs text-slate-500 leading-relaxed px-2">
                     Si ya adquiriste tu acceso en Skool con otro correo o necesitas soporte, comunícate directamente con la academia.
                   </p>
