@@ -194,11 +194,49 @@ export function getStoredErrorReports(): TelemetryErrorReport[] {
 }
 
 /**
- * Limpia el historial de errores local
+ * Obtiene el historial de reportes de error desde Supabase (Nube)
+ * con fallback a memoria local.
  */
-export function clearStoredErrorReports(): void {
+export async function fetchTelemetryErrorsFromCloud(): Promise<{ reports: TelemetryErrorReport[]; fromCloud: boolean }> {
+  try {
+    const { data, error } = await supabase
+      .from('errores_telemetria')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!error && data) {
+      const cloudReports: TelemetryErrorReport[] = data.map((row: any) => ({
+        id: row.id,
+        timestamp: row.created_at || new Date().toISOString(),
+        errorCode: row.error_code || 'ERR_GENERIC',
+        errorMessage: row.error_message || '',
+        possibleCause: row.possible_cause || '',
+        suggestedSolution: row.suggested_solution || '',
+        stage: row.stage || 'Sistema',
+        userEmail: row.user_email || 'creador@bulkscene.ai',
+        userAgent: row.user_agent || '',
+        contextData: row.context_data || {},
+        reportedToCloud: true
+      }));
+
+      localStorage.setItem(STORAGE_ERRORS_KEY, JSON.stringify(cloudReports));
+      return { reports: cloudReports, fromCloud: true };
+    }
+  } catch (err) {
+    console.warn('[TELEMETRY] No se pudo conectar con Supabase para telemetría:', err);
+  }
+
+  return { reports: getStoredErrorReports(), fromCloud: false };
+}
+
+/**
+ * Limpia el historial de errores local y en Supabase
+ */
+export async function clearStoredErrorReports(): Promise<void> {
   try {
     localStorage.removeItem(STORAGE_ERRORS_KEY);
+    await supabase.from('errores_telemetria').delete().neq('id', 'dummy_never_match');
   } catch {}
 }
 
@@ -233,9 +271,16 @@ Navegador/SO: ${report.userAgent || 'Desconocido'}
  */
 export function isIgnorableBrowserNoise(errorOrMsg: any): boolean {
   if (!errorOrMsg) return true;
-  const msg = typeof errorOrMsg === 'string'
-    ? errorOrMsg
-    : String(errorOrMsg?.message || errorOrMsg?.reason || errorOrMsg || '');
+  let msg = '';
+  if (typeof errorOrMsg === 'string') {
+    msg = errorOrMsg;
+  } else if (errorOrMsg instanceof Error) {
+    msg = errorOrMsg.message || String(errorOrMsg);
+  } else if (typeof errorOrMsg === 'object') {
+    msg = String(errorOrMsg.message || errorOrMsg.reason || errorOrMsg.error?.message || errorOrMsg.error || JSON.stringify(errorOrMsg) || '');
+  } else {
+    msg = String(errorOrMsg);
+  }
   if (!msg) return true;
   const m = msg.toLowerCase();
   return (
@@ -243,12 +288,22 @@ export function isIgnorableBrowserNoise(errorOrMsg: any): boolean {
     m.includes('receiving end does not exist') ||
     m.includes('message port closed') ||
     m.includes('message channel closed') ||
+    m.includes('listener indicated an asynchronous response') ||
+    m.includes('asynchronous response by returning true') ||
     m.includes('extension context invalidated') ||
     m.includes('resizeobserver') ||
     m.includes('script error') ||
     m.includes('chrome-extension://') ||
     m.includes('moz-extension://') ||
-    m.includes('safari-extension://')
+    m.includes('safari-extension://') ||
+    m.includes('chrome.runtime') ||
+    m.includes('browser.runtime') ||
+    m.includes('webextension') ||
+    m.includes('metamask') ||
+    m.includes('grammarly') ||
+    m.includes('lastpass') ||
+    m.includes('bitwarden') ||
+    m.includes('dashlane')
   );
 }
 

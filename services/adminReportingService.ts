@@ -40,7 +40,7 @@ export const DEFAULT_TELEGRAM_CONFIG: AdminTelegramConfig = {
 };
 
 /**
- * Obtiene la configuración guardada de Telegram / Webhook
+ * Obtiene la configuración guardada de Telegram / Webhook (síncrona de caché local)
  */
 export function getTelegramConfig(): AdminTelegramConfig {
   try {
@@ -51,7 +51,63 @@ export function getTelegramConfig(): AdminTelegramConfig {
 }
 
 /**
- * Guarda la configuración de Telegram / Webhook
+ * Obtiene la configuración de Telegram desde Supabase (para que los alumnos usen las credenciales del admin)
+ */
+export async function fetchTelegramConfigFromCloud(): Promise<AdminTelegramConfig> {
+  try {
+    const { data, error } = await supabase
+      .from('configuracion_soporte')
+      .select('*')
+      .eq('id', 'global_config')
+      .maybeSingle();
+
+    if (!error && data) {
+      const cloudCfg: AdminTelegramConfig = {
+        telegramBotToken: data.telegram_bot_token || '',
+        telegramChatId: data.telegram_chat_id || '',
+        genericWebhookUrl: data.generic_webhook_url || '',
+        notifyOnUserReport: data.notify_on_user_report !== false,
+        notifyOnCriticalAutoError: data.notify_on_critical_auto_error !== false
+      };
+      saveTelegramConfig(cloudCfg);
+      return cloudCfg;
+    }
+  } catch (err) {
+    // Si la tabla no está creada aún, usa la local
+  }
+  return getTelegramConfig();
+}
+
+/**
+ * Guarda la configuración de Telegram / Webhook tanto localmente como en Supabase
+ */
+export async function saveTelegramConfigToCloud(config: AdminTelegramConfig): Promise<{ success: boolean; error?: string }> {
+  saveTelegramConfig(config);
+  try {
+    const { error } = await supabase
+      .from('configuracion_soporte')
+      .upsert({
+        id: 'global_config',
+        telegram_bot_token: config.telegramBotToken.trim(),
+        telegram_chat_id: config.telegramChatId.trim(),
+        generic_webhook_url: config.genericWebhookUrl.trim(),
+        notify_on_user_report: config.notifyOnUserReport,
+        notify_on_critical_auto_error: config.notifyOnCriticalAutoError,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('[ADMIN REPORT] Advertencia al sincronizar config con Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error guardando en Supabase' };
+  }
+}
+
+/**
+ * Guarda la configuración de Telegram / Webhook en memoria local
  */
 export function saveTelegramConfig(config: AdminTelegramConfig): void {
   try {
@@ -65,10 +121,17 @@ export function saveTelegramConfig(config: AdminTelegramConfig): void {
  * Envía un mensaje directo a Telegram a través de la API oficial de bots
  */
 export async function sendTelegramMessage(textHtml: string, overrideConfig?: Partial<AdminTelegramConfig>): Promise<{ success: boolean; error?: string }> {
-  const cfg = { ...getTelegramConfig(), ...overrideConfig };
+  let cfg = { ...getTelegramConfig(), ...overrideConfig };
+  
+  // Si no hay token en caché local, intentar obtenerlo de la nube de Supabase
+  if (!cfg.telegramBotToken || !cfg.telegramChatId) {
+    try {
+      const cloudCfg = await fetchTelegramConfigFromCloud();
+      cfg = { ...cloudCfg, ...overrideConfig };
+    } catch {}
+  }
   
   if (!cfg.telegramBotToken || !cfg.telegramChatId) {
-    // Si no está configurado Telegram, probar genericWebhookUrl si existe
     if (cfg.genericWebhookUrl) {
       try {
         await fetch(cfg.genericWebhookUrl, {
@@ -127,7 +190,7 @@ export async function testTelegramConnection(botToken: string, chatId: string): 
 }
 
 /**
- * Registra un reporte de usuario y lo reenvía a Telegram y a la base de datos
+ * Registra un reporte de usuario y lo reenvía a Supabase y a Telegram
  */
 export async function submitUserErrorReport(params: {
   userEmail: string;
@@ -157,7 +220,29 @@ export async function submitUserErrorReport(params: {
     sentToTelegram: false
   };
 
-  // 1. Guardar en almacenamiento local para el admin
+  // 1. Guardar en Supabase para que llegue directamente al administrador
+  try {
+    const { error: insertError } = await supabase.from('reportes_soporte_admin').insert({
+      id: report.id,
+      user_email: report.userEmail,
+      user_comment: report.userComment,
+      stage: report.stage,
+      error_code: report.errorCode,
+      error_message: report.errorMessage,
+      technical_details: report.technicalDetails,
+      created_at: report.timestamp,
+      status: 'pending',
+      sent_to_telegram: false
+    });
+
+    if (insertError) {
+      console.warn('[ADMIN REPORT] Advertencia al insertar en Supabase:', insertError.message);
+    }
+  } catch (err) {
+    console.warn('[ADMIN REPORT] Excepción guardando en Supabase:', err);
+  }
+
+  // 2. Guardar en almacenamiento local
   try {
     const raw = localStorage.getItem(STORAGE_USER_REPORTS_KEY);
     const existing: UserErrorReport[] = raw ? JSON.parse(raw) : [];
@@ -167,26 +252,13 @@ export async function submitUserErrorReport(params: {
     console.warn('[ADMIN REPORT] Error guardando en local:', err);
   }
 
-  // 2. Guardar en Supabase si la tabla está disponible
-  try {
-    await supabase.from('reportes_soporte_admin').insert({
-      id: report.id,
-      user_email: report.userEmail,
-      user_comment: report.userComment,
-      stage: report.stage,
-      error_code: report.errorCode,
-      error_message: report.errorMessage,
-      technical_details: report.technicalDetails,
-      created_at: report.timestamp,
-      status: 'pending'
-    });
-  } catch (err) {
-    // Silencioso si la tabla no existe aún en Supabase
+  // 3. Notificar inmediatamente a Telegram
+  let cfg = getTelegramConfig();
+  if (!cfg.telegramBotToken) {
+    cfg = await fetchTelegramConfigFromCloud();
   }
 
-  // 3. Notificar inmediatamente a Telegram
-  const cfg = getTelegramConfig();
-  if (cfg.notifyOnUserReport) {
+  if (cfg.notifyOnUserReport && cfg.telegramBotToken) {
     const telegramHtml = `🚨 <b>NUEVO REPORTE DE ERROR - BULKSCENE STUDIO</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `🆔 <b>Ticket:</b> <code>${report.id}</code>\n` +
@@ -203,9 +275,11 @@ export async function submitUserErrorReport(params: {
       `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `👉 <i>Revisa el panel en /admin para marcar como resuelto.</i>`;
 
-    const teleRes = await sendTelegramMessage(telegramHtml);
+    const teleRes = await sendTelegramMessage(telegramHtml, cfg);
     if (teleRes.success) {
       report.sentToTelegram = true;
+      // Actualizar estado en Supabase
+      supabase.from('reportes_soporte_admin').update({ sent_to_telegram: true }).eq('id', report.id).then(() => {});
     }
   }
 
@@ -213,7 +287,7 @@ export async function submitUserErrorReport(params: {
 }
 
 /**
- * Obtiene todos los reportes de usuario guardados
+ * Obtiene todos los reportes de usuario guardados en caché local
  */
 export function getUserErrorReports(): UserErrorReport[] {
   try {
@@ -225,42 +299,81 @@ export function getUserErrorReports(): UserErrorReport[] {
 }
 
 /**
- * Marca un reporte como resuelto o pendiente
+ * Obtiene los reportes de usuario consultando directamente Supabase (Nube)
+ * y actualizando la caché local para soporte offline.
  */
-export function updateUserReportStatus(reportId: string, status: 'pending' | 'resolved'): void {
+export async function fetchUserErrorReportsFromCloud(): Promise<{ reports: UserErrorReport[]; fromCloud: boolean }> {
+  try {
+    const { data, error } = await supabase
+      .from('reportes_soporte_admin')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (!error && data) {
+      const cloudReports: UserErrorReport[] = data.map((row: any) => ({
+        id: row.id,
+        timestamp: row.created_at || new Date().toISOString(),
+        userEmail: row.user_email || 'alumno@bulkscene.ai',
+        userComment: row.user_comment || '',
+        stage: row.stage || 'Sistema',
+        errorCode: row.error_code || 'USER_REPORTED_ISSUE',
+        errorMessage: row.error_message || '',
+        technicalDetails: row.technical_details || {},
+        status: (row.status === 'resolved' ? 'resolved' : 'pending'),
+        sentToTelegram: Boolean(row.sent_to_telegram)
+      }));
+
+      // Guardar en caché local
+      localStorage.setItem(STORAGE_USER_REPORTS_KEY, JSON.stringify(cloudReports));
+      return { reports: cloudReports, fromCloud: true };
+    }
+  } catch (err) {
+    console.warn('[ADMIN REPORT] No se pudo conectar con Supabase, usando caché local:', err);
+  }
+
+  // Fallback a almacenamiento local si Supabase falla o la tabla no está creada
+  return { reports: getUserErrorReports(), fromCloud: false };
+}
+
+/**
+ * Marca un reporte como resuelto o pendiente (en Supabase y localmente)
+ */
+export async function updateUserReportStatus(reportId: string, status: 'pending' | 'resolved'): Promise<void> {
   try {
     const reports = getUserErrorReports();
     const updated = reports.map(r => r.id === reportId ? { ...r, status } : r);
     localStorage.setItem(STORAGE_USER_REPORTS_KEY, JSON.stringify(updated));
 
-    // Actualizar también en Supabase si es posible
-    supabase.from('reportes_soporte_admin').update({ status }).eq('id', reportId).then(() => {});
+    // Actualizar también en Supabase
+    await supabase.from('reportes_soporte_admin').update({ status }).eq('id', reportId);
   } catch (err) {
     console.error('Error actualizando estado del reporte:', err);
   }
 }
 
 /**
- * Elimina un reporte
+ * Elimina un reporte (en Supabase y localmente)
  */
-export function deleteUserReport(reportId: string): void {
+export async function deleteUserReport(reportId: string): Promise<void> {
   try {
     const reports = getUserErrorReports();
     const updated = reports.filter(r => r.id !== reportId);
     localStorage.setItem(STORAGE_USER_REPORTS_KEY, JSON.stringify(updated));
 
-    supabase.from('reportes_soporte_admin').delete().eq('id', reportId).then(() => {});
+    await supabase.from('reportes_soporte_admin').delete().eq('id', reportId);
   } catch (err) {
     console.error('Error eliminando reporte:', err);
   }
 }
 
 /**
- * Limpia todos los reportes
+ * Limpia todos los reportes (en Supabase y localmente)
  */
-export function clearAllUserReports(): void {
+export async function clearAllUserReports(): Promise<void> {
   try {
     localStorage.removeItem(STORAGE_USER_REPORTS_KEY);
+    await supabase.from('reportes_soporte_admin').delete().neq('id', 'dummy_never_match');
   } catch {}
 }
 

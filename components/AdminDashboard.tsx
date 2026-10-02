@@ -29,6 +29,9 @@ import {
   saveTelegramConfig, 
   testTelegramConnection, 
   getUserErrorReports, 
+  fetchUserErrorReportsFromCloud,
+  fetchTelegramConfigFromCloud,
+  saveTelegramConfigToCloud,
   updateUserReportStatus, 
   deleteUserReport, 
   clearAllUserReports, 
@@ -37,8 +40,14 @@ import {
   AdminTelegramConfig,
   UserErrorReport
 } from '../services/adminReportingService';
-import { getStoredErrorReports, clearStoredErrorReports, TelemetryErrorReport } from '../services/errorTelemetryService';
+import { 
+  getStoredErrorReports, 
+  fetchTelemetryErrorsFromCloud,
+  clearStoredErrorReports, 
+  TelemetryErrorReport 
+} from '../services/errorTelemetryService';
 import { fetchMarketingLeads, MarketingLeadRecord } from '../services/subscriptionService';
+import { supabase } from '../config/supabaseClient';
 
 export const AdminDashboard: React.FC = () => {
   // Estado de autenticación del panel admin
@@ -63,6 +72,11 @@ export const AdminDashboard: React.FC = () => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // Estado de conexión a la nube
+  const [isCloudConnected, setIsCloudConnected] = useState<boolean | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [supportSqlCopied, setSupportSqlCopied] = useState(false);
+
   // Listas de datos
   const [userReports, setUserReports] = useState<UserErrorReport[]>([]);
   const [telemetryErrors, setTelemetryErrors] = useState<TelemetryErrorReport[]>([]);
@@ -72,15 +86,49 @@ export const AdminDashboard: React.FC = () => {
   const [leadsCopiedSuccess, setLeadsCopiedSuccess] = useState(false);
   const [sqlCopiedSuccess, setSqlCopiedSuccess] = useState(false);
 
-  const loadData = () => {
-    setUserReports(getUserErrorReports());
-    setTelemetryErrors(getStoredErrorReports());
-    fetchMarketingLeads().then(setMarketingLeads);
+  const loadData = async () => {
+    setIsLoadingData(true);
+    try {
+      // 1. Cargar reportes de usuario desde la nube de Supabase
+      const cloudRes = await fetchUserErrorReportsFromCloud();
+      setUserReports(cloudRes.reports);
+      setIsCloudConnected(cloudRes.fromCloud);
+
+      // 2. Cargar telemetría desde la nube de Supabase
+      const teleRes = await fetchTelemetryErrorsFromCloud();
+      setTelemetryErrors(teleRes.reports);
+
+      // 3. Cargar configuración de Telegram desde Supabase
+      const cloudTg = await fetchTelegramConfigFromCloud();
+      setTelegramConfig(cloudTg);
+
+      // 4. Cargar leads si existieran
+      fetchMarketingLeads().then(setMarketingLeads);
+    } catch (err) {
+      console.error('Error cargando datos del panel:', err);
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       loadData();
+
+      // Suscripción en tiempo real a la tabla de reportes en Supabase
+      const channel = supabase
+        .channel('admin-support-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reportes_soporte_admin' }, () => {
+          fetchUserErrorReportsFromCloud().then(res => {
+            setUserReports(res.reports);
+            setIsCloudConnected(res.fromCloud);
+          });
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [isAuthenticated]);
 
@@ -97,9 +145,9 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleSaveTelegram = (e: React.FormEvent) => {
+  const handleSaveTelegram = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveTelegramConfig(telegramConfig);
+    await saveTelegramConfigToCloud(telegramConfig);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -135,59 +183,93 @@ export const AdminDashboard: React.FC = () => {
     alert(`¡Reporte de prueba creado (#${demo.id}) y enviado a Telegram!`);
   };
 
-  const SUPABASE_LEADS_SQL = `-- ==============================================================================
--- TABLA: leads_marketing
--- Registra todos los usuarios sin suscripción activa (nuevos prospectos y vencidos)
--- para campañas de email marketing y recuperación de clientes.
+  const SUPABASE_SUPPORT_SQL = `-- ==============================================================================
+-- BULKSCENE STUDIO - TABLAS DE SOPORTE, REPORTES DE USUARIOS Y TELEMETRÍA
+-- Ejecuta este script completo en el SQL Editor de tu Dashboard de Supabase:
+-- https://supabase.com/dashboard/project/pvcjahzwnhbfajmrtzmg/sql/new
 -- ==============================================================================
 
-CREATE TABLE IF NOT EXISTS public.leads_marketing (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email TEXT UNIQUE NOT NULL,
-    tipo_lead TEXT NOT NULL DEFAULT 'nuevo_prospecto', -- 'nuevo_prospecto' | 'suscripcion_expirada' | 'cuenta_inactiva'
-    estado_suscripcion TEXT NOT NULL DEFAULT 'sin_suscripcion', -- 'sin_suscripcion' | 'expirado' | 'inactivo'
-    origen TEXT DEFAULT 'solicitud_acceso_app',
-    intentos_acceso INTEGER DEFAULT 1,
-    fecha_expiracion_anterior TIMESTAMPTZ,
-    primer_intento TIMESTAMPTZ DEFAULT NOW(),
-    ultimo_intento TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- 1. TABLA DE REPORTES DE USUARIOS
+CREATE TABLE IF NOT EXISTS public.reportes_soporte_admin (
+    id TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    user_email TEXT NOT NULL DEFAULT 'alumno@bulkscene.ai',
+    user_comment TEXT NOT NULL,
+    stage TEXT DEFAULT 'Sistema',
+    error_code TEXT DEFAULT 'USER_REPORTED_ISSUE',
+    error_message TEXT,
+    technical_details JSONB DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'pending',
+    sent_to_telegram BOOLEAN DEFAULT false
 );
 
-CREATE INDEX IF NOT EXISTS idx_leads_marketing_email ON public.leads_marketing(email);
-CREATE INDEX IF NOT EXISTS idx_leads_marketing_tipo ON public.leads_marketing(tipo_lead);
-CREATE INDEX IF NOT EXISTS idx_leads_marketing_ultimo_intento ON public.leads_marketing(ultimo_intento DESC);
+CREATE INDEX IF NOT EXISTS idx_reportes_soporte_created ON public.reportes_soporte_admin(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reportes_soporte_status ON public.reportes_soporte_admin(status);
+CREATE INDEX IF NOT EXISTS idx_reportes_soporte_email ON public.reportes_soporte_admin(user_email);
 
-ALTER TABLE public.leads_marketing ENABLE ROW LEVEL SECURITY;
+-- 2. TABLA DE TELEMETRÍA AUTOMÁTICA DE ERRORES
+CREATE TABLE IF NOT EXISTS public.errores_telemetria (
+    id TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    user_email TEXT DEFAULT 'creador@bulkscene.ai',
+    stage TEXT DEFAULT 'Sistema',
+    error_code TEXT,
+    error_message TEXT,
+    possible_cause TEXT,
+    suggested_solution TEXT,
+    context_data JSONB DEFAULT '{}'::jsonb,
+    user_agent TEXT
+);
 
-DROP POLICY IF EXISTS "Permitir insercion anonima y autenticada de leads" ON public.leads_marketing;
-CREATE POLICY "Permitir insercion anonima y autenticada de leads" 
-ON public.leads_marketing 
-FOR INSERT 
-TO anon, authenticated
-WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_errores_telemetria_created ON public.errores_telemetria(created_at DESC);
 
-DROP POLICY IF EXISTS "Permitir actualizacion anonima de leads" ON public.leads_marketing;
-CREATE POLICY "Permitir actualizacion anonima de leads" 
-ON public.leads_marketing 
-FOR UPDATE 
-TO anon, authenticated
-USING (true)
-WITH CHECK (true);
+-- 3. TABLA DE CONFIGURACIÓN GLOBAL DE SOPORTE & TELEGRAM
+CREATE TABLE IF NOT EXISTS public.configuracion_soporte (
+    id TEXT PRIMARY KEY DEFAULT 'global_config',
+    telegram_bot_token TEXT DEFAULT '',
+    telegram_chat_id TEXT DEFAULT '',
+    generic_webhook_url TEXT DEFAULT '',
+    notify_on_user_report BOOLEAN DEFAULT true,
+    notify_on_critical_auto_error BOOLEAN DEFAULT true,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-DROP POLICY IF EXISTS "Permitir lectura publica o autenticada de leads" ON public.leads_marketing;
-CREATE POLICY "Permitir lectura publica o autenticada de leads" 
-ON public.leads_marketing 
-FOR SELECT 
-TO anon, authenticated
-USING (true);
+INSERT INTO public.configuracion_soporte (id, telegram_bot_token, telegram_chat_id)
+VALUES ('global_config', '', '')
+ON CONFLICT (id) DO NOTHING;
 
-DROP POLICY IF EXISTS "Permitir eliminacion anonima y autenticada de leads" ON public.leads_marketing;
-CREATE POLICY "Permitir eliminacion anonima y autenticada de leads"
-ON public.leads_marketing
-FOR DELETE
-TO anon, authenticated
-USING (true);`;
+-- RLS Y POLÍTICAS
+ALTER TABLE public.reportes_soporte_admin ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir insercion publica de reportes" ON public.reportes_soporte_admin;
+CREATE POLICY "Permitir insercion publica de reportes" ON public.reportes_soporte_admin FOR INSERT TO anon, authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir lectura de reportes" ON public.reportes_soporte_admin;
+CREATE POLICY "Permitir lectura de reportes" ON public.reportes_soporte_admin FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Permitir actualizacion de reportes" ON public.reportes_soporte_admin;
+CREATE POLICY "Permitir actualizacion de reportes" ON public.reportes_soporte_admin FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir eliminacion de reportes" ON public.reportes_soporte_admin;
+CREATE POLICY "Permitir eliminacion de reportes" ON public.reportes_soporte_admin FOR DELETE TO anon, authenticated USING (true);
+
+ALTER TABLE public.errores_telemetria ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir insercion publica de telemetria" ON public.errores_telemetria;
+CREATE POLICY "Permitir insercion publica de telemetria" ON public.errores_telemetria FOR INSERT TO anon, authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir lectura de telemetria" ON public.errores_telemetria FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Permitir eliminacion de telemetria" ON public.errores_telemetria FOR DELETE TO anon, authenticated USING (true);
+
+ALTER TABLE public.configuracion_soporte ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir lectura de configuracion de soporte" ON public.configuracion_soporte;
+CREATE POLICY "Permitir lectura de configuracion de soporte" ON public.configuracion_soporte FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Permitir actualizacion de configuracion de soporte" ON public.configuracion_soporte;
+CREATE POLICY "Permitir actualizacion de configuracion de soporte" ON public.configuracion_soporte FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir insercion de configuracion de soporte" ON public.configuracion_soporte;
+CREATE POLICY "Permitir insercion de configuracion de soporte" ON public.configuracion_soporte FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.reportes_soporte_admin; EXCEPTION WHEN OTHERS THEN NULL; END $$;`;
+
+  const handleCopySupportSql = () => {
+    navigator.clipboard.writeText(SUPABASE_SUPPORT_SQL);
+    setSupportSqlCopied(true);
+    setTimeout(() => setSupportSqlCopied(false), 2500);
+  };
 
   const handleCopyLeadsEmails = () => {
     const emails = marketingLeads.map(l => l.email).join('\n');
@@ -320,6 +402,16 @@ USING (true);`;
               <span className="text-[10px] font-mono bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-500/30">
                 Soporte & Telemetría
               </span>
+              {isCloudConnected === true && (
+                <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Nube Supabase Activa
+                </span>
+              )}
+              {isCloudConnected === false && (
+                <span className="text-[10px] font-mono bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Modo Local (Falta tabla Supabase)
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 font-mono">BulkScene Studio v1.0</p>
           </div>
@@ -430,6 +522,38 @@ USING (true);`;
         {/* TAB 1: REPORTES DE USUARIOS */}
         {activeTab === 'reportes' && (
           <div className="space-y-4">
+            {isCloudConnected === false && (
+              <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-amber-500/5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                    <h4 className="text-sm font-bold text-white">Vincular Base de Datos Supabase (Recepción Global de Alumnos)</h4>
+                  </div>
+                  <p className="text-xs text-amber-200/80 leading-relaxed max-w-2xl">
+                    La tabla <code className="bg-black/40 px-1.5 py-0.5 rounded text-amber-300 font-mono">reportes_soporte_admin</code> aún no ha sido creada en tu base de datos de Supabase. Mientras no se cree, los reportes enviados por los alumnos solo quedan guardados en sus computadoras y no pueden llegar aquí.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleCopySupportSql}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-xs transition-all shadow-md active:scale-95"
+                  >
+                    {supportSqlCopied ? <Check className="w-4 h-4 text-black" /> : <Copy className="w-4 h-4 text-black" />}
+                    <span>{supportSqlCopied ? '¡SQL Copiado!' : 'Copiar SQL para Supabase'}</span>
+                  </button>
+                  <a
+                    href="https://supabase.com/dashboard/project/pvcjahzwnhbfajmrtzmg/sql/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs border border-white/10 transition-colors"
+                  >
+                    <span>Abrir Supabase SQL</span>
+                    <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                  </a>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0a0d14] p-4 rounded-2xl border border-white/5">
               <div>
                 <h3 className="text-sm font-bold text-white">Bandeja de Reportes de Alumnos</h3>
@@ -558,8 +682,8 @@ USING (true);`;
                       <div className="flex items-center gap-2">
                         {report.status === 'pending' ? (
                           <button
-                            onClick={() => {
-                              updateUserReportStatus(report.id, 'resolved');
+                            onClick={async () => {
+                              await updateUserReportStatus(report.id, 'resolved');
                               loadData();
                             }}
                             className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -569,8 +693,8 @@ USING (true);`;
                           </button>
                         ) : (
                           <button
-                            onClick={() => {
-                              updateUserReportStatus(report.id, 'pending');
+                            onClick={async () => {
+                              await updateUserReportStatus(report.id, 'pending');
                               loadData();
                             }}
                             className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -589,9 +713,9 @@ USING (true);`;
                       </div>
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (confirm('¿Eliminar este reporte permanentemente?')) {
-                            deleteUserReport(report.id);
+                            await deleteUserReport(report.id);
                             loadData();
                           }
                         }}
