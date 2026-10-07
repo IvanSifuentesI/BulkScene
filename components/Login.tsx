@@ -35,7 +35,7 @@ export const Login: React.FC = () => {
     }
 
     // Excepción de administración
-    if (emailLower === 'admin@bulkscene.ai') {
+    if (emailLower === 'admin@bulkscene.ai' || emailLower === 'ivansifuentes340@gmail.com') {
       localStorage.setItem('bulkscene_auth_session', 'active');
       localStorage.setItem('bulkscene_user_email', emailLower);
       localStorage.setItem('bulkscene_subscription_active', 'true');

@@ -28,14 +28,16 @@ export interface AdminTelegramConfig {
   notifyOnCriticalAutoError: boolean;
 }
 
+import { TELEGRAM_SUPPORT_CONFIG } from '../config/telegramConfig';
+
 const STORAGE_USER_REPORTS_KEY = 'bulkscene_admin_user_reports';
 const STORAGE_TELEGRAM_CONFIG_KEY = 'bulkscene_admin_telegram_config';
 
 export const DEFAULT_TELEGRAM_CONFIG: AdminTelegramConfig = {
-  telegramBotToken: '',
-  telegramChatId: '',
+  telegramBotToken: TELEGRAM_SUPPORT_CONFIG.botToken || '',
+  telegramChatId: TELEGRAM_SUPPORT_CONFIG.chatId || '',
   genericWebhookUrl: '',
-  notifyOnUserReport: true,
+  notifyOnUserReport: TELEGRAM_SUPPORT_CONFIG.enabled !== false,
   notifyOnCriticalAutoError: true
 };
 
@@ -45,7 +47,15 @@ export const DEFAULT_TELEGRAM_CONFIG: AdminTelegramConfig = {
 export function getTelegramConfig(): AdminTelegramConfig {
   try {
     const raw = localStorage.getItem(STORAGE_TELEGRAM_CONFIG_KEY);
-    if (raw) return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_TELEGRAM_CONFIG,
+        ...parsed,
+        telegramBotToken: parsed.telegramBotToken || DEFAULT_TELEGRAM_CONFIG.telegramBotToken,
+        telegramChatId: parsed.telegramChatId || DEFAULT_TELEGRAM_CONFIG.telegramChatId,
+      };
+    }
   } catch {}
   return DEFAULT_TELEGRAM_CONFIG;
 }

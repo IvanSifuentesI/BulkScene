@@ -96,6 +96,37 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
   const [selectedTelemetryError, setSelectedTelemetryError] = useState<TelemetryErrorReport | null>(null);
   const [copiedErrorToast, setCopiedErrorToast] = useState<boolean>(false);
 
+  // Pool local de claves NVIDIA para permitir ingreso rápido directo desde esta vista
+  const [localNvidiaKeys, setLocalNvidiaKeys] = useState<string[]>(() => {
+    if (nvidiaKeys && nvidiaKeys.length > 0) return nvidiaKeys;
+    try {
+      const saved = localStorage.getItem('bulk_nvidia_api_keys');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [quickNvidiaKeyInput, setQuickNvidiaKeyInput] = useState<string>('');
+  const [keySavedToast, setKeySavedToast] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (nvidiaKeys && nvidiaKeys.length > 0) {
+      setLocalNvidiaKeys(nvidiaKeys);
+    }
+  }, [nvidiaKeys]);
+
+  const handleSaveQuickNvidiaKey = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = quickNvidiaKeyInput.trim();
+    if (!trimmed) return;
+    const updated = [trimmed, ...localNvidiaKeys.filter((k) => k !== trimmed)];
+    setLocalNvidiaKeys(updated);
+    localStorage.setItem('bulk_nvidia_api_keys', JSON.stringify(updated));
+    setQuickNvidiaKeyInput('');
+    setKeySavedToast(true);
+    setTimeout(() => setKeySavedToast(false), 3000);
+  };
+
   // Raw prompts textarea state
   const [rawPromptsInput, setRawPromptsInput] = useState<string>(() => {
     return slots.map((s) => s.rawPrompt).join('\n');
@@ -113,27 +144,20 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
     isBatchRunningRef.current = isBatchRunning;
   }, [isBatchRunning]);
 
-  // Synchronize textarea when slots change externally (e.g. from Director)
+  // Synchronize textarea when slots change externally
   useEffect(() => {
     if (slots.length > 0 && !rawPromptsInput) {
       setRawPromptsInput(slots.map((s) => s.rawPrompt).join('\n'));
     }
   }, [slots]);
 
-  // Helper to compile prompts with character and style
-  const compilePromptString = (raw: string, char?: CharacterPersona, sty?: StylePreset): string => {
-    let compiled = raw;
-    if (char?.anchorDescription) {
-      compiled = `${char.anchorDescription}. ${char.clothingAnchor || ''}. ${compiled}`;
-    }
-    if (sty?.promptModifier) {
-      compiled = `${compiled}, ${sty.promptModifier}`;
-    }
-    return compiled.trim();
+  // El compilador envía el prompt puro y directo ingresado por el usuario, sin prefijos ni alteraciones
+  const compilePromptString = (raw: string): string => {
+    return raw.trim();
   };
 
   // Parse lines to slots
-  const parseLinesToSlots = (text: string, char?: CharacterPersona, sty?: StylePreset): SceneSlot[] => {
+  const parseLinesToSlots = (text: string): SceneSlot[] => {
     const lines = text
       .split('\n')
       .map((l) => l.trim())
@@ -147,9 +171,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
         sequenceNumber: seq,
         paddedNumber: padded,
         rawPrompt: line,
-        compiledPrompt: compilePromptString(line, char || activeCharacter, sty || activeStyle),
+        compiledPrompt: line,
         status: 'idle',
-        seed: char?.defaultSeed || activeCharacter?.defaultSeed || (100000 + Math.floor(Math.random() * 899999)),
+        seed: 100000 + Math.floor(Math.random() * 899999),
       };
     });
   };
@@ -229,7 +253,7 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           sequenceNumber: seq,
           paddedNumber: padded,
           rawPrompt: promptText,
-          compiledPrompt: compilePromptString(promptText, activeCharacter, activeStyle),
+          compiledPrompt: promptText,
           status: 'idle',
           seed: 100000 + Math.floor(Math.random() * 899999),
         };
@@ -251,25 +275,10 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
 
   const handleCharacterChange = (newCharId?: string) => {
     if (onSelectCharacter) onSelectCharacter(newCharId);
-    const targetChar = characters?.find((c) => c.id === newCharId);
-    setSlots((prev) =>
-      prev.map((slot) => ({
-        ...slot,
-        compiledPrompt: compilePromptString(slot.rawPrompt, targetChar, activeStyle),
-        seed: targetChar?.defaultSeed || slot.seed,
-      }))
-    );
   };
 
   const handleStyleChange = (newStyleId?: string) => {
     if (onSelectStyle) onSelectStyle(newStyleId);
-    const targetStyle = styles?.find((s) => s.id === newStyleId);
-    setSlots((prev) =>
-      prev.map((slot) => ({
-        ...slot,
-        compiledPrompt: compilePromptString(slot.rawPrompt, activeCharacter, targetStyle),
-      }))
-    );
   };
 
   // Metric stats
@@ -310,8 +319,9 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
         );
       } else {
         // NVIDIA Models (FLUX 1, FLUX 2, Qwen Image, Stable Diffusion 3.5)
+        const keysToUse = localNvidiaKeys.length > 0 ? localNvidiaKeys : nvidiaKeys;
         const res = await generateNvidiaImage(
-          nvidiaKeys,
+          keysToUse,
           targetSlot.compiledPrompt || targetSlot.rawPrompt,
           selectedModel,
           targetSlot.seed,
@@ -431,11 +441,33 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
       return;
     }
     if (isBatchRunning) return;
+
+    // Si slots está vacío pero el usuario ingresó texto en el textarea, auto-parsear inmediatamente
+    let activeSlots = slots;
+    if (activeSlots.length === 0 && rawPromptsInput.trim()) {
+      activeSlots = parseLinesToSlots(rawPromptsInput);
+      setSlots(activeSlots);
+    }
+
+    if (activeSlots.length === 0) return;
+
+    // Validación proactiva de Claves API antes de iniciar inferencia
+    const effectiveKeys = localNvidiaKeys.length > 0 ? localNvidiaKeys : nvidiaKeys;
+    if (selectedModel !== 'google-imagen-3' && effectiveKeys.length === 0) {
+      alert(`⚠️ Para generar imágenes con ${currentModelMeta.name} necesitas ingresar tu Clave API de NVIDIA (nvapi-...). Puedes ingresarla directamente en la barra dorada de configuración rápida o en la sección de Ajustes.`);
+      return;
+    }
+
+    if (selectedModel === 'google-imagen-3' && !geminiKey) {
+      alert('⚠️ Para generar con Google Imagen 3 necesitas ingresar tu Clave API de Gemini en la sección de Ajustes.');
+      return;
+    }
+
     setIsBatchRunning(true);
     setIsPaused(false);
     abortControllerRef.current = new AbortController();
 
-    const pendingSlots = slots.filter((s) => s.status !== 'completed');
+    const pendingSlots = activeSlots.filter((s) => s.status !== 'completed');
     if (pendingSlots.length === 0) {
       setIsBatchRunning(false);
       return;
@@ -625,23 +657,6 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
             <Sparkles className="w-5 h-5 text-emerald-400" />
             <span>GENERADOR MASIVO DE ESCENAS</span>
           </h2>
-          
-        </div>
-
-        {/* Status badges */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {activeCharacter && (
-            <span className="bg-[#1a0e2a] border border-purple-500/40 text-purple-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              Personaje: {activeCharacter.name} (Seed #{activeCharacter.defaultSeed})
-            </span>
-          )}
-          {activeStyle && (
-            <span className="bg-[#221808] border border-amber-500/40 text-amber-300 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-bold shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              Estilo: {activeStyle.name}
-            </span>
-          )}
         </div>
       </div>
 
@@ -838,8 +853,8 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
         </div>
       </div>
 
-      {/* 4. Sub-Row: Project + Ratio + Character + Style */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 4. Sub-Row: Project + Ratio (2 Columns) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Column 1: Folder / ZIP Name */}
         <div className="bg-[#0e121b] border border-white/[0.08] rounded-2xl p-4 space-y-1.5">
           <label className="text-[10px] uppercase font-extrabold text-slate-400 tracking-wider block">
@@ -906,56 +921,50 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
             {aspectRatio === '9:16' ? 'TikTok / Shorts / Reels' : aspectRatio === '16:9' ? 'YouTube Horizontal' : 'Cuadrado 1:1'}
           </p>
         </div>
-
-        {/* Column 3: PERSONAJE INVARIABLE (PURPLE) */}
-        <div className="bg-[#120a1c] border border-purple-500/30 rounded-2xl p-4 space-y-1.5">
-          <label className="text-[10px] uppercase font-extrabold text-purple-400 tracking-wider flex items-center justify-between">
-            <span>PERSONAJE INVARIABLE</span>
-            <span className="w-2 h-2 rounded-full bg-purple-400" />
-          </label>
-          <div className="relative">
-            <select
-              value={activeCharacter?.id || ''}
-              onChange={(e) => handleCharacterChange(e.target.value || undefined)}
-              disabled={isBatchRunning}
-              className="w-full bg-[#0a0610] border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-purple-200 font-bold focus:outline-none focus:ring-1 focus:ring-purple-500 appearance-none pr-7 cursor-pointer"
-            >
-              <option value="" className="bg-[#100b1a] text-slate-300">🟣 Ninguno (Modo Libre)</option>
-              {characters?.map((c) => (
-                <option key={c.id} value={c.id} className="bg-[#100b1a] text-purple-200">
-                  🟣 {c.name} (Seed #{c.defaultSeed})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-purple-400 absolute right-2.5 top-2.5 pointer-events-none" />
-          </div>
-          <p className="text-[10px] text-purple-300/70 truncate">Ancla rostro y ropa en cada plano</p>
-        </div>
-
-        {/* Column 4: ESTILO VISUAL ACTIVO (AMBER) */}
-        <div className="bg-[#181208] border border-amber-500/30 rounded-2xl p-4 space-y-1.5">
-          <label className="text-[10px] uppercase font-extrabold text-amber-400 tracking-wider flex items-center justify-between">
-            <span>ESTILO VISUAL ACTIVO</span>
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
-          </label>
-          <div className="relative">
-            <select
-              value={activeStyle?.id || ''}
-              onChange={(e) => handleStyleChange(e.target.value || undefined)}
-              disabled={isBatchRunning}
-              className="w-full bg-[#0d0a04] border border-amber-500/40 rounded-xl px-3 py-2 text-xs text-amber-200 font-bold focus:outline-none focus:ring-1 focus:ring-amber-500 appearance-none pr-7 cursor-pointer"
-            >
-              {styles?.map((s) => (
-                <option key={s.id} value={s.id} className="bg-[#161106] text-amber-200">
-                  🟡 {s.name} ({s.category})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-amber-400 absolute right-2.5 top-2.5 pointer-events-none" />
-          </div>
-          <p className="text-[10px] text-amber-300/70 truncate">Modificador cromático unificado</p>
-        </div>
       </div>
+
+      {/* Banner de Configuración Rápida de Clave API (si faltan claves para el modelo NVIDIA seleccionado) */}
+      {selectedModel !== 'google-imagen-3' && (localNvidiaKeys.length > 0 ? localNvidiaKeys : nvidiaKeys).length === 0 && (
+        <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-lg shrink-0">
+              🔑
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-amber-200 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Clave API de NVIDIA Requerida</span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono">NIM Cluster</span>
+              </h4>
+              <p className="text-[11px] text-amber-300/80">
+                Para renderizar con {currentModelMeta.name}, ingresa tu Clave API de NVIDIA (empieza con <code className="font-mono bg-black/40 px-1 py-0.5 rounded text-amber-200">nvapi-...</code>).
+              </p>
+            </div>
+          </div>
+          <form onSubmit={handleSaveQuickNvidiaKey} className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              type="password"
+              placeholder="nvapi-..."
+              value={quickNvidiaKeyInput}
+              onChange={(e) => setQuickNvidiaKeyInput(e.target.value)}
+              className="bg-[#07090f] border border-amber-500/40 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono w-full md:w-64"
+            />
+            <button
+              type="submit"
+              disabled={!quickNvidiaKeyInput.trim()}
+              className="px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs rounded-xl transition-all shrink-0 disabled:opacity-40 uppercase tracking-wider shadow-md"
+            >
+              Guardar
+            </button>
+          </form>
+        </div>
+      )}
+
+      {keySavedToast && (
+        <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl px-4 py-2 text-xs font-bold text-emerald-300 flex items-center gap-2 animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>¡Clave API de NVIDIA guardada y lista para renderizar!</span>
+        </div>
+      )}
 
       {/* 5. Main Action Buttons */}
       <div className="bg-[#0e121b] border border-white/[0.08] rounded-2xl p-4 shadow-xl flex flex-col md:flex-row items-center justify-between gap-3">
@@ -964,11 +973,11 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
           {!isBatchRunning ? (
             <button
               onClick={handleStartBatch}
-              disabled={totalSlots === 0}
+              disabled={totalSlots === 0 && !rawPromptsInput.trim()}
               className="flex-1 sm:flex-none px-7 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-xs flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.35)] transition-all disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider"
             >
               <Play className="w-4 h-4 fill-black" />
-              <span>▶ INICIAR RENDER TURBO ({totalSlots} ESCENAS)</span>
+              <span>▶ INICIAR RENDER TURBO ({totalSlots > 0 ? totalSlots : rawPromptsInput.trim().split('\n').filter(Boolean).length} ESCENAS)</span>
             </button>
           ) : (
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1145,24 +1154,18 @@ export const BulkSceneGenerator: React.FC<BulkSceneGeneratorProps> = ({
               const demoSlots: SceneSlot[] = sampleLines.map((line, idx) => {
                 const seq = idx + 1;
                 const padded = String(seq).padStart(3, '0');
-                let compiled = line;
-                if (activeCharacter?.anchorDescription) {
-                  compiled = `${activeCharacter.anchorDescription}. ${compiled}`;
-                }
-                if (activeStyle?.promptModifier) {
-                  compiled = `${compiled}, ${activeStyle.promptModifier}`;
-                }
                 return {
                   id: `slot-${padded}`,
                   sequenceNumber: seq,
                   paddedNumber: padded,
                   rawPrompt: line,
-                  compiledPrompt: compiled.trim(),
+                  compiledPrompt: line,
                   status: 'idle',
-                  seed: activeCharacter?.defaultSeed || (100000 + idx * 777)
+                  seed: 100000 + idx * 777
                 };
               });
               setSlots(demoSlots);
+              setRawPromptsInput(sampleLines.join('\n'));
             }}
             className="px-6 py-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95"
           >

@@ -53,6 +53,8 @@ export async function fetchMarketingLeads(): Promise<MarketingLeadRecord[]> {
   return [];
 }
 
+const ADMIN_WHITELIST_EMAILS = ['admin@bulkscene.ai', 'ivansifuentes340@gmail.com'];
+
 /**
  * Comprueba de manera síncrona si el usuario actual cuenta con suscripción activa.
  * Devuelve true si el correo es la cuenta administrativa o si la bandera de sesión es 'true'.
@@ -60,7 +62,10 @@ export async function fetchMarketingLeads(): Promise<MarketingLeadRecord[]> {
 export function isSubscriptionActive(): boolean {
   try {
     const email = (localStorage.getItem(STORAGE_USER_EMAIL_KEY) || '').toLowerCase().trim();
-    if (email === 'admin@bulkscene.ai') {
+    if (ADMIN_WHITELIST_EMAILS.includes(email)) {
+      return true;
+    }
+    if (isAdminModeActive()) {
       return true;
     }
     return localStorage.getItem(STORAGE_SUBSCRIPTION_ACTIVE_KEY) === 'true';
@@ -72,14 +77,14 @@ export function isSubscriptionActive(): boolean {
 /**
  * Comprueba de manera síncrona si la sesión actual corresponde al Modo Administrador.
  * Es verdadero si:
- * 1. El correo del usuario es 'admin@bulkscene.ai'
+ * 1. El correo del usuario es 'admin@bulkscene.ai' o 'ivansifuentes340@gmail.com'
  * 2. Se autenticó en el panel /admin ('bulkscene_admin_authenticated' === 'true')
  * 3. Se activó explícitamente el modo admin ('bulkscene_admin_mode' === 'true')
  */
 export function isAdminModeActive(): boolean {
   try {
     const email = (localStorage.getItem(STORAGE_USER_EMAIL_KEY) || '').toLowerCase().trim();
-    if (email === 'admin@bulkscene.ai') {
+    if (ADMIN_WHITELIST_EMAILS.includes(email)) {
       return true;
     }
     if (localStorage.getItem('bulkscene_admin_authenticated') === 'true') {

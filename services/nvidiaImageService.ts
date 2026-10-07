@@ -131,6 +131,10 @@ export async function generateNvidiaImage(
     keysPool.push(...DEFAULT_NVIDIA_API_KEYS);
   }
 
+  if (keysPool.length === 0) {
+    throw new Error('No se ha configurado ninguna Clave API de NVIDIA. Por favor ingresa tu API Key (nvapi-...) para continuar.');
+  }
+
   // Blindaje anti-422: NVIDIA FLUX rechaza prompts de más de 800 caracteres
   let safePrompt = prompt.trim();
   if (safePrompt.length > 700) {
@@ -159,6 +163,51 @@ export async function generateNvidiaImage(
 
   // Rotamos entre las claves API disponibles si alguna devuelve 429
   for (const apiKey of keysPool) {
+    // Intento 1: Serverless proxy /api/nvidia (Vercel)
+    try {
+      if (signal?.aborted) {
+        throw new Error('Generación cancelada por el usuario.');
+      }
+
+      const proxyRes = await fetch('/api/nvidia', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          modelEndpoint: modelMeta?.endpointModel || model,
+          apiKey,
+          payload,
+        }),
+        signal,
+      });
+
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        const artifact = data.artifacts?.[0];
+        const base64Data = artifact?.base64 || data.image || data.data?.[0]?.b64_json;
+        if (base64Data) {
+          const elapsedSeconds = Number(((Date.now() - startTime) / 1000).toFixed(2));
+          return {
+            dataUrl: `data:image/png;base64,${base64Data}`,
+            elapsedSeconds,
+            seed: artifact?.seed || seed,
+            modelUsed: modelMeta?.name || model,
+          };
+        }
+      } else if (proxyRes.status === 429) {
+        console.warn(`Límite 429 en clave NVIDIA (${apiKey.slice(0, 10)}...), rotando clave...`);
+        lastError = new Error('Límite de tasa 429 en cluster NVIDIA.');
+        continue;
+      } else if (proxyRes.status !== 404) {
+        const errJson = await proxyRes.json().catch(() => null);
+        console.warn('Respuesta no-ok de proxy /api/nvidia:', errJson);
+      }
+    } catch (proxyErr: any) {
+      if (signal?.aborted) throw proxyErr;
+      console.warn('Proxy /api/nvidia no respondió, intentando endpoints estándar:', proxyErr.message);
+    }
     for (const endpoint of targetEndpoints) {
       try {
         if (signal?.aborted) {
